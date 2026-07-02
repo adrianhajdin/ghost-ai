@@ -11,7 +11,7 @@
 | Canvas           | React Flow              | Permanent canvas renderer and interaction layer                |
 | Realtime         | Internal WebSocket service | Collaboration runtime for room tokens, presence, canvas sync, chat/status events |
 | Background tasks | Internal AI task runner | PostgreSQL-backed durable AI generation workflows              |
-| AI providers     | Provider abstraction    | Mock, Google Gemini, and OpenAI-compatible design/spec generation |
+| AI providers     | Provider abstraction    | Mock, Google Gemini, and OpenAI-compatible design/spec/draft generation |
 | Email delivery   | Email provider abstraction | Local console delivery and SMTP account email delivery      |
 | Artifact storage | Storage provider        | Canvas snapshots and generated Markdown specs                  |
 
@@ -20,7 +20,8 @@
 - `app/api` — Authenticated request handlers: input validation, ownership checks, task triggering, read-only exports, and persistence.
 - `lib/ai-tasks` — Long-running background jobs: task leasing, retries, AI design generation, and spec generation.
 - `lib/ai/providers` — Server-side AI provider selection and external model adapters.
-- `lib/ai/design` / `lib/ai/spec` — Provider contracts, structured design actions, and spec context helpers.
+- `lib/ai/design` / `lib/ai/spec` / `lib/ai/architecture-draft` — Provider contracts, structured design actions, draft proposals, and spec context helpers.
+- `lib/architecture-draft` — Pure Architecture Draft v1 schema, validator, sanitizer, CanvasDoc append-only apply helper, collision resolution, and smoke-testable proposal utilities.
 - `lib/canvas` — Canvas snapshot sanitization, CanvasDoc v1 compatibility helpers, semantic validation, and deterministic Design IR v1 compilation/export.
 - `lib/prompt-pack` — Deterministic Prompt Pack v1 compilation from Design IR, target-specific Markdown rendering, stable IR hashing, and read-only project export helpers.
 - `scripts/ai-worker.ts` — Worker process entrypoint for local and production task execution.
@@ -41,7 +42,7 @@
 - Existing canvas storage remains compatible with `{ nodes, edges }` snapshots. New graph-aware canvas writes persist CanvasDoc v1 documents; legacy root reads normalize existing snapshots into `graph_root`, while subcanvas graphs are separate CanvasDoc v1 objects referenced by `node.data.subcanvasRef`.
 - Design IR is machine-readable architecture. It is compiled on demand from the root CanvasDoc and directly linked child graph CanvasDocs, is exposed through a read-only project route, and is not persisted as an additional artifact by default.
 - Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Prompt Pack generation is deterministic, read-only, does not call AI providers, does not persist by default, and does not write back to repositories.
-- Nimbus is not included as a Prompt Pack target in this version.
+- Nimbus is not included yet and is not a Prompt Pack target in this version.
 - Local development defaults to filesystem storage under `.local-storage`; external object storage such as Vercel Blob is optional.
 - The database stores only the provider object reference in the existing `canvasBlobUrl` and `filePath` fields.
 
@@ -85,6 +86,15 @@
 - Provider: selected through the same server-side AI provider factory.
 - Output: Markdown technical spec saved through the storage provider and linked to the project in the database.
 
+### Architecture Draft Generation
+
+- Input: natural-language prompt, project id, `graph_root`, optional current graph summary, optional existing Design IR, and complexity (`simple`, `standard`, `detailed`).
+- Execution: durable background task via the internal PostgreSQL-backed AI task runner.
+- Provider: selected through the same server-side AI provider factory. The mock provider returns deterministic structured proposals for taxi/booking/dispatch/payments, ecommerce, chat, and generic prompts.
+- Output: an Architecture Draft v1 proposal plus validation summary. The task does not mutate the canvas.
+- Apply: authenticated project route validates the proposal again, strips forbidden transient UI state/secrets through the shared sanitizer, appends nodes and edges to the root CanvasDoc, resolves ID collisions deterministically, preserves existing canvas items, writes through the storage provider, and publishes a graph-scoped realtime snapshot when available.
+- Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. Arc Forge does not execute or build the app.
+
 ### Design IR Export
 
 - Input: root `graph_root` CanvasDoc plus one level of child CanvasDocs referenced by root node `subcanvasRef.graphId`.
@@ -117,3 +127,4 @@
 12. Durable canvas data must not include transient UI state such as selected, dragging, hovered, editing drafts, lasso rectangles, reconnect ghosts, or presence cursors.
 13. Raw secret values must not be stored in canvas metadata or exported Design IR; use secretRef-style references only.
 14. Prompt Pack generation must remain read-only: no AI calls, no code execution, no app builder runtime, no repository write-back, and no default persistence.
+15. Architecture Draft generation must remain proposal-first: AI can propose architecture drafts on the canvas, the user approves before applying, and apply is append-only for v1.

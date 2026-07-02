@@ -2,7 +2,19 @@
 
 import { useState, useRef, useCallback, useEffect } from "react"
 import ReactMarkdown from "react-markdown"
-import { Bot, X, Send, FileText, Download, Loader2, MessageSquare } from "lucide-react"
+import {
+  AlertTriangle,
+  Bot,
+  Check,
+  Download,
+  FileText,
+  Loader2,
+  MessageSquare,
+  Send,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -18,6 +30,13 @@ import { cn } from "@/lib/utils"
 import { isTerminalAiRunStatus, useAiRunStatus } from "@/hooks/use-ai-run-status"
 import { useRealtimeRoom } from "@/hooks/use-realtime-room"
 import {
+  ARCHITECTURE_DRAFT_COMPLEXITIES,
+  architectureDraftHasErrors,
+  type ArchitectureDraftComplexity,
+  type ArchitectureDraftProposal,
+  type ArchitectureDraftValidationResult,
+} from "@/lib/architecture-draft/architecture-draft"
+import {
   AI_ASSISTANT_NAME,
   AI_WORKSPACE_TAGLINE,
   AI_WORKSPACE_TITLE,
@@ -27,6 +46,19 @@ interface SpecItem {
   id: string
   filePath: string
   createdAt: string
+}
+
+interface ArchitectureDraftRunOutput {
+  proposal?: ArchitectureDraftProposal
+  summary?: {
+    title?: string
+    nodeCount?: number
+    edgeCount?: number
+    errors?: number
+    warnings?: number
+    info?: number
+  }
+  validation?: ArchitectureDraftValidationResult[]
 }
 
 function getFilename(filePath: string): string {
@@ -96,6 +128,7 @@ export function AiSidebar({
     currentUserName,
     chatMessages,
     aiStatuses,
+    setCanvasSnapshot,
     sendChatMessage,
     broadcastRoomEvent,
     patchPresence,
@@ -106,7 +139,23 @@ export function AiSidebar({
   const [statusText, setStatusText] = useState<string>("")
   const [chatInput, setChatInput] = useState("")
   const [chatError, setChatError] = useState<string | null>(null)
+  const [draftPrompt, setDraftPrompt] = useState("")
+  const [draftComplexity, setDraftComplexity] =
+    useState<ArchitectureDraftComplexity>("standard")
+  const [draftRunId, setDraftRunId] = useState<string | null>(null)
+  const [isDraftGenerating, setIsDraftGenerating] = useState(false)
+  const [draftProposal, setDraftProposal] =
+    useState<ArchitectureDraftProposal | null>(null)
+  const [draftValidation, setDraftValidation] = useState<
+    ArchitectureDraftValidationResult[]
+  >([])
+  const [draftSummary, setDraftSummary] =
+    useState<ArchitectureDraftRunOutput["summary"] | null>(null)
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [draftApplyMessage, setDraftApplyMessage] = useState<string | null>(null)
+  const [isApplyingDraft, setIsApplyingDraft] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -178,6 +227,43 @@ export function AiSidebar({
     [broadcastRoomEvent, patchPresence, sendChatMessage]
   )
 
+  const handleDraftRunTerminal = useCallback((status: string, output: unknown) => {
+    setIsDraftGenerating(false)
+    setDraftRunId(null)
+    patchPresence({ thinking: false })
+
+    if (status !== "succeeded") {
+      setDraftError("Architecture draft generation failed. Please try again.")
+      broadcastRoomEvent({
+        type: "ai.status",
+        payload: {
+          text: "Architecture draft generation failed.",
+          status: "error",
+        },
+      })
+      return
+    }
+
+    const typedOutput = output as ArchitectureDraftRunOutput | null
+    if (!typedOutput?.proposal) {
+      setDraftError("Architecture draft result was empty.")
+      return
+    }
+
+    setDraftProposal(typedOutput.proposal)
+    setDraftValidation(typedOutput.validation ?? [])
+    setDraftSummary(typedOutput.summary ?? null)
+    setDraftError(null)
+    setDraftApplyMessage(null)
+    broadcastRoomEvent({
+      type: "ai.status",
+      payload: {
+        text: "Architecture draft is ready for review.",
+        status: "complete",
+      },
+    })
+  }, [broadcastRoomEvent, patchPresence])
+
   // Latest validated feed message for the status strip fallback
   const latestFeedMessage = (() => {
     if (!aiStatuses.length) return null
@@ -235,6 +321,141 @@ export function AiSidebar({
     const ta = e.target
     ta.style.height = "72px"
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`
+  }, [])
+
+  const handleDraftPromptChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDraftPrompt(e.target.value)
+    const ta = e.target
+    ta.style.height = "96px"
+    ta.style.height = `${Math.min(ta.scrollHeight, 180)}px`
+  }, [])
+
+  const handleGenerateArchitectureDraft = useCallback(async () => {
+    const prompt = draftPrompt.trim()
+    if (!prompt || isDraftGenerating) return
+
+    setIsDraftGenerating(true)
+    setDraftError(null)
+    setDraftApplyMessage(null)
+    setDraftProposal(null)
+    setDraftValidation([])
+    setDraftSummary(null)
+    patchPresence({ thinking: true })
+    broadcastRoomEvent({
+      type: "ai.status",
+      payload: {
+        text: "Generating architecture draft proposal...",
+        status: "start",
+      },
+    })
+
+    try {
+      const response = await fetch("/api/ai/architecture-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          projectId,
+          graphId,
+          complexity: draftComplexity,
+        }),
+      })
+
+      if (!response.ok) throw new Error("Architecture draft request failed")
+      const { runId: newRunId } = (await response.json()) as { runId: string }
+      setDraftRunId(newRunId)
+    } catch {
+      setIsDraftGenerating(false)
+      patchPresence({ thinking: false })
+      setDraftError("Failed to start architecture draft generation.")
+      broadcastRoomEvent({
+        type: "ai.status",
+        payload: {
+          text: "Failed to start architecture draft generation.",
+          status: "error",
+        },
+      })
+    }
+  }, [
+    broadcastRoomEvent,
+    draftComplexity,
+    draftPrompt,
+    graphId,
+    isDraftGenerating,
+    patchPresence,
+    projectId,
+  ])
+
+  const handleApplyArchitectureDraft = useCallback(async () => {
+    if (!draftProposal || isApplyingDraft || architectureDraftHasErrors(draftValidation)) {
+      return
+    }
+
+    setIsApplyingDraft(true)
+    setDraftError(null)
+    setDraftApplyMessage(null)
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/architecture-draft/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          graphId,
+          mode: "append",
+          proposal: draftProposal,
+        }),
+      })
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string
+        validation?: ArchitectureDraftValidationResult[]
+        canvas?: { nodes: typeof nodes; edges: typeof edges }
+        applied?: { nodes?: number; edges?: number }
+      }
+
+      if (!response.ok) {
+        setDraftValidation(data.validation ?? draftValidation)
+        throw new Error(data.error ?? "Architecture draft apply failed")
+      }
+
+      if (data.canvas) {
+        setCanvasSnapshot(data.canvas)
+      }
+
+      const appliedNodes = data.applied?.nodes ?? draftProposal.nodes.length
+      const appliedEdges = data.applied?.edges ?? draftProposal.edges.length
+      setDraftApplyMessage(
+        `Applied ${appliedNodes} node${appliedNodes === 1 ? "" : "s"} and ${appliedEdges} edge${appliedEdges === 1 ? "" : "s"} to the root canvas.`
+      )
+      broadcastRoomEvent({
+        type: "ai.status",
+        payload: {
+          text: "Architecture draft applied to canvas.",
+          status: "complete",
+        },
+      })
+    } catch (error) {
+      setDraftError(
+        error instanceof Error ? error.message : "Architecture draft apply failed."
+      )
+    } finally {
+      setIsApplyingDraft(false)
+    }
+  }, [
+    broadcastRoomEvent,
+    draftProposal,
+    draftValidation,
+    graphId,
+    isApplyingDraft,
+    projectId,
+    setCanvasSnapshot,
+  ])
+
+  const handleClearArchitectureDraft = useCallback(() => {
+    setDraftProposal(null)
+    setDraftValidation([])
+    setDraftSummary(null)
+    setDraftError(null)
+    setDraftApplyMessage(null)
   }, [])
 
   const handleSend = useCallback(async () => {
@@ -411,6 +632,12 @@ export function AiSidebar({
           onTerminal={handleSpecRunTerminal}
         />
       )}
+      {draftRunId && (
+        <RunTracker
+          runId={draftRunId}
+          onTerminal={handleDraftRunTerminal}
+        />
+      )}
 
       {/* Spec preview modal */}
       <Dialog open={specModalOpen} onOpenChange={(open) => { if (!open) handleModalClose() }}>
@@ -502,13 +729,19 @@ export function AiSidebar({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="architect" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <TabsList className="mx-4 mt-3 h-auto shrink-0 rounded-xl bg-bg-subtle p-1">
+      <Tabs defaultValue="draft" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <TabsList className="mx-4 mt-3 grid h-auto w-auto shrink-0 grid-cols-4 rounded-xl bg-bg-subtle p-1">
           <TabsTrigger
-            value="architect"
+            value="draft"
             className="rounded-lg px-3 py-1.5 text-xs font-medium data-active:bg-accent-ai data-active:text-white data-active:shadow-none"
           >
-            AI Architect
+            Architect
+          </TabsTrigger>
+          <TabsTrigger
+            value="design"
+            className="rounded-lg px-3 py-1.5 text-xs font-medium data-active:bg-accent-ai data-active:text-white data-active:shadow-none"
+          >
+            Design
           </TabsTrigger>
           <TabsTrigger
             value="chat"
@@ -524,8 +757,105 @@ export function AiSidebar({
           </TabsTrigger>
         </TabsList>
 
-        {/* AI Architect Tab */}
-        <TabsContent value="architect" className="min-h-0 flex-1 overflow-hidden">
+        {/* Architecture Draft Tab */}
+        <TabsContent value="draft" className="min-h-0 flex-1 overflow-hidden">
+          <div className="flex h-full flex-col">
+            <ScrollArea className="flex-1">
+              <div className="grid gap-3 px-4 py-3">
+                <div className="rounded-2xl border border-accent-ai/20 bg-accent-ai/10 p-3">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-ai-text" />
+                    <div>
+                      <p className="text-xs font-semibold text-text-primary">
+                        AI proposes an architecture draft. You stay in control. Arc Forge does not build or execute the app.
+                      </p>
+                      <p className="mt-1 text-[11px] leading-4 text-text-muted">
+                        Review the structured proposal, then append it to the root canvas only when it looks right.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 rounded-2xl border border-border-subtle bg-bg-elevated p-3">
+                  <Textarea
+                    ref={draftTextareaRef}
+                    value={draftPrompt}
+                    onChange={handleDraftPromptChange}
+                    placeholder="Describe the system you want to model..."
+                    disabled={isDraftGenerating}
+                    style={{ height: "96px", maxHeight: "180px" }}
+                    className="resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
+                  />
+                  <div className="flex items-center gap-2">
+                    <label className="min-w-0 flex-1">
+                      <span className="sr-only">Draft complexity</span>
+                      <select
+                        value={draftComplexity}
+                        onChange={(event) =>
+                          setDraftComplexity(event.target.value as ArchitectureDraftComplexity)
+                        }
+                        disabled={isDraftGenerating}
+                        className="h-8 w-full rounded-lg border border-border-default bg-bg-subtle px-2 text-xs text-text-primary outline-none transition-colors focus:border-accent-ai/60 disabled:opacity-50"
+                      >
+                        {ARCHITECTURE_DRAFT_COMPLEXITIES.map((complexity) => (
+                          <option key={complexity} value={complexity}>
+                            {complexity}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <Button
+                      size="sm"
+                      onClick={handleGenerateArchitectureDraft}
+                      disabled={!draftPrompt.trim() || isDraftGenerating}
+                      className="h-8 gap-1.5 rounded-lg bg-accent-ai px-3 text-xs text-white hover:bg-accent-ai/80 disabled:opacity-40"
+                    >
+                      {isDraftGenerating ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-3 w-3" />
+                      )}
+                      {isDraftGenerating ? "Generating" : "Generate"}
+                    </Button>
+                  </div>
+                </div>
+
+                {draftError ? (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                    {draftError}
+                  </div>
+                ) : null}
+
+                {draftApplyMessage ? (
+                  <div className="rounded-xl border border-state-success/25 bg-state-success/10 px-3 py-2 text-xs text-state-success">
+                    {draftApplyMessage}
+                  </div>
+                ) : null}
+
+                {isDraftGenerating ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-accent-ai/20 bg-accent-ai/10 px-3 py-2 text-xs text-accent-ai-text">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Drafting semantic architecture proposal...</span>
+                  </div>
+                ) : null}
+
+                {draftProposal ? (
+                  <ArchitectureDraftPreview
+                    proposal={draftProposal}
+                    summary={draftSummary}
+                    validation={draftValidation}
+                    isApplying={isApplyingDraft}
+                    onApply={handleApplyArchitectureDraft}
+                    onClear={handleClearArchitectureDraft}
+                  />
+                ) : null}
+              </div>
+            </ScrollArea>
+          </div>
+        </TabsContent>
+
+        {/* AI Canvas Design Tab */}
+        <TabsContent value="design" className="min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full flex-col">
             <ScrollArea className="flex-1" ref={scrollRef as React.Ref<HTMLDivElement>}>
               <div className="px-4 pt-3 pb-2">
@@ -794,5 +1124,171 @@ export function AiSidebar({
       </Tabs>
     </aside>
     </>
+  )
+}
+
+function ArchitectureDraftPreview({
+  proposal,
+  summary,
+  validation,
+  isApplying,
+  onApply,
+  onClear,
+}: {
+  proposal: ArchitectureDraftProposal
+  summary: ArchitectureDraftRunOutput["summary"] | null
+  validation: ArchitectureDraftValidationResult[]
+  isApplying: boolean
+  onApply: () => void
+  onClear: () => void
+}) {
+  const hasErrors = architectureDraftHasErrors(validation)
+  const groupedNodes = proposal.nodes.reduce<Record<string, typeof proposal.nodes>>(
+    (groups, node) => {
+      groups[node.semanticType] = groups[node.semanticType] ?? []
+      groups[node.semanticType].push(node)
+      return groups
+    },
+    {}
+  )
+  const visibleValidation = validation.filter((item) => item.severity !== "info")
+
+  return (
+    <div className="grid gap-3 rounded-2xl border border-border-subtle bg-bg-surface/70 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-text-primary">
+            {proposal.title}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-text-muted">{proposal.summary}</p>
+        </div>
+        <div
+          className={cn(
+            "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+            hasErrors
+              ? "bg-red-500/10 text-red-300"
+              : "bg-state-success/10 text-state-success"
+          )}
+        >
+          {hasErrors ? "Blocked" : "Ready"}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <MetricPill label="Nodes" value={summary?.nodeCount ?? proposal.nodes.length} />
+        <MetricPill label="Edges" value={summary?.edgeCount ?? proposal.edges.length} />
+        <MetricPill label="Issues" value={visibleValidation.length} />
+      </div>
+
+      {visibleValidation.length > 0 ? (
+        <div className="grid gap-1.5">
+          {visibleValidation.slice(0, 6).map((item) => (
+            <div
+              key={item.id}
+              className={cn(
+                "flex gap-2 rounded-xl border px-2.5 py-2 text-xs",
+                item.severity === "error"
+                  ? "border-red-500/30 bg-red-500/10 text-red-200"
+                  : "border-state-warning/30 bg-state-warning/10 text-state-warning"
+              )}
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                {item.targetId ? `${item.targetId}: ` : ""}
+                {item.message}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 rounded-xl border border-state-success/25 bg-state-success/10 px-2.5 py-2 text-xs text-state-success">
+          <Check className="h-3.5 w-3.5" />
+          <span>No blocking validation errors.</span>
+        </div>
+      )}
+
+      <div className="grid gap-2">
+        {Object.entries(groupedNodes).map(([semanticType, group]) => (
+          <div key={semanticType} className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
+            <p className="text-[10px] font-semibold uppercase text-text-faint">
+              {semanticType}
+            </p>
+            <div className="mt-2 grid gap-1">
+              {group.map((node) => (
+                <div key={node.id} className="min-w-0">
+                  <p className="truncate text-xs font-medium text-text-primary">{node.label}</p>
+                  <p className="truncate font-mono text-[10px] text-text-faint">{node.id}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {proposal.edges.length > 0 ? (
+        <div className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
+          <p className="text-[10px] font-semibold uppercase text-text-faint">
+            Relations
+          </p>
+          <div className="mt-2 grid gap-1.5">
+            {proposal.edges.slice(0, 10).map((edge) => (
+              <p key={edge.id} className="truncate text-[11px] text-text-secondary">
+                <span className="text-text-primary">{edge.source}</span>
+                <span className="text-text-faint"> {"->"} </span>
+                <span className="text-text-primary">{edge.target}</span>
+                <span className="text-text-faint"> / {edge.semanticType}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {proposal.assumptions.length > 0 || proposal.suggestedNextSteps.length > 0 ? (
+        <div className="grid gap-2 rounded-xl border border-border-default bg-bg-elevated p-2.5">
+          {[...proposal.assumptions, ...proposal.suggestedNextSteps]
+            .slice(0, 5)
+            .map((item) => (
+              <p key={item} className="text-[11px] leading-4 text-text-muted">
+                {item}
+              </p>
+            ))}
+        </div>
+      ) : null}
+
+      <div className="flex items-center gap-2 border-t border-border-default pt-3">
+        <Button
+          size="sm"
+          onClick={onApply}
+          disabled={hasErrors || isApplying}
+          className="h-8 flex-1 gap-1.5 rounded-lg bg-accent-ai px-3 text-xs text-white hover:bg-accent-ai/80 disabled:opacity-40"
+        >
+          {isApplying ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Check className="h-3 w-3" />
+          )}
+          {isApplying ? "Applying" : "Apply to canvas"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onClear}
+          disabled={isApplying}
+          className="h-8 gap-1.5 rounded-lg border-border-subtle px-3 text-xs text-text-secondary hover:border-border-default hover:text-text-primary"
+        >
+          <Trash2 className="h-3 w-3" />
+          Clear
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function MetricPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2">
+      <p className="text-[10px] text-text-faint">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold text-text-primary">{value}</p>
+    </div>
   )
 }

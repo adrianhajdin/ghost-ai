@@ -13,6 +13,16 @@ import {
   type GenerateSpecMarkdownInput,
 } from "@/lib/ai/spec/spec-provider-contract"
 import { AiProviderConfigError, type AiProvider } from "@/lib/ai/providers/types"
+import {
+  parseArchitectureDraftProposal,
+  type ArchitectureDraftProposal,
+} from "@/lib/architecture-draft/architecture-draft"
+import {
+  buildArchitectureDraftSystemPrompt,
+  buildArchitectureDraftUserPrompt,
+  type GenerateArchitectureDraftInput,
+  type GenerateArchitectureDraftResult,
+} from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
 import { NODE_SHAPES } from "@/types/canvas"
 import { AI_ASSISTANT_NAME } from "@/lib/branding"
 
@@ -148,5 +158,22 @@ export class OpenAiCompatibleProvider implements AiProvider {
     })
 
     return z.string().min(1).parse(markdown)
+  }
+
+  async generateArchitectureDraft(
+    input: GenerateArchitectureDraftInput
+  ): Promise<GenerateArchitectureDraftResult> {
+    const content = await this.chatCompletion({
+      model: this.model,
+      json: true,
+      messages: [
+        { role: "system", content: buildArchitectureDraftSystemPrompt() },
+        { role: "user", content: buildArchitectureDraftUserPrompt(input) },
+      ],
+    })
+
+    return parseArchitectureDraftProposal(
+      extractJsonObject(content) as ArchitectureDraftProposal
+    )
   }
 }

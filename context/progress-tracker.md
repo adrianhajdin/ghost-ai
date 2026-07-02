@@ -3,10 +3,10 @@
 Update this file whenever the current phase, active feature, or implementation state changes.
 
 ## Current Phase
-- Prompt Pack Generator & Export
+- AI Architecture Draft Generator
 
 ## Current Goal
-- Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Design IR is machine-readable architecture. Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Nimbus is not included as a Prompt Pack target in this version.
+- Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. AI can propose architecture drafts on the canvas. The user approves before applying. Arc Forge does not execute or build the app. Design IR is machine-readable architecture. Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Nimbus is not included yet.
 
 ## Completed
 
@@ -55,10 +55,11 @@ The numbered feature notes below are historical implementation notes. They descr
 - Service Drill-Down Subcanvas: the root canvas graph remains backward compatible as `graph_root`; service nodes can create and open service-internal CanvasDoc subcanvas graphs stored separately; editor URLs and breadcrumbs switch graph context; realtime rooms, autosave, and AI design updates are graph-scoped; service-internal templates expose endpoint, entity, worker, event contract, business rule, validation rule, and policy nodes; sanitizer logic preserves subcanvas references while stripping transient UI state; and Design IR includes a deterministic multi-CanvasDoc helper.
 - Design IR Compiler & Export: projects can compile a deterministic read-only Design IR from the root CanvasDoc plus directly linked child graphs; the IR preserves graph hierarchy, parent service metadata for child nodes, semantic sections for services/apis/endpoints/data models/workers/events/policies/business rules/validation rules, unclassified nodes, relations with labels and source graph IDs, validation summaries, and provenance. Raw secret-looking values are stripped or redacted while secretRef-style references survive. The editor exposes a compact Design IR modal with status, compiled graph IDs, JSON preview, copy, and download controls.
 - Prompt Pack Generator & Export: projects can compile deterministic Prompt Pack v1 instruction artifacts from Design IR only. Supported targets are Codex, Claude Code, and Generic AI Builder. Prompt Packs include stable Design IR hashes, architecture summaries, target-specific Markdown, warnings, assumptions, decisions, source refs, forbidden choices, implementation plans, acceptance checks, validation checks, and final report requirements. The editor exposes a separate compact Prompt Pack modal with target switching, Markdown/JSON/Warn tabs, copy, refresh, and downloads. Prompt Pack generation remains read-only with no AI calls, no code execution, no app builder runtime, no repository write-back, and no default persistence.
+- AI Architecture Draft Generator: added Architecture Draft v1 schema, provider contract, deterministic mock proposal generation, validation/sanitization, root CanvasDoc append-only apply helper, server-side generate/apply routes, durable `architecture_draft` task type, realtime snapshot publication after apply, and an Architect tab in the AI sidebar for prompt, complexity, preview, validation, Apply, and Clear. Draft generation is proposal-first, user-approved, root-graph only, no app builder/codegen, no repository write-back, no raw secrets, and no persistent UI state.
 
 ## In Progress
 
-- Prompt Pack validation and product smoke coverage — verify read-only project export access, target switching, deterministic output, secret redaction, download/copy behavior, desktop/mobile layout, and existing semantic canvas behavior under realistic local workflows.
+- AI Architecture Draft validation and product smoke coverage — verify generation, preview, validation gating, append-only apply, Design IR/Prompt Pack downstream output, desktop/mobile layout, and existing semantic canvas behavior under realistic local workflows.
 - Foundation stabilization and production hardening — keep verifying the internal auth, account recovery, AI task runner, realtime, storage, and AI provider foundation under realistic local workflows, then tighten deployment guidance and operational edge cases.
 
 ## Next Up

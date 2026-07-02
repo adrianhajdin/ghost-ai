@@ -298,5 +298,7 @@ export function getSafeWorkerError(error: unknown) {
 }
 
 export function taskTypeLabel(type: AiTaskType) {
-  return type === "design_agent" ? "Design agent" : "Spec generation"
+  if (type === "design_agent") return "Design agent"
+  if (type === "architecture_draft") return "Architecture draft"
+  return "Spec generation"
 }

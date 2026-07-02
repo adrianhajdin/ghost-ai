@@ -8,6 +8,10 @@ import {
   runGenerateSpecTask,
 } from "@/lib/ai-tasks/task-handlers/generate-spec-handler"
 import {
+  ArchitectureDraftPayloadSchema,
+  runArchitectureDraftTask,
+} from "@/lib/ai-tasks/task-handlers/architecture-draft-handler"
+import {
   appendAiTaskEvent,
   getSafeWorkerError,
   heartbeatTask,
@@ -59,6 +63,10 @@ async function runHandler(run: AiTaskRun) {
     case AiTaskType.generate_spec: {
       const payload = GenerateSpecPayloadSchema.parse(run.payloadJson)
       return runGenerateSpecTask(payload)
+    }
+    case AiTaskType.architecture_draft: {
+      const payload = ArchitectureDraftPayloadSchema.parse(run.payloadJson)
+      return runArchitectureDraftTask(payload)
     }
   }
 }

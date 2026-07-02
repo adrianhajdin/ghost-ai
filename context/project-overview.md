@@ -2,16 +2,16 @@
 
 ## Overview
 
-Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Users capture application architecture intent on a shared React Flow canvas; the product normalizes that graph into semantic canvas data, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
+Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. Users capture application architecture intent on a shared React Flow canvas; AI can propose architecture drafts on the canvas, the user approves before applying, the product normalizes that graph into semantic canvas data, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
 
-Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Nimbus is not included as a Prompt Pack target in this version.
+Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Arc Forge does not execute or build the app. Nimbus is not included yet and is not a Prompt Pack target in this version.
 
 ## Goals
 
 1. Let authenticated users create and manage architecture projects.
 2. Provide a collaborative real-time semantic canvas for system design.
 3. Let users import prebuilt starter system designs into the canvas.
-4. Let AI generate an initial architecture from a natural language prompt.
+4. Let AI propose an initial architecture draft from a natural language prompt.
 5. Let collaborators refine the generated architecture and attach semantic metadata.
 6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, canonical Design IR, and Prompt Pack instructions for external implementation agents.
 
@@ -21,13 +21,14 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 2. User creates or selects a project.
 3. User enters the project workspace.
 4. User optionally imports a starter system design template into the canvas.
-5. User prompts the AI to generate or extend the system design.
-6. AI generates nodes and edges in the shared canvas.
-7. Collaborators edit, classify, and refine the design.
-8. User previews or downloads Design IR and Prompt Pack instruction artifacts.
-9. User triggers spec generation when they need a persisted Markdown technical spec.
-10. App persists the generated Markdown spec.
-11. User reviews or downloads the spec.
+5. User asks AI for an architecture draft proposal.
+6. User reviews validation, warnings, nodes, and relations before accepting.
+7. Accepted drafts append semantic nodes and edges to the shared canvas.
+8. Collaborators edit, classify, and refine the design.
+9. User previews or downloads Design IR and Prompt Pack instruction artifacts.
+10. User triggers spec generation when they need a persisted Markdown technical spec.
+11. App persists the generated Markdown spec.
+12. User reviews or downloads the spec.
 
 ## Features
 
@@ -63,6 +64,14 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Output is structured as canvas nodes and edges persisted to canvas storage and published through the internal realtime room.
 - Generation runs as a durable PostgreSQL-backed background task.
 
+### AI Architecture Drafts
+
+- AI can propose architecture drafts on the canvas from natural language.
+- Draft proposals are structured semantic root-canvas nodes and edges, not Markdown-only output.
+- The user approves before applying.
+- Accepted drafts are append-only and run through deterministic validation, sanitization, CanvasDoc persistence, and realtime publication.
+- Arc Forge does not execute or build the app.
+
 ### Spec Generation
 
 - The current canvas graph is converted into a Markdown technical specification through the configured AI provider.
@@ -89,6 +98,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Real-time shared canvas with nodes, edges, and presence
 - Internal realtime room/presence/event runtime for collaborative canvas state
 - AI-powered architecture generation from prompts
+- AI-powered architecture draft proposals with preview, validation, and user-approved append-only apply
 - AI-powered Markdown spec generation from the canvas graph
 - Read-only Design IR export and Prompt Pack instruction export
 - Persistent storage for project metadata and generated artifacts
@@ -102,13 +112,14 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Advanced artifact retention/versioning policies
 - Mobile-native applications
 - In-app code generation, repository write-back, branch automation, pull request automation, sandbox execution, and autonomous app building
+- Arc Forge executing Prompt Packs, building generated apps, or writing target application repositories
 
 ## Success Criteria
 
 1. A signed-in user can create and open a project.
 2. Multiple users can collaborate in the same canvas simultaneously.
 3. A user can import a prebuilt starter design into the canvas.
-4. AI can generate an architecture into the shared room from a prompt.
+4. AI can propose an architecture draft from a prompt and apply it only after user approval.
 5. The graph can be converted into Design IR, Prompt Pack instructions, and a persisted Markdown spec.
 6. Project metadata and generated artifacts are stored in the correct layers.
 7. Internal realtime room access is authenticated before any custom realtime connection is accepted.

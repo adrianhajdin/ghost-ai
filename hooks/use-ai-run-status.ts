@@ -13,7 +13,7 @@ export type AiRunStatus =
 
 export interface AiRunStatusResponse {
   id: string
-  type: "design_agent" | "generate_spec"
+  type: "design_agent" | "generate_spec" | "architecture_draft"
   status: AiRunStatus
   projectId: string
   resultJson: unknown
