@@ -22,6 +22,7 @@
 - `lib/ai/providers` — Server-side AI provider selection and external model adapters.
 - `lib/ai/design` / `lib/ai/spec` — Provider contracts, structured design actions, and spec context helpers.
 - `lib/canvas` — Canvas snapshot sanitization, CanvasDoc v1 compatibility helpers, semantic validation, and deterministic Design IR v1 compilation/export.
+- `lib/prompt-pack` — Deterministic Prompt Pack v1 compilation from Design IR, target-specific Markdown rendering, stable IR hashing, and read-only project export helpers.
 - `scripts/ai-worker.ts` — Worker process entrypoint for local and production task execution.
 - `lib/email` — Server-only email provider selection and delivery for account emails.
 - `lib/realtime` — Internal realtime foundation: signed room tokens, typed protocol, room registry, and WebSocket server.
@@ -39,6 +40,8 @@
 - Canvas content and Markdown output are stored in and retrieved from the configured artifact storage provider.
 - Existing canvas storage remains compatible with `{ nodes, edges }` snapshots. New graph-aware canvas writes persist CanvasDoc v1 documents; legacy root reads normalize existing snapshots into `graph_root`, while subcanvas graphs are separate CanvasDoc v1 objects referenced by `node.data.subcanvasRef`.
 - Design IR is machine-readable architecture. It is compiled on demand from the root CanvasDoc and directly linked child graph CanvasDocs, is exposed through a read-only project route, and is not persisted as an additional artifact by default.
+- Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Prompt Pack generation is deterministic, read-only, does not call AI providers, does not persist by default, and does not write back to repositories.
+- Nimbus is not included as a Prompt Pack target in this version.
 - Local development defaults to filesystem storage under `.local-storage`; external object storage such as Vercel Blob is optional.
 - The database stores only the provider object reference in the existing `canvasBlobUrl` and `filePath` fields.
 
@@ -88,7 +91,15 @@
 - Execution: deterministic in-process compiler, not AI.
 - Output: read-only JSON export containing project defaults, graph hierarchy, typed semantic sections, relations, validation results, and provenance.
 - Missing child graphs, unclassified items, missing required semantic fields, invalid graph IDs, relationship target issues, and raw secret redaction appear as advisory validation results. Export is not blocked.
-- Prompt Pack generation is not active yet.
+
+### Prompt Pack Generation
+
+- Input: Design IR v1 compiled from the project canvas graph scope.
+- Execution: deterministic in-process renderer, not AI.
+- Output: JSON and Markdown instruction artifacts for Codex, Claude Code, and Generic AI Builder targets.
+- Prompt Packs include a stable hash of the source Design IR, architecture summaries, target-specific implementation guidance, warnings, assumptions, decisions, source references, forbidden choices, acceptance checks, validation checks, and final report requirements.
+- Prompt Pack status is ready, has-warnings, or draft based on Design IR validation, unclassified items, missing child graphs, and missing required semantic fields.
+- Raw secret-looking values remain redacted; `secretRef` and `secretCapabilityRef` references survive.
 
 ## Invariants
 
@@ -105,3 +116,4 @@
 11. Email delivery secrets are server-only, and raw verification/reset tokens must never be stored in the database.
 12. Durable canvas data must not include transient UI state such as selected, dragging, hovered, editing drafts, lasso rectangles, reconnect ghosts, or presence cursors.
 13. Raw secret values must not be stored in canvas metadata or exported Design IR; use secretRef-style references only.
+14. Prompt Pack generation must remain read-only: no AI calls, no code execution, no app builder runtime, no repository write-back, and no default persistence.

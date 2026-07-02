@@ -2,6 +2,7 @@
 
 import {
   FileJson,
+  FileText,
   LayoutTemplate,
   PanelLeftClose,
   PanelLeftOpen,
@@ -22,6 +23,7 @@ interface EditorNavbarProps {
   onOpenShareDialog?: () => void
   onOpenTemplates?: () => void
   onOpenDesignIr?: () => void
+  onOpenPromptPack?: () => void
   saveStatus?: SaveStatus
   onSave?: () => void
 }
@@ -35,6 +37,7 @@ export function EditorNavbar({
   onOpenShareDialog,
   onOpenTemplates,
   onOpenDesignIr,
+  onOpenPromptPack,
   saveStatus,
   onSave,
 }: EditorNavbarProps) {
@@ -116,6 +119,18 @@ export function EditorNavbar({
               >
                 <FileJson className="h-4 w-4" />
                 <span className="hidden sm:inline">Design IR</span>
+              </Button>
+            ) : null}
+            {onOpenPromptPack ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-0 px-2 sm:gap-2 sm:px-3"
+                onClick={onOpenPromptPack}
+                aria-label="Open Prompt Pack"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Prompt Pack</span>
               </Button>
             ) : null}
             <Button

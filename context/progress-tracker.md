@@ -3,10 +3,10 @@
 Update this file whenever the current phase, active feature, or implementation state changes.
 
 ## Current Phase
-- Design IR Compiler & Export
+- Prompt Pack Generator & Export
 
 ## Current Goal
-- Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Design IR is machine-readable architecture. Prompt Pack generation is not active yet.
+- Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Design IR is machine-readable architecture. Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Nimbus is not included as a Prompt Pack target in this version.
 
 ## Completed
 
@@ -54,16 +54,16 @@ The numbered feature notes below are historical implementation notes. They descr
 - Workspace Panel Layout: the editor now reserves desktop canvas gutters for open project and AI sidebars, uses a stronger mobile/tablet navigation deck treatment for the project sidebar, compresses workspace navbar actions to icon controls on narrow viewports so semantic inspector panels no longer visually collide with workspace navigation, and keeps Account/Sign out accessible through a compact avatar menu on small screens.
 - Service Drill-Down Subcanvas: the root canvas graph remains backward compatible as `graph_root`; service nodes can create and open service-internal CanvasDoc subcanvas graphs stored separately; editor URLs and breadcrumbs switch graph context; realtime rooms, autosave, and AI design updates are graph-scoped; service-internal templates expose endpoint, entity, worker, event contract, business rule, validation rule, and policy nodes; sanitizer logic preserves subcanvas references while stripping transient UI state; and Design IR includes a deterministic multi-CanvasDoc helper.
 - Design IR Compiler & Export: projects can compile a deterministic read-only Design IR from the root CanvasDoc plus directly linked child graphs; the IR preserves graph hierarchy, parent service metadata for child nodes, semantic sections for services/apis/endpoints/data models/workers/events/policies/business rules/validation rules, unclassified nodes, relations with labels and source graph IDs, validation summaries, and provenance. Raw secret-looking values are stripped or redacted while secretRef-style references survive. The editor exposes a compact Design IR modal with status, compiled graph IDs, JSON preview, copy, and download controls.
+- Prompt Pack Generator & Export: projects can compile deterministic Prompt Pack v1 instruction artifacts from Design IR only. Supported targets are Codex, Claude Code, and Generic AI Builder. Prompt Packs include stable Design IR hashes, architecture summaries, target-specific Markdown, warnings, assumptions, decisions, source refs, forbidden choices, implementation plans, acceptance checks, validation checks, and final report requirements. The editor exposes a separate compact Prompt Pack modal with target switching, Markdown/JSON/Warn tabs, copy, refresh, and downloads. Prompt Pack generation remains read-only with no AI calls, no code execution, no app builder runtime, no repository write-back, and no default persistence.
 
 ## In Progress
 
-- Design IR validation and product smoke coverage — verify read-only project export access, root plus child graph compilation, advisory validation, secret redaction, deterministic output, desktop/mobile layout, and existing semantic canvas behavior under realistic local workflows.
+- Prompt Pack validation and product smoke coverage — verify read-only project export access, target switching, deterministic output, secret redaction, download/copy behavior, desktop/mobile layout, and existing semantic canvas behavior under realistic local workflows.
 - Foundation stabilization and production hardening — keep verifying the internal auth, account recovery, AI task runner, realtime, storage, and AI provider foundation under realistic local workflows, then tighten deployment guidance and operational edge cases.
 
 ## Next Up
 - Additional semantic drill-down scopes for API, database, auth-module, and worker nodes.
-- Prompt Pack generation remains future work and is not active yet.
-- Design IR expansion for technical specs, API contracts, and external coding-agent instruction packs.
+- Design IR and Prompt Pack expansion for technical specs, API contracts, and additional coding-agent instruction formats.
 - Realtime collaboration stabilization, including conflict handling, reconnection polish, event replay strategy, and production reverse-proxy guidance.
 
 

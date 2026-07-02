@@ -2,7 +2,9 @@
 
 ## Overview
 
-Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Users capture application architecture intent on a shared React Flow canvas; the product normalizes that graph into semantic canvas data and prepares a canonical Design IR foundation for later implementation instructions, prompt packs, technical specs, API contracts, and checklists for external coding agents.
+Arc Forge v1 is a semantic architect and instruction generator, not an app builder. Users capture application architecture intent on a shared React Flow canvas; the product normalizes that graph into semantic canvas data, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
+
+Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Nimbus is not included as a Prompt Pack target in this version.
 
 ## Goals
 
@@ -11,7 +13,7 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 3. Let users import prebuilt starter system designs into the canvas.
 4. Let AI generate an initial architecture from a natural language prompt.
 5. Let collaborators refine the generated architecture and attach semantic metadata.
-6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, with Design IR prepared for future instruction generation.
+6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, canonical Design IR, and Prompt Pack instructions for external implementation agents.
 
 ## Core User Flow
 
@@ -22,9 +24,10 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 5. User prompts the AI to generate or extend the system design.
 6. AI generates nodes and edges in the shared canvas.
 7. Collaborators edit, classify, and refine the design.
-8. User triggers spec generation.
-9. App persists the generated Markdown spec.
-10. User reviews or downloads the spec.
+8. User previews or downloads Design IR and Prompt Pack instruction artifacts.
+9. User triggers spec generation when they need a persisted Markdown technical spec.
+10. App persists the generated Markdown spec.
+11. User reviews or downloads the spec.
 
 ## Features
 
@@ -43,7 +46,7 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 - Live cursors, presence indicators, and node/edge editing.
 - Semantic node and edge metadata with validation warnings for unclassified or incomplete technical meaning.
 - Semantic templates for service, database, worker, and auth-module nodes.
-- CanvasDoc v1 and Design IR v1 type foundations for future compiler and prompt-pack work.
+- CanvasDoc v1, Design IR v1, and Prompt Pack v1 foundations for external coding-agent instruction generation.
 - Canvas snapshots persisted through the configured artifact storage provider.
 
 ### Starter System Designs
@@ -66,6 +69,14 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 - Specs are persisted through the configured artifact storage provider and linked to the project in the database.
 - Users can view and download generated specs.
 
+### Prompt Pack Generation
+
+- Prompt Packs are generated from Design IR.
+- Prompt Packs are copy/download instruction artifacts only.
+- Arc Forge does not execute Prompt Packs.
+- Supported Prompt Pack targets are Codex, Claude Code, and Generic AI Builder.
+- Nimbus is not included as a Prompt Pack target in this version.
+
 ## Scope
 
 ### In Scope
@@ -79,6 +90,7 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 - Internal realtime room/presence/event runtime for collaborative canvas state
 - AI-powered architecture generation from prompts
 - AI-powered Markdown spec generation from the canvas graph
+- Read-only Design IR export and Prompt Pack instruction export
 - Persistent storage for project metadata and generated artifacts
 - Spec download
 
@@ -97,7 +109,7 @@ Arc Forge v1 is a semantic architect and instruction generator, not an app build
 2. Multiple users can collaborate in the same canvas simultaneously.
 3. A user can import a prebuilt starter design into the canvas.
 4. AI can generate an architecture into the shared room from a prompt.
-5. The graph can be converted into a persisted Markdown spec.
+5. The graph can be converted into Design IR, Prompt Pack instructions, and a persisted Markdown spec.
 6. Project metadata and generated artifacts are stored in the correct layers.
 7. Internal realtime room access is authenticated before any custom realtime connection is accepted.
 8. Users can verify their email and recover or change passwords without an external auth provider.

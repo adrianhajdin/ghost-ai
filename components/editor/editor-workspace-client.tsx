@@ -7,6 +7,7 @@ import { ProjectDialogs } from "@/components/editor/project-dialogs"
 import { ProjectShareDialog } from "@/components/editor/project-share-dialog"
 import { StarterTemplatesModal } from "@/components/editor/starter-templates-modal"
 import { DesignIrPanel } from "@/components/editor/design-ir-panel"
+import { PromptPackPanel } from "@/components/editor/prompt-pack-panel"
 import { ProjectSidebar } from "@/components/editor/project-sidebar"
 import { AiSidebar } from "@/components/editor/ai-sidebar"
 import { CanvasRoom } from "@/components/editor/canvas/canvas-room"
@@ -36,6 +37,7 @@ export function EditorWorkspaceClient({
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [designIrOpen, setDesignIrOpen] = useState(false)
+  const [promptPackOpen, setPromptPackOpen] = useState(false)
   const [pendingTemplate, setPendingTemplate] = useState<CanvasTemplate | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
   const saveFnRef = useRef<() => void>(() => {})
@@ -62,6 +64,7 @@ export function EditorWorkspaceClient({
             onOpenShareDialog={() => setShareDialogOpen(true)}
             onOpenTemplates={() => setTemplatesOpen(true)}
             onOpenDesignIr={() => setDesignIrOpen(true)}
+            onOpenPromptPack={() => setPromptPackOpen(true)}
             saveStatus={saveStatus}
             onSave={() => saveFnRef.current()}
           />
@@ -118,6 +121,11 @@ export function EditorWorkspaceClient({
             projectId={currentProject.id}
             open={designIrOpen}
             onOpenChange={setDesignIrOpen}
+          />
+          <PromptPackPanel
+            projectId={currentProject.id}
+            open={promptPackOpen}
+            onOpenChange={setPromptPackOpen}
           />
         </div>
     </InternalRealtimeProvider>
