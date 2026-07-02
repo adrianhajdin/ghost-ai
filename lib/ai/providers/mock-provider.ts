@@ -20,6 +20,7 @@ import {
   ARCHITECTURE_DRAFT_VERSION,
   parseArchitectureDraftProposal,
   type ArchitectureDraftEdge,
+  type ArchitectureDraftGraph,
   type ArchitectureDraftNode,
   type ArchitectureDraftProposal,
 } from "@/lib/architecture-draft/architecture-draft"
@@ -66,7 +67,7 @@ function formatEdgeLabels(edge: GenerateSpecMarkdownInput["edges"][number]) {
 }
 
 function draftNode(
-  semanticType: SemanticNodeType,
+  semanticType: SemanticNodeType | string,
   label: string,
   metadata: Record<string, unknown>,
   position: { x: number; y: number },
@@ -86,12 +87,12 @@ function draftNode(
 function draftEdge(
   source: string,
   target: string,
-  semanticType: SemanticEdgeType,
+  semanticType: SemanticEdgeType | string,
   label: string,
   metadata: Record<string, unknown> = {}
 ): ArchitectureDraftEdge {
   return {
-    id: `edge-${source}-${target}-${semanticType}`.slice(0, 120),
+    id: slugify(`edge-${source}-${target}-${semanticType}`).slice(0, 120),
     source,
     target,
     semanticType,
@@ -108,7 +109,8 @@ function baseProposal(
   nodes: ArchitectureDraftNode[],
   edges: ArchitectureDraftEdge[],
   assumptions: string[],
-  suggestedNextSteps: string[]
+  suggestedNextSteps: string[],
+  graphs: ArchitectureDraftGraph[] = []
 ): ArchitectureDraftProposal {
   return {
     $schema: ARCHITECTURE_DRAFT_SCHEMA_URL,
@@ -120,6 +122,8 @@ function baseProposal(
     complexity: input.complexity,
     nodes,
     edges,
+    graphs,
+    clarificationQuestions: [],
     assumptions,
     warnings: [],
     suggestedNextSteps,
@@ -307,6 +311,58 @@ function taxiArchitecture(input: GenerateArchitectureDraftInput) {
       { enforcementPoint: "service", blocking: true }
     ),
   ]
+  const backendNodeId = byLabel.get("Booking Service")!
+  const childNodes = [
+    draftNode(
+      "module",
+      "Booking Workflow Module",
+      { moduleKind: "workflow", boundedContext: "booking" },
+      { x: 80, y: 80 },
+      "Coordinates ride request validation, pricing, booking creation, and dispatch handoff."
+    ),
+    draftNode(
+      "endpoint-group",
+      "Ride Booking API",
+      { pathPrefix: "/rides", resourceName: "rides" },
+      { x: 340, y: 80 },
+      "HTTP surface for ride quote, create, cancel, and status operations."
+    ),
+    draftNode(
+      "entity",
+      "Ride Aggregate",
+      { fields: ["id", "passengerId", "driverId", "status", "fare"], tenantKey: "ownerId" },
+      { x: 600, y: 80 },
+      "Core booking aggregate for the ride lifecycle."
+    ),
+    draftNode(
+      "business-rule",
+      "Fare and Dispatch Guard",
+      { ruleType: "pricing-and-dispatch-policy" },
+      { x: 340, y: 260 },
+      "Keeps pricing and dispatch eligibility explicit inside the booking layer."
+    ),
+  ]
+  const childIds = new Map(childNodes.map((node) => [node.label, node.id ?? node.label]))
+  const childEdges = [
+    draftEdge(
+      childIds.get("Ride Booking API")!,
+      childIds.get("Booking Workflow Module")!,
+      "invokes",
+      "routes commands to workflow"
+    ),
+    draftEdge(
+      childIds.get("Booking Workflow Module")!,
+      childIds.get("Ride Aggregate")!,
+      "persists aggregate",
+      "writes ride lifecycle state"
+    ),
+    draftEdge(
+      childIds.get("Fare and Dispatch Guard")!,
+      childIds.get("Booking Workflow Module")!,
+      "guards",
+      "guards booking decisions"
+    ),
+  ]
 
   return baseProposal(
     input,
@@ -321,6 +377,19 @@ function taxiArchitecture(input: GenerateArchitectureDraftInput) {
     [
       "Drill into Booking Service to define endpoints and entities.",
       "Add event contracts for RideRequested and DriverAssigned.",
+    ],
+    [
+      {
+        graphId: "graph_booking_service_internals",
+        title: "Booking Service Internals",
+        layer: input.graphId === "graph_root" ? 1 : undefined,
+        layerKind: "service-internals",
+        parentGraphId: input.graphId,
+        parentNodeTempId: backendNodeId,
+        summary: "Internal booking modules, API surface, aggregate, and guardrails.",
+        nodes: childNodes,
+        edges: childEdges,
+      },
     ]
   )
 }

@@ -29,16 +29,28 @@ export async function compileProjectDesignIr(
   const docs = [rootDoc]
 
   if (!options.rootOnly) {
-    const childGraphIds = [...new Set(
-      rootDoc.nodes
-        .map((node) => node.data.subcanvasRef?.graphId)
-        .filter((graphId): graphId is string => Boolean(graphId?.trim()))
-        .filter((graphId) => isValidGraphId(graphId))
-    )].sort((a, b) => a.localeCompare(b, "en"))
+    const seenGraphIds = new Set([rootDoc.graphId])
+    const pendingGraphIds = rootDoc.nodes
+      .map((node) => node.data.subcanvasRef?.graphId)
+      .filter((graphId): graphId is string => Boolean(graphId?.trim()))
+      .filter((graphId) => isValidGraphId(graphId))
+      .sort((a, b) => a.localeCompare(b, "en"))
 
-    for (const graphId of childGraphIds) {
+    while (pendingGraphIds.length > 0) {
+      const graphId = pendingGraphIds.shift()
+      if (!graphId || seenGraphIds.has(graphId)) continue
+      seenGraphIds.add(graphId)
+
       const childDoc = await readCanvasDoc(projectId, graphId)
-      if (childDoc) docs.push(childDoc)
+      if (!childDoc) continue
+
+      docs.push(childDoc)
+      const nestedGraphIds = childDoc.nodes
+        .map((node) => node.data.subcanvasRef?.graphId)
+        .filter((nestedGraphId): nestedGraphId is string => Boolean(nestedGraphId?.trim()))
+        .filter((nestedGraphId) => isValidGraphId(nestedGraphId))
+        .sort((a, b) => a.localeCompare(b, "en"))
+      pendingGraphIds.push(...nestedGraphIds)
     }
   }
 

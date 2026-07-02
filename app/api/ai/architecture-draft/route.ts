@@ -38,13 +38,6 @@ export async function POST(request: Request) {
     throw error
   }
 
-  if (graphId !== ROOT_GRAPH_ID) {
-    return Response.json(
-      { error: "Architecture Draft v1 only supports graph_root" },
-      { status: 400 }
-    )
-  }
-
   const run = await createAiTaskRun({
     type: AiTaskType.architecture_draft,
     projectId: project.id,

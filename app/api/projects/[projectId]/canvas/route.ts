@@ -51,7 +51,11 @@ export async function PUT(
         parentNodeId:
           "parentNodeId" in record && typeof record.parentNodeId === "string"
             ? record.parentNodeId
-            : null,
+            : undefined,
+        parentGraphId:
+          "parentGraphId" in record && typeof record.parentGraphId === "string"
+            ? record.parentGraphId
+            : undefined,
         scopeKind:
           "scopeKind" in record && typeof record.scopeKind === "string"
             ? docScopeFromRequest(record.scopeKind, graphId)
@@ -59,6 +63,18 @@ export async function PUT(
         title:
           "title" in record && typeof record.title === "string"
             ? record.title
+            : undefined,
+        layer:
+          "layer" in record && typeof record.layer === "number" && Number.isInteger(record.layer)
+            ? record.layer
+            : undefined,
+        layerKind:
+          "layerKind" in record && typeof record.layerKind === "string"
+            ? record.layerKind
+            : undefined,
+        summary:
+          "summary" in record && typeof record.summary === "string"
+            ? record.summary
             : undefined,
       }
     )
@@ -79,9 +95,10 @@ function docScopeFromRequest(scopeKind: string, graphId: string) {
     scopeKind === "api-design" ||
     scopeKind === "database-design" ||
     scopeKind === "auth-design" ||
-    scopeKind === "worker-design"
+    scopeKind === "worker-design" ||
+    scopeKind === "architecture-layer"
   ) {
     return scopeKind
   }
-  return undefined
+  return graphId === "graph_root" ? "system-root" : "architecture-layer"
 }

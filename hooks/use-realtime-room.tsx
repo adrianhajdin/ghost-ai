@@ -43,7 +43,11 @@ interface RealtimeRoomContextValue {
   graphId: string
   graphTitle: string
   graphScopeKind: CanvasScopeKind
+  parentGraphId: string | null
   parentNodeId: string | null
+  graphLayer: number | null
+  graphLayerKind: string | null
+  graphSummary: string | null
   currentUserName: string
   status: RealtimeConnectionStatus
   error: string | null
@@ -124,11 +128,15 @@ export function InternalRealtimeProvider({
   const [connectionId, setConnectionId] = useState<string | null>(null)
   const [nodes, setNodes] = useState<CanvasNode[]>([])
   const [edges, setEdges] = useState<CanvasEdge[]>([])
-  const [graphTitle, setGraphTitle] = useState(graphId === ROOT_GRAPH_ID ? "System" : "Service design")
+  const [graphTitle, setGraphTitle] = useState(graphId === ROOT_GRAPH_ID ? "System" : "Design layer")
   const [graphScopeKind, setGraphScopeKind] = useState<CanvasScopeKind>(
-    graphId === ROOT_GRAPH_ID ? "system-root" : "service-internal"
+    graphId === ROOT_GRAPH_ID ? "system-root" : "architecture-layer"
   )
+  const [parentGraphId, setParentGraphId] = useState<string | null>(null)
   const [parentNodeId, setParentNodeId] = useState<string | null>(null)
+  const [graphLayer, setGraphLayer] = useState<number | null>(null)
+  const [graphLayerKind, setGraphLayerKind] = useState<string | null>(null)
+  const [graphSummary, setGraphSummary] = useState<string | null>(null)
   const [presence, setPresence] = useState<RealtimePresenceRecord[]>([])
   const [chatMessages, setChatMessages] = useState<Array<ChatFeedMessage & { id: string; createdAt: number }>>([])
   const [aiStatuses, setAiStatuses] = useState<Array<AiStatusFeedMessage & { id: string; createdAt: number }>>([])
@@ -278,7 +286,11 @@ export function InternalRealtimeProvider({
         if (doc) {
           setGraphTitle(doc.title)
           setGraphScopeKind(doc.scopeKind)
+          setParentGraphId(doc.parentGraphId)
           setParentNodeId(doc.parentNodeId)
+          setGraphLayer(doc.layer)
+          setGraphLayerKind(doc.layerKind)
+          setGraphSummary(doc.summary)
         }
         setCanvasSnapshot(canvas ? sanitizeCanvasSnapshot(canvas) : emptyCanvasSnapshot())
       })
@@ -423,7 +435,11 @@ export function InternalRealtimeProvider({
       graphId,
       graphTitle,
       graphScopeKind,
+      parentGraphId,
       parentNodeId,
+      graphLayer,
+      graphLayerKind,
+      graphSummary,
       currentUserName,
       status,
       error,
@@ -445,7 +461,11 @@ export function InternalRealtimeProvider({
       graphId,
       graphTitle,
       graphScopeKind,
+      parentGraphId,
       parentNodeId,
+      graphLayer,
+      graphLayerKind,
+      graphSummary,
       currentUserName,
       status,
       error,

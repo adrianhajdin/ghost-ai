@@ -70,19 +70,18 @@ const nodeDataSchema = z
     subcanvasRef: z
       .object({
         graphId: z.string().trim().min(1).max(120),
-        scopeKind: z
-          .enum([
-            "service-internal",
-            "api-design",
-            "database-design",
-            "auth-design",
-            "worker-design",
-          ])
-          .optional(),
+        scopeKind: z.string().trim().max(80).optional(),
         title: z.string().max(240).optional(),
+        parentGraphId: z.string().trim().max(120).optional(),
+        parentNodeId: z.string().trim().max(120).optional(),
+        layer: z.number().int().min(0).max(100).optional(),
+        layerKind: z.string().trim().max(120).optional(),
+        summary: z.string().trim().max(2000).optional(),
         createdAt: z.string().max(80).optional(),
         updatedAt: z.string().max(80).optional(),
+        llmLayerPurpose: z.string().trim().max(2000).optional(),
       })
+      .passthrough()
       .nullable()
       .optional(),
   })

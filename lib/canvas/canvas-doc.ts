@@ -25,9 +25,13 @@ export interface CanvasDocV1 {
   docVersion: typeof CANVAS_DOC_VERSION
   projectId: string
   graphId: string
+  parentGraphId: string | null
   parentNodeId: string | null
   scopeKind: CanvasScopeKind
   title: string
+  layer: number | null
+  layerKind: string | null
+  summary: string | null
   viewport: CanvasViewport
   nodes: CanvasNode[]
   edges: CanvasEdge[]
@@ -40,6 +44,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeString(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null
+}
+
+function normalizeLayer(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : null
 }
 
 function normalizeViewport(value: unknown): CanvasViewport {
@@ -62,7 +76,8 @@ function normalizeScopeKind(value: unknown): CanvasScopeKind {
     value === "api-design" ||
     value === "database-design" ||
     value === "auth-design" ||
-    value === "worker-design"
+    value === "worker-design" ||
+    value === "architecture-layer"
   ) {
     return value
   }
@@ -77,9 +92,13 @@ export function createCanvasDocV1(
   options: {
     projectId: string
     graphId?: string
+    parentGraphId?: string | null
     parentNodeId?: string | null
     scopeKind?: CanvasScopeKind
     title?: string
+    layer?: number | null
+    layerKind?: string | null
+    summary?: string | null
     viewport?: CanvasViewport
     panels?: Record<string, unknown>
   }
@@ -91,9 +110,13 @@ export function createCanvasDocV1(
     docVersion: CANVAS_DOC_VERSION,
     projectId: options.projectId,
     graphId: options.graphId ?? ROOT_GRAPH_ID,
+    parentGraphId: options.parentGraphId ?? null,
     parentNodeId: options.parentNodeId ?? null,
     scopeKind: options.scopeKind ?? "system-root",
     title: options.title ?? "System",
+    layer: options.layer ?? null,
+    layerKind: options.layerKind ?? null,
+    summary: options.summary ?? null,
     viewport: options.viewport ?? { x: 0, y: 0, zoom: 1 },
     nodes: canvas.nodes,
     edges: canvas.edges,
@@ -117,9 +140,13 @@ export function normalizeCanvasDocV1(
   return createCanvasDocV1(snapshot, {
     projectId: normalizeString(record.projectId, options.projectId ?? ""),
     graphId: normalizeString(record.graphId, options.graphId ?? ROOT_GRAPH_ID),
+    parentGraphId: normalizeOptionalString(record.parentGraphId),
     parentNodeId: typeof record.parentNodeId === "string" ? record.parentNodeId : null,
     scopeKind,
     title: normalizeString(record.title, options.title ?? "System"),
+    layer: normalizeLayer(record.layer),
+    layerKind: normalizeOptionalString(record.layerKind),
+    summary: normalizeOptionalString(record.summary),
     viewport: normalizeViewport(record.viewport),
     panels: isRecord(record.panels) ? record.panels : {},
   })
