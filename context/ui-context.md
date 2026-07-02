@@ -120,6 +120,7 @@ shadcn/ui on top of Tailwind. No custom design system. Components live in `compo
 - Compact account menu: on small workspaces, the avatar remains the only navbar account trigger and opens a compact cockpit-style popover with Account and Sign out actions layered above the mobile project deck.
 - Design IR preview/export: the workspace navbar exposes a compact `FileJson` action that opens a bounded cockpit-style modal with status, compiled graph IDs, validation counts, JSON preview, Copy JSON, and Download JSON. Design IR is machine-readable architecture.
 - Prompt Pack preview/export: the workspace navbar exposes a compact Prompt Pack action that opens a separate bounded cockpit-style modal. Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Supported selector options are Codex, Claude Code, and Generic AI Builder. Nimbus is not included as a Prompt Pack target in this version.
+- AI Architect draft preview: the AI sidebar includes an Architect tab where users describe the desired system, choose draft complexity, generate a structured proposal, review validation issues, inspect grouped semantic nodes and relations, and explicitly apply or clear the proposal. The copy states that AI proposes an architecture draft, the user stays in control, and Arc Forge does not build or execute the app.
 - Modals and dialogs: centered overlay, `rounded-3xl`, dark background with backdrop blur.
 - Navbar: top bar with dark background and bottom border.
 

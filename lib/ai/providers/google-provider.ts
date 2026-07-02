@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google"
-import { generateText, tool } from "ai"
+import { generateObject, generateText, tool } from "ai"
 import { z } from "zod"
 import { getGoogleAiApiKey } from "@/lib/ai/google-api-key"
 import {
@@ -16,6 +16,16 @@ import {
   type GenerateSpecMarkdownInput,
 } from "@/lib/ai/spec/spec-provider-contract"
 import type { AiProvider } from "@/lib/ai/providers/types"
+import {
+  ArchitectureDraftProposalSchema,
+  parseArchitectureDraftProposal,
+} from "@/lib/architecture-draft/architecture-draft"
+import {
+  buildArchitectureDraftSystemPrompt,
+  buildArchitectureDraftUserPrompt,
+  type GenerateArchitectureDraftInput,
+  type GenerateArchitectureDraftResult,
+} from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
 import { NODE_COLORS, NODE_SHAPES } from "@/types/canvas"
 import { AI_ASSISTANT_NAME } from "@/lib/branding"
 
@@ -223,5 +233,19 @@ export class GoogleAiProvider implements AiProvider {
     })
 
     return z.string().min(1).parse(result.text)
+  }
+
+  async generateArchitectureDraft(
+    input: GenerateArchitectureDraftInput
+  ): Promise<GenerateArchitectureDraftResult> {
+    const google = createGoogleGenerativeAI({ apiKey: this.apiKey })
+    const result = await generateObject({
+      model: google(getGoogleDesignModel()),
+      schema: ArchitectureDraftProposalSchema,
+      system: buildArchitectureDraftSystemPrompt(),
+      prompt: buildArchitectureDraftUserPrompt(input),
+    })
+
+    return parseArchitectureDraftProposal(result.object)
   }
 }
