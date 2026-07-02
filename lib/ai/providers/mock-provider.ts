@@ -15,6 +15,10 @@ import type {
   GenerateArchitectureDraftInput,
   GenerateArchitectureDraftResult,
 } from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
+import type {
+  GeneratePromptPackInput,
+  GeneratePromptPackResult,
+} from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 import {
   ARCHITECTURE_DRAFT_SCHEMA_URL,
   ARCHITECTURE_DRAFT_VERSION,
@@ -24,6 +28,11 @@ import {
   type ArchitectureDraftNode,
   type ArchitectureDraftProposal,
 } from "@/lib/architecture-draft/architecture-draft"
+import {
+  LLM_PROMPT_PACK_SCHEMA_URL,
+  LLM_PROMPT_PACK_VERSION,
+  parseLlmPromptPackProposal,
+} from "@/lib/prompt-pack/llm-prompt-pack"
 import type { SemanticEdgeType, SemanticNodeType } from "@/types/canvas"
 
 function slugify(value: string) {
@@ -494,6 +503,172 @@ function architectureForPrompt(input: GenerateArchitectureDraftInput) {
   return genericArchitecture(input)
 }
 
+function nodeLabel(node: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]["nodes"][number]) {
+  const data = node.data
+  return (
+    (typeof data.name === "string" && data.name.trim()) ||
+    (typeof data.label === "string" && data.label.trim()) ||
+    node.id
+  )
+}
+
+function edgeLabel(edge: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]["edges"][number]) {
+  const data = edge.data
+  return (
+    (typeof data.label === "string" && data.label.trim()) ||
+    (Array.isArray(data.labels) && typeof data.labels[0] === "string"
+      ? data.labels[0]
+      : "") ||
+    `${edge.source} -> ${edge.target}`
+  )
+}
+
+function graphInPromptScope(
+  input: GeneratePromptPackInput,
+  graph: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]
+) {
+  if (input.scopeMode === "full-project") return true
+  if (input.scopeMode === "current-layer") return graph.graphId === input.currentGraphId
+  return graph.nodes.some((node) => input.selectedNodeIds.includes(node.id))
+}
+
+function nodesInPromptScope(
+  input: GeneratePromptPackInput,
+  graph: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]
+) {
+  if (input.scopeMode === "selected-nodes") {
+    return graph.nodes.filter((node) => input.selectedNodeIds.includes(node.id))
+  }
+  return graph.nodes
+}
+
+function mockPromptPack(input: GeneratePromptPackInput): GeneratePromptPackResult {
+  const scopedGraphs = input.canvasPyramid.graphs.filter((graph) =>
+    graphInPromptScope(input, graph)
+  )
+  const promptGraphs = scopedGraphs.length > 0 ? scopedGraphs : input.canvasPyramid.graphs
+  const allNodes = promptGraphs.flatMap((graph) =>
+    nodesInPromptScope(input, graph).map((node) => ({ graph, node }))
+  )
+  const firstGraph = promptGraphs[0] ?? input.canvasPyramid.graphs[0]
+  const firstNode = allNodes[0]
+  const graphCount = input.canvasPyramid.graphs.length
+  const nodeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.nodes.length,
+    0
+  )
+  const edgeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.edges.length,
+    0
+  )
+
+  return parseLlmPromptPackProposal({
+    $schema: LLM_PROMPT_PACK_SCHEMA_URL,
+    packVersion: LLM_PROMPT_PACK_VERSION,
+    status: "draft",
+    title: `${input.projectName} AI Prompt Pack`,
+    targetAgent: input.targetAgent,
+    scope: {
+      mode: input.scopeMode,
+      rootGraphId: input.canvasPyramid.rootGraphId,
+      currentGraphId: input.currentGraphId,
+      selectedNodeIds: input.selectedNodeIds,
+    },
+    summary: `Mock fixture Prompt Pack from ${graphCount} canvas graph(s), ${nodeCount} node(s), and ${edgeCount} edge(s).`,
+    globalPrompt: {
+      title: "Global Build Context",
+      markdown: [
+        `You are working from the Arc Forge canvas pyramid for ${input.projectName}.`,
+        "Arc Forge is a prompt composer and architecture canvas; it does not build, execute, deploy, or write to external repositories.",
+        `Use the ${input.targetAgent} target style and preserve secretRef or secretCapabilityRef references.`,
+        input.instructions ? `Extra user instructions: ${input.instructions}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    },
+    layerPrompts: promptGraphs.map((graph) => ({
+      graphId: graph.graphId,
+      title: `${graph.title} Layer Prompt`,
+      markdown: [
+        `Layer ${graph.graphId} contains ${graph.nodes.length} node(s) and ${graph.edges.length} edge(s).`,
+        graph.summary ? `Layer summary: ${graph.summary}` : "",
+        graph.nodes.length
+          ? `Nodes: ${graph.nodes.map(nodeLabel).join(", ")}.`
+          : "No nodes are present in this layer yet.",
+        graph.edges.length
+          ? `Relationships: ${graph.edges.map(edgeLabel).join("; ")}.`
+          : "No relationships are present in this layer yet.",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      coveredNodeIds: graph.nodes.map((node) => node.id),
+    })),
+    nodePrompts: allNodes.map(({ graph, node }) => ({
+      graphId: graph.graphId,
+      nodeId: node.id,
+      nodeLabel: nodeLabel(node),
+      title: `Build ${nodeLabel(node)}`,
+      markdown: [
+        `Implement the responsibility represented by ${nodeLabel(node)} in graph ${graph.graphId}.`,
+        `Node data: ${JSON.stringify(node.data)}`,
+        "Do not invent raw secrets; keep any secretRef or secretCapabilityRef values as references.",
+        "This is a prompt pack, not generated app code.",
+      ].join("\n\n"),
+      dependsOnNodeIds: graph.edges
+        .filter((edge) => edge.target === node.id)
+        .map((edge) => edge.source),
+      relatedGraphIds:
+        typeof node.data.subcanvasRef === "object" &&
+        node.data.subcanvasRef !== null &&
+        "graphId" in node.data.subcanvasRef &&
+        typeof node.data.subcanvasRef.graphId === "string"
+          ? [node.data.subcanvasRef.graphId]
+          : [],
+    })),
+    canvasImprovementProposal: firstGraph
+      ? {
+          summary:
+            "Mock fixture suggestion for user-approved canvas metadata refinement.",
+          operations: [
+            {
+              op: "update-graph",
+              graphId: firstGraph.graphId,
+              patch: {
+                summary:
+                  firstGraph.summary ??
+                  `Prompt Pack reviewed ${firstGraph.nodes.length} node(s) in ${firstGraph.title}.`,
+              },
+            },
+            ...(firstNode
+              ? [
+                  {
+                    op: "update-node" as const,
+                    graphId: firstNode.graph.graphId,
+                    nodeId: firstNode.node.id,
+                    patch: {
+                      description:
+                        typeof firstNode.node.data.description === "string" &&
+                        firstNode.node.data.description.trim()
+                          ? firstNode.node.data.description
+                          : `Prompt Pack fixture noted ${nodeLabel(firstNode.node)} as an implementation responsibility.`,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        }
+      : { summary: "", operations: [] },
+    clarificationQuestions: [],
+    assumptions: [
+      "Mock provider output is a local fixture used for development and smoke tests.",
+    ],
+    warnings: [],
+    suggestedNextSteps: [
+      "Review the generated prompts before copying or downloading them.",
+    ],
+  })
+}
+
 export class MockAiProvider implements AiProvider {
   readonly name = "mock" as const
 
@@ -610,5 +785,11 @@ export class MockAiProvider implements AiProvider {
     input: GenerateArchitectureDraftInput
   ): Promise<GenerateArchitectureDraftResult> {
     return parseArchitectureDraftProposal(architectureForPrompt(input))
+  }
+
+  async generatePromptPack(
+    input: GeneratePromptPackInput
+  ): Promise<GeneratePromptPackResult> {
+    return mockPromptPack(input)
   }
 }

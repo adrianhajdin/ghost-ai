@@ -1,6 +1,7 @@
 import { applyDesignActions, DesignProviderResultSchema } from "@/lib/ai/design/design-actions"
 import { emptyCanvasSnapshot } from "@/lib/canvas/canvas-state"
 import { getAiProvider, getAiProviderName } from "@/lib/ai/providers/provider-factory"
+import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 
 const trackedEnv = [
   "AI_PROVIDER",
@@ -83,6 +84,61 @@ async function main() {
     edges: canvas.edges,
   })
   assert(markdown.startsWith("#"), "mock spec should return Markdown")
+
+  const promptPack = await mockProvider.generatePromptPack({
+    projectId: "project-ai-provider-smoke",
+    projectName: "AI Provider Smoke",
+    targetAgent: "codex",
+    scopeMode: "full-project",
+    currentGraphId: ROOT_GRAPH_ID,
+    selectedNodeIds: [],
+    canvasPyramid: {
+      projectId: "project-ai-provider-smoke",
+      rootGraphId: ROOT_GRAPH_ID,
+      graphs: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          scopeKind: "system-root",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          summary: null,
+          nodes: canvas.nodes.map((node) => ({
+            id: node.id,
+            type: node.type,
+            position: node.position,
+            data: node.data,
+          })),
+          edges: canvas.edges.map((edge) => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            type: edge.type,
+            data: edge.data ?? {},
+          })),
+        },
+      ],
+      graphIndex: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          nodeCount: canvas.nodes.length,
+          edgeCount: canvas.edges.length,
+        },
+      ],
+    },
+  })
+  assert(promptPack.globalPrompt.markdown.length > 0, "mock Prompt Pack should return a global prompt")
+  assert(promptPack.layerPrompts.length === 1, "mock Prompt Pack should return a layer prompt")
+  assert(promptPack.nodePrompts.length >= 1, "mock Prompt Pack should return node prompts")
 
   const invalidDesign = DesignProviderResultSchema.safeParse({
     summary: "invalid",

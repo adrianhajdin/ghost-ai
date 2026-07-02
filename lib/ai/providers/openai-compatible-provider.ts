@@ -23,6 +23,13 @@ import {
   type GenerateArchitectureDraftInput,
   type GenerateArchitectureDraftResult,
 } from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
+import {
+  buildPromptPackSystemPrompt,
+  buildPromptPackUserPrompt,
+  type GeneratePromptPackInput,
+  type GeneratePromptPackResult,
+} from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
+import { parseLlmPromptPackProposal } from "@/lib/prompt-pack/llm-prompt-pack"
 import { NODE_SHAPES } from "@/types/canvas"
 import { AI_ASSISTANT_NAME } from "@/lib/branding"
 
@@ -175,5 +182,20 @@ export class OpenAiCompatibleProvider implements AiProvider {
     return parseArchitectureDraftProposal(
       extractJsonObject(content) as ArchitectureDraftProposal
     )
+  }
+
+  async generatePromptPack(
+    input: GeneratePromptPackInput
+  ): Promise<GeneratePromptPackResult> {
+    const content = await this.chatCompletion({
+      model: this.specModel,
+      json: true,
+      messages: [
+        { role: "system", content: buildPromptPackSystemPrompt() },
+        { role: "user", content: buildPromptPackUserPrompt(input) },
+      ],
+    })
+
+    return parseLlmPromptPackProposal(extractJsonObject(content))
   }
 }

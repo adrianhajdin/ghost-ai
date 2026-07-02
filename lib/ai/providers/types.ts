@@ -7,6 +7,10 @@ import type {
   GenerateArchitectureDraftInput,
   GenerateArchitectureDraftResult,
 } from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
+import type {
+  GeneratePromptPackInput,
+  GeneratePromptPackResult,
+} from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 
 export type AiProviderName = "mock" | "google" | "openai_compatible"
 
@@ -19,6 +23,7 @@ export interface AiProvider {
   generateArchitectureDraft(
     input: GenerateArchitectureDraftInput
   ): Promise<GenerateArchitectureDraftResult>
+  generatePromptPack(input: GeneratePromptPackInput): Promise<GeneratePromptPackResult>
 }
 
 export class AiProviderConfigError extends Error {

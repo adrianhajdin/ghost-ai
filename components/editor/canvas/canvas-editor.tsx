@@ -189,6 +189,7 @@ interface CanvasEditorProps {
   onTemplateImported?: () => void
   onSaveStatusChange?: (status: SaveStatus) => void
   onSaveReady?: (saveFn: () => void) => void
+  onSelectedNodeIdsChange?: (nodeIds: string[]) => void
 }
 
 export function CanvasEditor({
@@ -198,6 +199,7 @@ export function CanvasEditor({
   onTemplateImported,
   onSaveStatusChange,
   onSaveReady,
+  onSelectedNodeIdsChange,
 }: CanvasEditorProps) {
   const {
     nodes,
@@ -248,6 +250,10 @@ export function CanvasEditor({
     selectedNodeIdsRef.current = selectedNodeIds
     selectedEdgeIdsRef.current = selectedEdgeIds
   }, [selectedEdgeIds, selectedNodeIds])
+
+  useEffect(() => {
+    onSelectedNodeIdsChange?.([...selectedNodeIds])
+  }, [onSelectedNodeIdsChange, selectedNodeIds])
 
   const displayedNodes = useMemo(
     () =>

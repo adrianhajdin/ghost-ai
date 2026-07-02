@@ -26,6 +26,16 @@ import {
   type GenerateArchitectureDraftInput,
   type GenerateArchitectureDraftResult,
 } from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
+import {
+  buildPromptPackSystemPrompt,
+  buildPromptPackUserPrompt,
+  type GeneratePromptPackInput,
+  type GeneratePromptPackResult,
+} from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
+import {
+  LlmPromptPackProposalSchema,
+  parseLlmPromptPackProposal,
+} from "@/lib/prompt-pack/llm-prompt-pack"
 import { NODE_COLORS, NODE_SHAPES } from "@/types/canvas"
 import { AI_ASSISTANT_NAME } from "@/lib/branding"
 
@@ -247,5 +257,19 @@ export class GoogleAiProvider implements AiProvider {
     })
 
     return parseArchitectureDraftProposal(result.object)
+  }
+
+  async generatePromptPack(
+    input: GeneratePromptPackInput
+  ): Promise<GeneratePromptPackResult> {
+    const google = createGoogleGenerativeAI({ apiKey: this.apiKey })
+    const result = await generateObject({
+      model: google(getGoogleSpecModel()),
+      schema: LlmPromptPackProposalSchema,
+      system: buildPromptPackSystemPrompt(),
+      prompt: buildPromptPackUserPrompt(input),
+    })
+
+    return parseLlmPromptPackProposal(result.object)
   }
 }

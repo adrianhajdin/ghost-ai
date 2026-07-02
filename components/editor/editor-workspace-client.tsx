@@ -39,6 +39,7 @@ export function EditorWorkspaceClient({
   const [designIrOpen, setDesignIrOpen] = useState(false)
   const [promptPackOpen, setPromptPackOpen] = useState(false)
   const [pendingTemplate, setPendingTemplate] = useState<CanvasTemplate | null>(null)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
   const saveFnRef = useRef<() => void>(() => {})
   const actions = useProjectActions()
@@ -83,6 +84,7 @@ export function EditorWorkspaceClient({
               onTemplateImported={() => setPendingTemplate(null)}
               onSaveStatusChange={handleSaveStatusChange}
               onSaveReady={handleSaveReady}
+              onSelectedNodeIdsChange={setSelectedNodeIds}
             />
           </main>
 
@@ -124,6 +126,8 @@ export function EditorWorkspaceClient({
           />
           <PromptPackPanel
             projectId={currentProject.id}
+            graphId={graphId}
+            selectedNodeIds={selectedNodeIds}
             open={promptPackOpen}
             onOpenChange={setPromptPackOpen}
           />

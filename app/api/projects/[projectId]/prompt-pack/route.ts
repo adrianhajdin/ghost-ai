@@ -9,6 +9,9 @@ import {
   type PromptPackTargetAgent,
 } from "@/lib/prompt-pack/prompt-pack"
 
+// Legacy/internal Design IR Prompt Pack export. The main product UI uses
+// /api/ai/prompt-pack so the LLM writes Prompt Pack content from CanvasDoc pyramid JSON.
+
 type BooleanParseResult = boolean | "invalid"
 type PromptPackFormat = "json" | "markdown"
 

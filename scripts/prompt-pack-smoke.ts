@@ -1,20 +1,24 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import type { CanvasEdge, CanvasNode, SemanticEdgeType } from "@/types/canvas"
 import { SHAPE_DEFAULTS } from "@/types/canvas"
+import { MockAiProvider } from "@/lib/ai/providers/mock-provider"
 import { createCanvasDocV1 } from "@/lib/canvas/canvas-doc"
 import {
-  compileCanvasDocsToDesignIrResult,
-  type DesignIrV1,
-} from "@/lib/canvas/design-ir"
+  buildCanvasPyramidFromDocs,
+  loadProjectCanvasPyramid,
+} from "@/lib/canvas/canvas-pyramid"
+import { writeCanvasDoc } from "@/lib/canvas/canvas-persistence"
 import { baseNodeData } from "@/lib/canvas/semantic-defaults"
 import { createEdgeLabelItems, mirrorEdgeLabelData } from "@/lib/canvas/edge-labels"
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
+import { prisma } from "@/lib/prisma"
+import { applyLlmCanvasImprovementProposal } from "@/lib/prompt-pack/canvas-patch"
 import {
-  PROMPT_PACK_TARGET_AGENTS,
-  compileDesignIrToPromptPack,
-  isPromptPackTargetAgent,
-  renderPromptPackMarkdown,
-  stableHashDesignIr,
-} from "@/lib/prompt-pack/prompt-pack"
+  LLM_PROMPT_PACK_TARGET_AGENTS,
+  parseLlmPromptPackProposal,
+} from "@/lib/prompt-pack/llm-prompt-pack"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -44,7 +48,7 @@ function edge(
   id: string,
   source: string,
   target: string,
-  semanticType: SemanticEdgeType,
+  semanticType: SemanticEdgeType | string,
   labels: string[]
 ): CanvasEdge {
   const labelItems = createEdgeLabelItems(
@@ -62,237 +66,416 @@ function edge(
     targetHandle: null,
     selected: true,
     data: {
-      semanticType,
+      semanticType: semanticType as SemanticEdgeType,
       ...mirrorEdgeLabelData(labelItems),
     },
   }
 }
 
-const childGraphId = "graph_service_billing"
-const serviceNode = node("service-billing", "Billing Service", {
-  semanticType: "service",
-  serviceKind: "application-service",
-  runtime: "node-typescript",
-  language: "typescript",
-  framework: "nextjs",
-  tenancy: "owner-scoped-now-workspace-compatible-later",
-  authMode: "internal-cookie-session",
-  sourceRefs: ["docs/billing.md"],
-  assumptions: ["Invoices are owner scoped."],
-  decisionRefs: ["ADR-001"],
-  subcanvasRef: {
-    graphId: childGraphId,
-    scopeKind: "service-internal",
-    title: "Billing Service",
-  },
-})
-const databaseNode = node("database-ledger", "Ledger Database", {
-  semanticType: "database",
-  dbKind: "relational",
-  engine: "postgresql",
-  orm: "prisma",
-  secretRef: "secretRef:database/connection-string",
-})
-const authNode = node("auth-core", "Auth Core", {
-  semanticType: "auth-module",
-  authStrategy: "internal-cookie-session",
-  sessionMode: "httpOnly-cookie",
-  emailVerification: true,
-})
-const workerNode = node("worker-invoices", "Invoice Worker", {
-  semanticType: "worker",
-  triggerType: "event",
-  retryPolicy: "exponential",
-  idempotencyRequired: true,
-})
-const unclassifiedNode = node("legacy-box", "Legacy Box")
-const secretNode = node("external-payments", "Payment Gateway", {
-  semanticType: "external-system",
-  vendorType: "payments",
-  description: "token sk-abcdefghijklmnopqrstuvwxyz123456",
-  secretCapabilityRef: "secretCapabilityRef:payments/charge",
-})
+async function main() {
+  const root = await mkdtemp(path.join(os.tmpdir(), "arc-forge-prompt-pack-smoke-"))
+  process.env.STORAGE_PROVIDER = "local_fs"
+  process.env.LOCAL_STORAGE_ROOT = root
 
-const rootDoc = createCanvasDocV1(
-  {
-    nodes: [serviceNode, databaseNode, authNode, workerNode, unclassifiedNode, secretNode],
-    edges: [
-      edge("edge-service-db", serviceNode.id, databaseNode.id, "db-write", [
-        "writes invoices",
-      ]),
-      edge("edge-service-worker", serviceNode.id, workerNode.id, "invokes-worker", [
-        "queues invoice jobs",
-      ]),
-      edge("edge-auth-service", authNode.id, serviceNode.id, "auth-check", [
-        "guards billing",
-      ]),
-      edge("edge-unclassified", unclassifiedNode.id, serviceNode.id, "unclassified", [
-        "needs classification",
-      ]),
+  const projectId = "project-llm-prompt-pack-smoke"
+  const userId = "user-llm-prompt-pack-smoke"
+  const childGraphId = "graph_service_billing"
+  const nestedGraphId = "graph_service_billing_endpoint"
+
+  const serviceNode = node("service-billing", "Billing Service", {
+    semanticType: "service",
+    serviceKind: "application-service",
+    runtime: "node-typescript",
+    language: "typescript",
+    framework: "nextjs",
+    tenancy: "owner-scoped-now-workspace-compatible-later",
+    authMode: "internal-cookie-session",
+    sourceRefs: ["docs/billing.md"],
+    assumptions: ["Invoices are owner scoped."],
+    subcanvasRef: {
+      graphId: childGraphId,
+      scopeKind: "service-internal",
+      title: "Billing Service",
+    },
+  })
+  const databaseNode = node("database-ledger", "Ledger Database", {
+    semanticType: "database",
+    dbKind: "relational",
+    engine: "postgresql",
+    orm: "prisma",
+    secretRef: "secretRef:database/connection-string",
+  })
+  const customNode = node("ai-orchestrator", "AI Orchestrator", {
+    semanticType: "unclassified",
+    llmSemanticType: "llm-agent-orchestrator",
+    architectureType: "ai-agent-orchestrator",
+    originalSemanticType: "llm-agent",
+    description: "contains raw token sk-abcdefghijklmnopqrstuvwxyz123456",
+    secretCapabilityRef: "secretCapabilityRef:llm/provider",
+    apiKey: "sk-abcdefghijklmnopqrstuvwxyz123456",
+  })
+  const rootDoc = createCanvasDocV1(
+    {
+      nodes: [serviceNode, databaseNode, customNode],
+      edges: [
+        edge("edge-service-db", serviceNode.id, databaseNode.id, "db-write", [
+          "writes invoices",
+        ]),
+        {
+          ...edge("edge-custom-ai", serviceNode.id, customNode.id, "unclassified", [
+            "asks AI",
+          ]),
+          data: {
+            semanticType: "unclassified",
+            llmSemanticType: "llm-call-with-tools",
+            architectureType: "agent-tool-call",
+            originalSemanticType: "ai-tool-call",
+            ...mirrorEdgeLabelData(
+              createEdgeLabelItems(["asks AI"], [], "edge-custom-ai")
+            ),
+          },
+        },
+      ],
+    },
+    {
+      projectId,
+      graphId: ROOT_GRAPH_ID,
+      scopeKind: "system-root",
+      title: "Prompt Pack Smoke",
+    }
+  )
+  ;(rootDoc.nodes[0] as CanvasNode & { presence?: unknown }).presence = {
+    user: "do-not-send",
+  }
+
+  const endpointNode = node("endpoint-create-invoice", "Create Invoice", {
+    semanticType: "endpoint",
+    method: "POST",
+    path: "/invoices",
+    authRequired: true,
+    idempotent: true,
+    subcanvasRef: {
+      graphId: nestedGraphId,
+      scopeKind: "architecture-layer",
+      title: "Create Invoice Internals",
+    },
+  })
+  const entityNode = node("entity-invoice", "Invoice", {
+    semanticType: "entity",
+    fields: ["id", "tenantId", "total", "status"],
+    tenantKey: "tenantId",
+  })
+  const childDoc = createCanvasDocV1(
+    {
+      nodes: [endpointNode, entityNode],
+      edges: [
+        edge("edge-endpoint-entity", endpointNode.id, entityNode.id, "db-write", [
+          "persists invoice",
+        ]),
+      ],
+    },
+    {
+      projectId,
+      graphId: childGraphId,
+      parentGraphId: ROOT_GRAPH_ID,
+      parentNodeId: serviceNode.id,
+      scopeKind: "service-internal",
+      title: "Billing Service",
+      layer: 1,
+      layerKind: "service-internals",
+    }
+  )
+  const nestedDoc = createCanvasDocV1(
+    {
+      nodes: [
+        node("rule-idempotency", "Idempotency Rule", {
+          semanticType: "business-rule",
+          ruleType: "idempotency",
+        }),
+      ],
+      edges: [],
+    },
+    {
+      projectId,
+      graphId: nestedGraphId,
+      parentGraphId: childGraphId,
+      parentNodeId: endpointNode.id,
+      scopeKind: "architecture-layer",
+      title: "Create Invoice Internals",
+      layer: 2,
+      layerKind: "endpoint-internals",
+    }
+  )
+
+  const transportOnly = buildCanvasPyramidFromDocs(projectId, [
+    rootDoc,
+    childDoc,
+    nestedDoc,
+  ])
+  const transportJson = JSON.stringify(transportOnly)
+  assert(transportOnly.graphs.length === 3, "Canvas pyramid did not include nested graphs")
+  assert(!transportJson.includes("selected"), "selected leaked into LLM transport")
+  assert(!transportJson.includes("dragging"), "dragging leaked into LLM transport")
+  assert(!transportJson.includes("presence"), "presence leaked into LLM transport")
+  assert(
+    !transportJson.includes("sk-abcdefghijklmnopqrstuvwxyz123456"),
+    "raw secret leaked into LLM transport"
+  )
+  assert(transportJson.includes("[redacted-secret]"), "raw secret was not redacted")
+  assert(
+    transportJson.includes("secretRef:database/connection-string"),
+    "secretRef did not survive LLM transport"
+  )
+  assert(
+    transportJson.includes("secretCapabilityRef:llm/provider"),
+    "secretCapabilityRef did not survive LLM transport"
+  )
+  assert(
+    transportJson.includes("llm-agent-orchestrator") &&
+      transportJson.includes("agent-tool-call"),
+    "custom architecture types did not survive LLM transport"
+  )
+
+  assert(
+    JSON.stringify(LLM_PROMPT_PACK_TARGET_AGENTS) ===
+      JSON.stringify(["codex", "claude-code", "generic-ai-builder"]),
+    "Prompt Pack target agents changed"
+  )
+  assert(
+    !JSON.stringify(LLM_PROMPT_PACK_TARGET_AGENTS).toLowerCase().includes("nimbus"),
+    "Nimbus became an active Prompt Pack target"
+  )
+
+  const provider = new MockAiProvider()
+  const proposal = await provider.generatePromptPack({
+    projectId,
+    projectName: "Prompt Pack Smoke",
+    targetAgent: "codex",
+    scopeMode: "full-project",
+    currentGraphId: ROOT_GRAPH_ID,
+    selectedNodeIds: [],
+    instructions: "Keep the report concise.",
+    canvasPyramid: transportOnly,
+  })
+  const proposalJson = JSON.stringify(proposal)
+  assert(proposal.globalPrompt.markdown.length > 0, "missing global prompt")
+  assert(proposal.layerPrompts.length === 3, "mock provider did not return layer prompts")
+  assert(
+    proposal.nodePrompts.some((prompt) => prompt.nodeId === serviceNode.id),
+    "mock provider did not return node prompts from actual canvas nodes"
+  )
+  assert(
+    proposal.nodePrompts.some((prompt) => prompt.nodeId === endpointNode.id),
+    "mock provider did not use nested layer nodes"
+  )
+  assert(!proposalJson.toLowerCase().includes("nimbus"), "Prompt Pack mentioned Nimbus")
+  assert(!proposalJson.includes("```"), "mock Prompt Pack generated code fences")
+  assert(
+    !proposalJson.includes("sk-abcdefghijklmnopqrstuvwxyz123456"),
+    "Prompt Pack leaked raw secret"
+  )
+
+  const freeform = structuredClone(proposal)
+  freeform.globalPrompt.markdown = "Freeform markdown with unusual wording is allowed.\n\n- Keep context."
+  parseLlmPromptPackProposal(freeform)
+
+  const unsafe = structuredClone(proposal)
+  unsafe.globalPrompt.markdown = "leak sk-abcdefghijklmnopqrstuvwxyz123456"
+  let rejectedUnsafe = false
+  try {
+    parseLlmPromptPackProposal(unsafe)
+  } catch {
+    rejectedUnsafe = true
+  }
+  assert(rejectedUnsafe, "raw secret Prompt Pack output was not rejected")
+
+  const patchProposal = {
+    summary: "Preview all supported non-destructive patch operations.",
+    operations: [
+      {
+        op: "update-node",
+        graphId: ROOT_GRAPH_ID,
+        nodeId: serviceNode.id,
+        patch: { description: "Billing service owns invoice lifecycle." },
+      },
+      {
+        op: "add-node",
+        graphId: ROOT_GRAPH_ID,
+        tempId: "policy-temp",
+        node: {
+          label: "Invoice Policy",
+          semanticType: "policy",
+          description: "Guards invoice ownership.",
+          position: { x: 480, y: 260 },
+          metadata: { policyKind: "security" },
+        },
+      },
+      {
+        op: "add-edge",
+        graphId: ROOT_GRAPH_ID,
+        tempId: "policy-edge-temp",
+        edge: {
+          source: "policy-temp",
+          target: serviceNode.id,
+          semanticType: "guards",
+          label: "guards billing",
+          metadata: {},
+        },
+      },
+      {
+        op: "create-layer",
+        parentGraphId: ROOT_GRAPH_ID,
+        parentNodeId: customNode.id,
+        graph: {
+          title: "AI Orchestrator Internals",
+          layerKind: "custom-ai-layer",
+          summary: "LLM orchestration internals.",
+          nodes: [
+            {
+              id: "tool-router",
+              label: "Tool Router",
+              semanticType: "custom-router",
+              metadata: { architectureType: "llm-tool-router" },
+            },
+          ],
+          edges: [],
+        },
+      },
+      {
+        op: "delete-node",
+        graphId: ROOT_GRAPH_ID,
+        nodeId: databaseNode.id,
+      },
+      {
+        op: "update-node",
+        graphId: ROOT_GRAPH_ID,
+        nodeId: "missing-node",
+        patch: { description: "missing" },
+      },
     ],
-  },
-  {
-    projectId: "project-prompt-pack-smoke",
+  }
+  parseLlmPromptPackProposal({
+    ...proposal,
+    canvasImprovementProposal: patchProposal,
+  })
+
+  await prisma.project.deleteMany({ where: { id: projectId } })
+  await prisma.user.deleteMany({ where: { id: userId } })
+  await prisma.user.create({
+    data: {
+      id: userId,
+      email: "prompt-pack-smoke@example.test",
+      name: "Prompt Pack Smoke",
+    },
+  })
+  await prisma.project.create({
+    data: {
+      id: projectId,
+      ownerId: userId,
+      name: "Prompt Pack Smoke",
+    },
+  })
+
+  await writeCanvasDoc(projectId, rootDoc, {
     graphId: ROOT_GRAPH_ID,
     scopeKind: "system-root",
     title: "Prompt Pack Smoke",
-  }
-)
-
-const endpointNode = node("endpoint-create-invoice", "Create Invoice", {
-  semanticType: "endpoint",
-  method: "POST",
-  path: "/invoices",
-  authRequired: true,
-  idempotent: true,
-})
-const entityNode = node("entity-invoice", "Invoice", {
-  semanticType: "entity",
-  fields: ["id", "tenantId", "total", "status"],
-  tenantKey: "tenantId",
-})
-const eventNode = node("event-invoice-created", "Invoice Created", {
-  semanticType: "event-contract",
-  direction: "published",
-  topic: "billing.invoice.created",
-  deliveryGuarantee: "at-least-once",
-})
-const businessRuleNode = node("rule-positive-total", "Positive Invoice Total", {
-  semanticType: "business-rule",
-  ruleType: "invariant",
-})
-const validationRuleNode = node("validation-invoice-input", "Invoice Input Validation", {
-  semanticType: "validation-rule",
-  validationScope: "input",
-  severity: "error",
-})
-const policyNode = node("policy-owner-scope", "Owner Scope Policy", {
-  semanticType: "policy",
-  policyKind: "security",
-  enforcementMode: "server-side",
-  auditRequired: true,
-})
-
-const childDoc = createCanvasDocV1(
-  {
-    nodes: [
-      endpointNode,
-      entityNode,
-      eventNode,
-      businessRuleNode,
-      validationRuleNode,
-      policyNode,
-    ],
-    edges: [
-      edge("edge-endpoint-entity", endpointNode.id, entityNode.id, "db-write", [
-        "persists invoice",
-      ]),
-      edge("edge-endpoint-event", endpointNode.id, eventNode.id, "event-publish", [
-        "emits invoice event",
-      ]),
-      edge("edge-policy-endpoint", policyNode.id, endpointNode.id, "guards", [
-        "owner boundary",
-      ]),
-      edge("edge-validation-endpoint", validationRuleNode.id, endpointNode.id, "validates", [
-        "input contract",
-      ]),
-    ],
-  },
-  {
-    projectId: "project-prompt-pack-smoke",
+  })
+  await writeCanvasDoc(projectId, childDoc, {
     graphId: childGraphId,
+    parentGraphId: ROOT_GRAPH_ID,
     parentNodeId: serviceNode.id,
     scopeKind: "service-internal",
     title: "Billing Service",
-  }
-)
+    layer: 1,
+    layerKind: "service-internals",
+  })
+  await writeCanvasDoc(projectId, nestedDoc, {
+    graphId: nestedGraphId,
+    parentGraphId: childGraphId,
+    parentNodeId: endpointNode.id,
+    scopeKind: "architecture-layer",
+    title: "Create Invoice Internals",
+    layer: 2,
+    layerKind: "endpoint-internals",
+  })
 
-const designIrResult = compileCanvasDocsToDesignIrResult([childDoc, rootDoc], {
-  projectName: "Prompt Pack Smoke",
-})
-const ir: DesignIrV1 = designIrResult.ir
-
-assert(
-  JSON.stringify(PROMPT_PACK_TARGET_AGENTS) ===
-    JSON.stringify(["codex", "claude-code", "generic-ai-builder"]),
-  "Prompt Pack target agents changed"
-)
-assert(!isPromptPackTargetAgent("nimbus"), "Unsupported target agent was accepted")
-
-for (const targetAgent of PROMPT_PACK_TARGET_AGENTS) {
-  const packA = compileDesignIrToPromptPack(ir, { targetAgent })
-  const packB = compileDesignIrToPromptPack(ir, { targetAgent })
-  const jsonA = JSON.stringify(packA, null, 2)
-  const jsonB = JSON.stringify(packB, null, 2)
-  const markdownA = renderPromptPackMarkdown(packA)
-  const markdownB = renderPromptPackMarkdown(packB)
-
-  assert(jsonA === jsonB, `${targetAgent} JSON is not deterministic`)
-  assert(markdownA === markdownB, `${targetAgent} Markdown is not deterministic`)
-  assert(packA.output.markdown === markdownA, `${targetAgent} output markdown mismatch`)
-  assert(packA.source.irHash === stableHashDesignIr(ir), `${targetAgent} IR hash mismatch`)
-  assert(!jsonA.includes("generatedAt"), `${targetAgent} JSON contains generatedAt`)
-  assert(!markdownA.includes("generatedAt"), `${targetAgent} Markdown contains generatedAt`)
-  assert(!jsonA.includes("sk-abcdefghijklmnopqrstuvwxyz123456"), `${targetAgent} JSON leaked raw secret`)
+  const loadedPyramid = await loadProjectCanvasPyramid(projectId)
   assert(
-    !markdownA.includes("sk-abcdefghijklmnopqrstuvwxyz123456"),
-    `${targetAgent} Markdown leaked raw secret`
-  )
-  assert(jsonA.includes("secretRef:database/connection-string"), `${targetAgent} lost secretRef`)
-  assert(
-    jsonA.includes("secretCapabilityRef:payments/charge"),
-    `${targetAgent} lost secretCapabilityRef`
-  )
-  assert(!jsonA.includes("selected"), `${targetAgent} JSON leaked selected state`)
-  assert(!jsonA.includes("dragging"), `${targetAgent} JSON leaked dragging state`)
-  assert(packA.status === "draft", `${targetAgent} should be draft with unclassified items`)
-  assert(packA.warnings.some((warning) => warning.id.includes("unclassified")), `${targetAgent} missing unclassified warning`)
-  assert(markdownA.includes("## Forbidden Choices"), `${targetAgent} missing forbidden section`)
-  assert(markdownA.includes("## Acceptance Checklist"), `${targetAgent} missing acceptance checklist`)
-  assert(
-    markdownA.includes("## Final Report Requirements"),
-    `${targetAgent} missing final report requirements`
-  )
-  assert(!jsonA.toLowerCase().includes("nimbus"), `${targetAgent} JSON mentioned unsupported target`)
-  assert(
-    !markdownA.toLowerCase().includes("nimbus"),
-    `${targetAgent} Markdown mentioned unsupported target`
+    loadedPyramid.graphs.map((graph) => graph.graphId).includes(nestedGraphId),
+    "loadProjectCanvasPyramid did not load nested child graph"
   )
 
-  if (targetAgent === "codex") {
-    assert(
-      markdownA.startsWith("ROLE: You are Codex working in a software repository."),
-      "Codex role prefix mismatch"
-    )
-    assert(markdownA.includes("Create a feature branch"), "Codex branch instruction missing")
-    assert(markdownA.includes("Do not use raw secrets."), "Codex raw secret rule missing")
-    assert(
-      markdownA.includes("If the repo conflicts with this prompt, stop and report."),
-      "Codex repo conflict rule missing"
-    )
-  }
+  const applyResult = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: patchProposal,
+  })
+  assert(applyResult.applied.updateNodes === 1, "update-node was not applied")
+  assert(applyResult.applied.addNodes === 1, "add-node was not applied")
+  assert(applyResult.applied.addEdges === 1, "add-edge was not applied")
+  assert(applyResult.applied.createLayers === 1, "create-layer was not applied")
+  assert(
+    applyResult.applied.skippedOperations === 2,
+    "unsupported/missing patch operations were not skipped explicitly"
+  )
+  assert(
+    applyResult.issues.some((item) => item.message.includes("Unsupported patch operation")),
+    "unsupported delete operation did not return an explicit issue"
+  )
+  assert(
+    applyResult.issues.some((item) => item.message.includes("missing node")),
+    "missing node reference did not return an explicit issue"
+  )
 
-  if (targetAgent === "claude-code") {
-    assert(
-      markdownA.startsWith("ROLE: You are Claude Code working as a senior implementation agent."),
-      "Claude Code role prefix mismatch"
-    )
-    assert(
-      markdownA.includes("Use concise visible reasoning summaries only."),
-      "Claude visible reasoning instruction missing"
-    )
-  }
+  const panelSource = await readFile(
+    path.join(process.cwd(), "components/editor/prompt-pack-panel.tsx"),
+    "utf8"
+  )
+  assert(panelSource.includes("/api/ai/prompt-pack"), "Prompt Pack UI does not use AI task route")
+  assert(
+    !panelSource.includes("/api/projects/${projectId}/prompt-pack?") &&
+      !panelSource.includes("compileDesignIrToPromptPack"),
+    "Prompt Pack UI still uses deterministic Prompt Pack generation"
+  )
+  assert(
+    panelSource.includes("Apply canvas improvements"),
+    "Prompt Pack UI does not expose user-approved canvas improvement apply"
+  )
 
-  if (targetAgent === "generic-ai-builder") {
-    assert(
-      markdownA.startsWith("ROLE: You are an AI app builder."),
-      "Generic builder role prefix mismatch"
-    )
-    assert(
-      !markdownA.includes("Create a feature branch") && !markdownA.includes("Pull request URL"),
-      "Generic builder should not instruct branch or PR workflow"
-    )
-  }
+  const designIrPanelSource = await readFile(
+    path.join(process.cwd(), "components/editor/design-ir-panel.tsx"),
+    "utf8"
+  )
+  assert(designIrPanelSource.includes("Design IR"), "Design IR panel no longer opens")
+
+  const aiSidebarSource = await readFile(
+    path.join(process.cwd(), "components/editor/ai-sidebar.tsx"),
+    "utf8"
+  )
+  assert(
+    aiSidebarSource.includes("architecture-draft"),
+    "Architecture Draft flow is not reachable from AI sidebar"
+  )
+  const semanticInspectorSource = await readFile(
+    path.join(process.cwd(), "components/editor/canvas/semantic-inspector.tsx"),
+    "utf8"
+  )
+  assert(
+    semanticInspectorSource.includes("Open design layer") &&
+      semanticInspectorSource.includes("Create layer"),
+    "Generic layer drill-down affordance is missing"
+  )
+
+  await prisma.project.deleteMany({ where: { id: projectId } })
+  await prisma.user.deleteMany({ where: { id: userId } })
+  await rm(root, { recursive: true, force: true })
+  await prisma.$disconnect()
+  console.log("prompt pack smoke passed")
 }
 
-console.log("prompt pack smoke passed")
+main().catch(async (error: unknown) => {
+  console.error(error)
+  await prisma.$disconnect().catch(() => {})
+  process.exit(1)
+})
