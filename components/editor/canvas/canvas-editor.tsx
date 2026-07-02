@@ -966,11 +966,11 @@ function GraphBreadcrumb({
         <button
           type="button"
           onClick={onNavigateRoot}
-          aria-label="Back to system canvas"
+          aria-label="Back to System canvas"
           className="flex h-7 shrink-0 items-center gap-1.5 rounded-xl border border-accent-primary/25 bg-accent-primary/10 px-2.5 font-medium text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/45"
         >
           <ArrowLeft className="h-3.5 w-3.5 text-accent-primary" aria-hidden="true" />
-          <span>System canvas</span>
+          <span>Back to System canvas</span>
         </button>
       )}
       {!isRoot ? (
