@@ -72,13 +72,20 @@ export type CanvasSubcanvasScopeKind =
   | "database-design"
   | "auth-design"
   | "worker-design"
+  | "architecture-layer"
 
 export interface CanvasSubcanvasRef {
   graphId: string
   scopeKind?: CanvasSubcanvasScopeKind
   title?: string
+  parentGraphId?: string
+  parentNodeId?: string
+  layer?: number
+  layerKind?: string
+  summary?: string
   createdAt?: string
   updatedAt?: string
+  llmLayerPurpose?: string
 }
 
 export interface SemanticDefinition<TType extends string> {

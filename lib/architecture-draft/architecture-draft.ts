@@ -1,14 +1,15 @@
 import { z } from "zod"
 import {
   NODE_COLORS,
-  SEMANTIC_EDGE_DEFINITIONS,
   SEMANTIC_EDGE_TYPES,
-  SEMANTIC_NODE_DEFINITIONS,
   SEMANTIC_NODE_TYPES,
   SHAPE_DEFAULTS,
+  isSemanticEdgeType,
+  isSemanticNodeType,
   type CanvasEdge,
   type CanvasNode,
   type NodeShape,
+  type SemanticEdgeType,
   type SemanticNodeType,
 } from "@/types/canvas"
 import type { CanvasDocV1 } from "@/lib/canvas/canvas-doc"
@@ -37,7 +38,11 @@ export type ArchitectureDraftComplexity =
   (typeof ARCHITECTURE_DRAFT_COMPLEXITIES)[number]
 
 export type ArchitectureDraftValidationSeverity = "info" | "warning" | "error"
-export type ArchitectureDraftValidationTargetKind = "proposal" | "node" | "edge"
+export type ArchitectureDraftValidationTargetKind =
+  | "proposal"
+  | "graph"
+  | "node"
+  | "edge"
 
 export interface ArchitectureDraftValidationResult {
   id: string
@@ -54,6 +59,7 @@ const safeIdSchema = z
   .min(1)
   .max(120)
   .regex(/^[a-z0-9][a-z0-9_-]*$/)
+const graphIdSchema = safeIdSchema.regex(/^graph_[a-z0-9][a-z0-9_-]*$/)
 const safeTextSchema = z.string().trim().min(1).max(240)
 const optionalTextSchema = z.string().trim().max(4000).optional()
 const metadataSchema = z.record(z.unknown()).default({})
@@ -70,8 +76,9 @@ export const ArchitectureDraftComplexitySchema = z.enum(
 
 export const ArchitectureDraftNodeSchema = z
   .object({
-    id: safeIdSchema,
-    semanticType: z.enum(SEMANTIC_NODE_TYPES),
+    id: safeIdSchema.optional(),
+    type: z.string().trim().min(1).max(120).optional(),
+    semanticType: z.string().trim().min(1).max(120).optional(),
     label: safeTextSchema,
     name: z.string().trim().max(240).optional(),
     description: optionalTextSchema,
@@ -82,13 +89,29 @@ export const ArchitectureDraftNodeSchema = z
 
 export const ArchitectureDraftEdgeSchema = z
   .object({
-    id: safeIdSchema,
+    id: safeIdSchema.optional(),
     source: safeIdSchema,
     target: safeIdSchema,
-    semanticType: z.enum(SEMANTIC_EDGE_TYPES),
+    type: z.string().trim().min(1).max(120).optional(),
+    semanticType: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().max(240).optional(),
     labels: z.array(z.string().trim().max(240)).max(8).default([]),
     metadata: metadataSchema,
+  })
+  .passthrough()
+
+export const ArchitectureDraftGraphSchema = z
+  .object({
+    graphId: graphIdSchema.optional(),
+    title: z.string().trim().min(1).max(240).optional(),
+    layer: z.number().int().min(0).max(100).optional(),
+    layerKind: z.string().trim().min(1).max(120).optional(),
+    parentGraphId: graphIdSchema.nullable().optional(),
+    parentNodeId: safeIdSchema.nullable().optional(),
+    parentNodeTempId: safeIdSchema.nullable().optional(),
+    summary: z.string().trim().max(2000).optional(),
+    nodes: z.array(ArchitectureDraftNodeSchema).max(160).default([]),
+    edges: z.array(ArchitectureDraftEdgeSchema).max(320).default([]),
   })
   .passthrough()
 
@@ -99,10 +122,15 @@ export const ArchitectureDraftProposalSchema = z
     status: z.literal("draft"),
     title: safeTextSchema,
     summary: z.string().trim().min(1).max(2000),
-    targetGraphId: safeIdSchema,
+    targetGraphId: graphIdSchema,
     complexity: ArchitectureDraftComplexitySchema,
-    nodes: z.array(ArchitectureDraftNodeSchema).min(1).max(80),
-    edges: z.array(ArchitectureDraftEdgeSchema).max(160),
+    nodes: z.array(ArchitectureDraftNodeSchema).max(160).default([]),
+    edges: z.array(ArchitectureDraftEdgeSchema).max(320).default([]),
+    graphs: z.array(ArchitectureDraftGraphSchema).max(80).default([]),
+    clarificationQuestions: z
+      .array(z.string().trim().min(1).max(500))
+      .max(32)
+      .default([]),
     assumptions: z.array(z.string().trim().min(1).max(500)).max(32).default([]),
     warnings: z.array(z.string().trim().min(1).max(500)).max(32).default([]),
     suggestedNextSteps: z
@@ -114,6 +142,7 @@ export const ArchitectureDraftProposalSchema = z
 
 export type ArchitectureDraftNode = z.infer<typeof ArchitectureDraftNodeSchema>
 export type ArchitectureDraftEdge = z.infer<typeof ArchitectureDraftEdgeSchema>
+export type ArchitectureDraftGraph = z.infer<typeof ArchitectureDraftGraphSchema>
 export type ArchitectureDraftProposal = z.infer<
   typeof ArchitectureDraftProposalSchema
 >
@@ -158,20 +187,6 @@ const TRANSIENT_FIELD_KEYS = new Set([
   "cursors",
 ])
 
-const ROOT_NODE_TYPES = new Set<SemanticNodeType>([
-  "service",
-  "api",
-  "frontend",
-  "database",
-  "cache",
-  "queue",
-  "worker",
-  "external-system",
-  "auth-module",
-  "domain-model",
-  "policy",
-])
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
@@ -187,33 +202,6 @@ function resultId(parts: Array<string | undefined>) {
     .replace(/[^A-Za-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 180)
-}
-
-function addValidation(
-  results: ArchitectureDraftValidationResult[],
-  result: ArchitectureDraftValidationResult
-) {
-  results.push(result)
-}
-
-function hasMeaningfulValue(value: unknown): boolean {
-  if (typeof value === "string") return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return value !== null && value !== undefined && value !== false
-}
-
-function proposalNodeField(node: ArchitectureDraftNode, field: string): unknown {
-  if (field === "id") return node.id
-  if (field === "name") return node.name || node.label || node.metadata.name
-  return node.metadata[field]
-}
-
-function proposalEdgeField(edge: ArchitectureDraftEdge, field: string): unknown {
-  if (field === "id") return edge.id
-  if (field === "source") return edge.source
-  if (field === "target") return edge.target
-  if (field === "label") return edge.label || edge.labels[0]
-  return edge.metadata[field]
 }
 
 function scanUnsafeFields(
@@ -303,161 +291,75 @@ function scanUnsafeFields(
   return results
 }
 
-function semanticNodeTypeForId(
-  nodeTypesById: Map<string, SemanticNodeType>,
-  id: string
-) {
-  return nodeTypesById.get(id)
+function safeIdFromText(value: string, fallback: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/_{2,}/g, "_")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 120)
+
+  return /^[a-z0-9]/.test(slug) ? slug : fallback
 }
 
-function validateNode(
-  node: ArchitectureDraftNode,
-  results: ArchitectureDraftValidationResult[]
+function draftNodeId(node: ArchitectureDraftNode, index: number) {
+  return node.id ?? safeIdFromText(node.label, `node-${index + 1}`)
+}
+
+function draftEdgeId(edge: ArchitectureDraftEdge, index: number) {
+  return (
+    edge.id ??
+    safeIdFromText(
+      `edge-${edge.source}-${edge.target}-${edge.semanticType ?? edge.type ?? index + 1}`,
+      `edge-${index + 1}`
+    )
+  )
+}
+
+function graphIdForProposalGraph(
+  graph: ArchitectureDraftGraph,
+  index: number,
+  targetGraphId: string
 ) {
-  if (node.semanticType === "unclassified") {
-    addValidation(results, {
-      id: `node-${node.id}-unclassified`,
-      severity: "error",
-      targetKind: "node",
-      targetId: node.id,
-      field: "semanticType",
-      message: "Architecture draft nodes must have a concrete semantic type.",
-    })
-  }
+  return graph.graphId ?? (index === 0 ? targetGraphId : `graph_layer_${index + 1}`)
+}
 
-  if (!ROOT_NODE_TYPES.has(node.semanticType)) {
-    addValidation(results, {
-      id: `node-${node.id}-unsupported-root-type`,
-      severity: "error",
-      targetKind: "node",
-      targetId: node.id,
-      field: "semanticType",
-      message: `${SEMANTIC_NODE_DEFINITIONS[node.semanticType].label} is not supported in root architecture drafts yet.`,
-    })
-  }
+export function getArchitectureDraftGraphs(
+  proposal: ArchitectureDraftProposal
+): ArchitectureDraftGraph[] {
+  const graphs = proposal.graphs.map((graph, index) => ({
+    ...graph,
+    graphId: graphIdForProposalGraph(graph, index, proposal.targetGraphId),
+  }))
 
-  for (const field of SEMANTIC_NODE_DEFINITIONS[node.semanticType].requiredFields) {
-    if (!hasMeaningfulValue(proposalNodeField(node, field))) {
-      addValidation(results, {
-        id: `node-${node.id}-missing-${field}`,
-        severity: "error",
-        targetKind: "node",
-        targetId: node.id,
-        field,
-        message: `${SEMANTIC_NODE_DEFINITIONS[node.semanticType].label} is missing required field: ${field}.`,
+  if (proposal.nodes.length > 0 || proposal.edges.length > 0) {
+    const hasTargetGraph = graphs.some((graph) => graph.graphId === proposal.targetGraphId)
+    if (!hasTargetGraph) {
+      graphs.unshift({
+        graphId: proposal.targetGraphId,
+        title: proposal.title,
+        layer: proposal.targetGraphId === ROOT_GRAPH_ID ? 0 : undefined,
+        layerKind: proposal.targetGraphId === ROOT_GRAPH_ID ? "system-context" : "design-layer",
+        parentGraphId: null,
+        parentNodeId: null,
+        parentNodeTempId: null,
+        summary: proposal.summary,
+        nodes: proposal.nodes,
+        edges: proposal.edges,
       })
     }
   }
 
-  results.push(
-    ...scanUnsafeFields(node, {
-      targetKind: "node",
-      targetId: node.id,
-    })
-  )
+  return graphs
 }
 
-function validateEdge(
-  edge: ArchitectureDraftEdge,
-  nodeTypesById: Map<string, SemanticNodeType>,
-  nodeIds: Set<string>,
-  results: ArchitectureDraftValidationResult[]
-) {
-  if (edge.semanticType === "unclassified") {
-    addValidation(results, {
-      id: `edge-${edge.id}-unclassified`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "semanticType",
-      message: "Architecture draft edges must have a concrete semantic type.",
-    })
-  }
-
-  if (!nodeIds.has(edge.source)) {
-    addValidation(results, {
-      id: `edge-${edge.id}-missing-source`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "source",
-      message: `Edge source does not exist in this graph: ${edge.source}.`,
-    })
-  }
-
-  if (!nodeIds.has(edge.target)) {
-    addValidation(results, {
-      id: `edge-${edge.id}-missing-target`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "target",
-      message: `Edge target does not exist in this graph: ${edge.target}.`,
-    })
-  }
-
-  for (const field of SEMANTIC_EDGE_DEFINITIONS[edge.semanticType].requiredFields) {
-    if (!hasMeaningfulValue(proposalEdgeField(edge, field))) {
-      addValidation(results, {
-        id: `edge-${edge.id}-missing-${field}`,
-        severity: "error",
-        targetKind: "edge",
-        targetId: edge.id,
-        field,
-        message: `${SEMANTIC_EDGE_DEFINITIONS[edge.semanticType].label} is missing required field: ${field}.`,
-      })
-    }
-  }
-
-  const targetType = semanticNodeTypeForId(nodeTypesById, edge.target)
-  if (
-    (edge.semanticType === "db-read" || edge.semanticType === "db-write") &&
-    targetType !== "database" &&
-    targetType !== "entity" &&
-    targetType !== "domain-model"
-  ) {
-    addValidation(results, {
-      id: `edge-${edge.id}-db-target`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "target",
-      message: `${SEMANTIC_EDGE_DEFINITIONS[edge.semanticType].label} must target a database, entity, or domain model.`,
-    })
-  }
-
-  if (edge.semanticType === "invokes-worker" && targetType !== "worker") {
-    addValidation(results, {
-      id: `edge-${edge.id}-worker-target`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "target",
-      message: "Invokes Worker must target a worker node.",
-    })
-  }
-
-  if (
-    edge.semanticType === "auth-check" &&
-    targetType !== "auth-module" &&
-    targetType !== "policy"
-  ) {
-    addValidation(results, {
-      id: `edge-${edge.id}-auth-target`,
-      severity: "error",
-      targetKind: "edge",
-      targetId: edge.id,
-      field: "target",
-      message: "Auth Check must target an auth module or policy node.",
-    })
-  }
-
-  results.push(
-    ...scanUnsafeFields(edge, {
-      targetKind: "edge",
-      targetId: edge.id,
-    })
-  )
+export function findArchitectureDraftGraph(
+  proposal: ArchitectureDraftProposal,
+  graphId: string
+): ArchitectureDraftGraph | null {
+  return getArchitectureDraftGraphs(proposal).find((graph) => graph.graphId === graphId) ?? null
 }
 
 export function parseArchitectureDraftProposal(
@@ -487,24 +389,19 @@ export function validateArchitectureDraftProposal(
   }
 
   const proposal = parsed.data
-  const targetGraphId = context.targetGraphId ?? ROOT_GRAPH_ID
-  if (proposal.targetGraphId !== targetGraphId) {
-    results.push({
-      id: "proposal-target-graph-id",
-      severity: "error",
-      targetKind: "proposal",
-      field: "targetGraphId",
-      message: `Architecture draft targets ${proposal.targetGraphId}, but the active graph is ${targetGraphId}.`,
-    })
-  }
+  const graphs = getArchitectureDraftGraphs(proposal)
+  const hasProposalContent =
+    proposal.nodes.length > 0 ||
+    proposal.edges.length > 0 ||
+    graphs.length > 0 ||
+    proposal.clarificationQuestions.length > 0
 
-  if (proposal.targetGraphId !== ROOT_GRAPH_ID) {
+  if (!hasProposalContent) {
     results.push({
-      id: "proposal-root-only",
+      id: "proposal-empty",
       severity: "error",
       targetKind: "proposal",
-      field: "targetGraphId",
-      message: "Architecture Draft v1 only applies to the root graph.",
+      message: "Architecture draft proposal is empty.",
     })
   }
 
@@ -514,57 +411,62 @@ export function validateArchitectureDraftProposal(
     }).filter((result) => result.field !== undefined)
   )
 
-  const existingNodeTypes = new Map<string, SemanticNodeType>()
-  const nodeTypesById = new Map<string, SemanticNodeType>()
-  const nodeIds = new Set<string>()
-  const proposalNodeIds = new Set<string>()
-  const proposalEdgeIds = new Set<string>()
+  const activeGraphId = context.targetGraphId ?? proposal.targetGraphId
+  const existingNodeIds = new Set(
+    (context.existingCanvas?.nodes ?? []).map((node) => node.id)
+  )
 
-  for (const node of context.existingCanvas?.nodes ?? []) {
-    nodeIds.add(node.id)
-    if (
-      typeof node.data.semanticType === "string" &&
-      (SEMANTIC_NODE_TYPES as readonly string[]).includes(node.data.semanticType)
-    ) {
-      existingNodeTypes.set(node.id, node.data.semanticType as SemanticNodeType)
-      nodeTypesById.set(node.id, node.data.semanticType as SemanticNodeType)
+  for (const graph of graphs) {
+    const graphId = graph.graphId ?? proposal.targetGraphId
+    const nodeIds = new Set<string>()
+
+    if (graphId === activeGraphId) {
+      for (const nodeId of existingNodeIds) nodeIds.add(nodeId)
     }
-  }
 
-  for (const node of proposal.nodes) {
-    if (proposalNodeIds.has(node.id)) {
-      results.push({
-        id: `node-${node.id}-duplicate`,
-        severity: "error",
-        targetKind: "node",
-        targetId: node.id,
-        field: "id",
-        message: `Duplicate proposal node id: ${node.id}.`,
-      })
-    }
-    proposalNodeIds.add(node.id)
-    nodeIds.add(node.id)
-    nodeTypesById.set(node.id, node.semanticType)
-    validateNode(node, results)
-  }
+    graph.nodes.forEach((node, index) => {
+      const nodeId = draftNodeId(node, index)
+      nodeIds.add(nodeId)
+      results.push(
+        ...scanUnsafeFields(node, {
+          targetKind: "node",
+          targetId: nodeId,
+        })
+      )
+    })
 
-  for (const [id, semanticType] of existingNodeTypes) {
-    if (!nodeTypesById.has(id)) nodeTypesById.set(id, semanticType)
-  }
+    graph.edges.forEach((edge, index) => {
+      const edgeId = draftEdgeId(edge, index)
 
-  for (const edge of proposal.edges) {
-    if (proposalEdgeIds.has(edge.id)) {
-      results.push({
-        id: `edge-${edge.id}-duplicate`,
-        severity: "error",
-        targetKind: "edge",
-        targetId: edge.id,
-        field: "id",
-        message: `Duplicate proposal edge id: ${edge.id}.`,
-      })
-    }
-    proposalEdgeIds.add(edge.id)
-    validateEdge(edge, nodeTypesById, nodeIds, results)
+      if (!nodeIds.has(edge.source)) {
+        results.push({
+          id: `edge-${edgeId}-missing-source`,
+          severity: "error",
+          targetKind: "edge",
+          targetId: edgeId,
+          field: "source",
+          message: `Edge source does not exist in this graph: ${edge.source}.`,
+        })
+      }
+
+      if (!nodeIds.has(edge.target)) {
+        results.push({
+          id: `edge-${edgeId}-missing-target`,
+          severity: "error",
+          targetKind: "edge",
+          targetId: edgeId,
+          field: "target",
+          message: `Edge target does not exist in this graph: ${edge.target}.`,
+        })
+      }
+
+      results.push(
+        ...scanUnsafeFields(edge, {
+          targetKind: "edge",
+          targetId: edgeId,
+        })
+      )
+    })
   }
 
   return results
@@ -604,20 +506,49 @@ function sanitizeMetadataRecord(value: Record<string, unknown>): Record<string, 
   return output
 }
 
+function sanitizeNode(node: ArchitectureDraftNode) {
+  return {
+    ...sanitizeMetadataRecord(node),
+    metadata: sanitizeMetadataRecord(node.metadata),
+  }
+}
+
+function sanitizeEdge(edge: ArchitectureDraftEdge) {
+  return {
+    ...sanitizeMetadataRecord(edge),
+    metadata: sanitizeMetadataRecord(edge.metadata),
+  }
+}
+
 export function sanitizeArchitectureDraftProposal(
   value: ArchitectureDraftProposal
 ): ArchitectureDraftProposal {
   return ArchitectureDraftProposalSchema.parse({
     ...sanitizeMetadataRecord(value),
-    nodes: value.nodes.map((node) => ({
-      ...sanitizeMetadataRecord(node),
-      metadata: sanitizeMetadataRecord(node.metadata),
-    })),
-    edges: value.edges.map((edge) => ({
-      ...sanitizeMetadataRecord(edge),
-      metadata: sanitizeMetadataRecord(edge.metadata),
+    nodes: value.nodes.map(sanitizeNode),
+    edges: value.edges.map(sanitizeEdge),
+    graphs: value.graphs.map((graph) => ({
+      ...sanitizeMetadataRecord(graph),
+      nodes: graph.nodes.map(sanitizeNode),
+      edges: graph.edges.map(sanitizeEdge),
     })),
   })
+}
+
+function knownNodeSemanticType(value: unknown): SemanticNodeType {
+  return isSemanticNodeType(value) ? value : SEMANTIC_NODE_TYPES[0]
+}
+
+function knownEdgeSemanticType(value: unknown): SemanticEdgeType {
+  return isSemanticEdgeType(value) ? value : SEMANTIC_EDGE_TYPES[0]
+}
+
+function draftNodeTypeText(draftNode: ArchitectureDraftNode) {
+  return draftNode.semanticType?.trim() || draftNode.type?.trim() || "unclassified"
+}
+
+function draftEdgeTypeText(draftEdge: ArchitectureDraftEdge) {
+  return draftEdge.semanticType?.trim() || draftEdge.type?.trim() || "unclassified"
 }
 
 function nodeShapeAndColor(semanticType: SemanticNodeType): {
@@ -733,7 +664,9 @@ function toCanvasNode(
   index: number,
   existingNodes: CanvasNode[]
 ): CanvasNode {
-  const { shape, colorIndex } = nodeShapeAndColor(draftNode.semanticType)
+  const architectureType = draftNodeTypeText(draftNode)
+  const semanticType = knownNodeSemanticType(architectureType)
+  const { shape, colorIndex } = nodeShapeAndColor(semanticType)
   const color = NODE_COLORS[colorIndex]
   const size = SHAPE_DEFAULTS[shape] ?? SHAPE_DEFAULTS.rectangle
   const metadata = sanitizeMetadataRecord(draftNode.metadata)
@@ -742,6 +675,13 @@ function toCanvasNode(
     (typeof metadata.name === "string" ? metadata.name.trim() : "") ||
     draftNode.label
   const position = draftNode.position ?? gridPosition(index, existingNodes)
+  const customTypeMetadata = isSemanticNodeType(architectureType)
+    ? { architectureType: draftNode.type ?? architectureType }
+    : {
+        llmSemanticType: architectureType,
+        architectureType: draftNode.type ?? architectureType,
+        originalSemanticType: draftNode.semanticType ?? architectureType,
+      }
 
   return {
     id,
@@ -751,9 +691,10 @@ function toCanvasNode(
     height: size.height,
     data: {
       ...baseNodeData(draftNode.label),
-      ...defaultNodeMetadata(draftNode.semanticType),
+      ...defaultNodeMetadata(semanticType),
       ...metadata,
-      semanticType: draftNode.semanticType,
+      ...customTypeMetadata,
+      semanticType,
       label: draftNode.label,
       name,
       description:
@@ -773,10 +714,19 @@ function toCanvasEdge(
   source: string,
   target: string
 ): CanvasEdge {
+  const architectureType = draftEdgeTypeText(draftEdge)
+  const semanticType = knownEdgeSemanticType(architectureType)
   const metadata = sanitizeMetadataRecord(draftEdge.metadata)
   const labels = draftEdge.labels.length > 0 ? draftEdge.labels : draftEdge.label ? [draftEdge.label] : []
   const labelItems = createEdgeLabelItems(labels, [], `${id}-label`)
   const mirroredLabels = mirrorEdgeLabelData(labelItems)
+  const customTypeMetadata = isSemanticEdgeType(architectureType)
+    ? { architectureType: draftEdge.type ?? architectureType }
+    : {
+        llmSemanticType: architectureType,
+        architectureType: draftEdge.type ?? architectureType,
+        originalSemanticType: draftEdge.semanticType ?? architectureType,
+      }
 
   return {
     id,
@@ -787,7 +737,8 @@ function toCanvasEdge(
     targetHandle: null,
     data: {
       ...metadata,
-      semanticType: draftEdge.semanticType,
+      ...customTypeMetadata,
+      semanticType,
       name:
         typeof metadata.name === "string" && metadata.name.trim()
           ? metadata.name.trim()
@@ -809,9 +760,10 @@ function toCanvasEdge(
   }
 }
 
-export function applyArchitectureDraftProposalToCanvasDoc(
+export function applyArchitectureDraftGraphToCanvasDoc(
   doc: CanvasDocV1,
-  value: unknown
+  value: unknown,
+  graphInput?: ArchitectureDraftGraph
 ): ArchitectureDraftApplyResult | ArchitectureDraftApplyBlockedResult {
   const validation = validateArchitectureDraftProposal(value, {
     targetGraphId: doc.graphId,
@@ -825,21 +777,32 @@ export function applyArchitectureDraftProposalToCanvasDoc(
   const proposal = sanitizeArchitectureDraftProposal(
     parseArchitectureDraftProposal(value)
   )
+  const graph =
+    graphInput ??
+    findArchitectureDraftGraph(proposal, doc.graphId) ?? {
+      graphId: doc.graphId,
+      title: proposal.title,
+      summary: proposal.summary,
+      nodes: proposal.nodes,
+      edges: proposal.edges,
+    }
   const usedNodeIds = new Set(doc.nodes.map((node) => node.id))
   const usedEdgeIds = new Set(doc.edges.map((edge) => edge.id))
   const idMap: Record<string, string> = {}
   const newNodes: CanvasNode[] = []
   const newEdges: CanvasEdge[] = []
 
-  proposal.nodes.forEach((draftNode, index) => {
-    const nextId = resolveCollision(draftNode.id, usedNodeIds)
-    idMap[draftNode.id] = nextId
+  graph.nodes.forEach((draftNode, index) => {
+    const originalId = draftNodeId(draftNode, index)
+    const nextId = resolveCollision(originalId, usedNodeIds)
+    idMap[originalId] = nextId
     newNodes.push(toCanvasNode(draftNode, nextId, index, doc.nodes))
   })
 
-  proposal.edges.forEach((draftEdge) => {
-    const nextId = resolveCollision(draftEdge.id, usedEdgeIds)
-    idMap[draftEdge.id] = nextId
+  graph.edges.forEach((draftEdge, index) => {
+    const originalId = draftEdgeId(draftEdge, index)
+    const nextId = resolveCollision(originalId, usedEdgeIds)
+    idMap[originalId] = nextId
     const source = idMap[draftEdge.source] ?? draftEdge.source
     const target = idMap[draftEdge.target] ?? draftEdge.target
     newEdges.push(toCanvasEdge(draftEdge, nextId, source, target))
@@ -854,6 +817,10 @@ export function applyArchitectureDraftProposalToCanvasDoc(
     ok: true,
     doc: {
       ...doc,
+      title: graph.title ?? doc.title,
+      layer: graph.layer ?? doc.layer,
+      layerKind: graph.layerKind ?? doc.layerKind,
+      summary: graph.summary ?? doc.summary,
       nodes: sanitizedCanvas.nodes,
       edges: sanitizedCanvas.edges,
     },
@@ -864,16 +831,30 @@ export function applyArchitectureDraftProposalToCanvasDoc(
   }
 }
 
+export function applyArchitectureDraftProposalToCanvasDoc(
+  doc: CanvasDocV1,
+  value: unknown
+): ArchitectureDraftApplyResult | ArchitectureDraftApplyBlockedResult {
+  return applyArchitectureDraftGraphToCanvasDoc(doc, value)
+}
+
 export function summarizeCanvasForArchitectureDraft(doc: CanvasDocV1 | null) {
   const nodes = doc?.nodes ?? []
   const edges = doc?.edges ?? []
   const nodeTypes = nodes.reduce<Record<string, number>>((counts, node) => {
-    const type = node.data.semanticType ?? "unclassified"
+    const type =
+      typeof node.data.architectureType === "string"
+        ? node.data.architectureType
+        : node.data.semanticType ?? "unclassified"
     counts[type] = (counts[type] ?? 0) + 1
     return counts
   }, {})
   const edgeTypes = edges.reduce<Record<string, number>>((counts, edge) => {
-    const type = edge.data?.semanticType ?? "unclassified"
+    const data = edge.data ?? {}
+    const type =
+      typeof data.architectureType === "string"
+        ? data.architectureType
+        : data.semanticType ?? "unclassified"
     counts[type] = (counts[type] ?? 0) + 1
     return counts
   }, {})
@@ -881,6 +862,11 @@ export function summarizeCanvasForArchitectureDraft(doc: CanvasDocV1 | null) {
   return {
     graphId: doc?.graphId ?? ROOT_GRAPH_ID,
     title: doc?.title ?? "System",
+    parentGraphId: doc?.parentGraphId ?? null,
+    parentNodeId: doc?.parentNodeId ?? null,
+    layer: doc?.layer ?? null,
+    layerKind: doc?.layerKind ?? null,
+    summary: doc?.summary ?? null,
     nodeCount: nodes.length,
     edgeCount: edges.length,
     nodeTypes,
@@ -890,12 +876,15 @@ export function summarizeCanvasForArchitectureDraft(doc: CanvasDocV1 | null) {
       label: node.data.label,
       name: node.data.name,
       semanticType: node.data.semanticType,
+      architectureType: node.data.architectureType,
+      subcanvasGraphId: node.data.subcanvasRef?.graphId,
     })),
     edges: edges.slice(0, 32).map((edge) => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
       semanticType: edge.data?.semanticType,
+      architectureType: edge.data?.architectureType,
       label: edge.data?.label,
     })),
   }
@@ -905,10 +894,18 @@ export function createArchitectureDraftSummary(
   proposal: ArchitectureDraftProposal,
   validation: ArchitectureDraftValidationResult[]
 ) {
+  const graphs = getArchitectureDraftGraphs(proposal)
+  const nodeCount = graphs.reduce((count, graph) => count + graph.nodes.length, 0)
+  const edgeCount = graphs.reduce((count, graph) => count + graph.edges.length, 0)
+  const childLayerCount = graphs.filter((graph) => graph.parentGraphId || graph.parentNodeTempId || graph.parentNodeId).length
+
   return {
     title: proposal.title,
-    nodeCount: proposal.nodes.length,
-    edgeCount: proposal.edges.length,
+    nodeCount,
+    edgeCount,
+    graphCount: graphs.length,
+    childLayerCount,
+    clarificationQuestionCount: proposal.clarificationQuestions.length,
     errors: validation.filter((result) => result.severity === "error").length,
     warnings: validation.filter((result) => result.severity === "warning").length,
     info: validation.filter((result) => result.severity === "info").length,

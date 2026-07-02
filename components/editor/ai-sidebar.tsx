@@ -32,6 +32,7 @@ import { useRealtimeRoom } from "@/hooks/use-realtime-room"
 import {
   ARCHITECTURE_DRAFT_COMPLEXITIES,
   architectureDraftHasErrors,
+  getArchitectureDraftGraphs,
   type ArchitectureDraftComplexity,
   type ArchitectureDraftProposal,
   type ArchitectureDraftValidationResult,
@@ -54,6 +55,9 @@ interface ArchitectureDraftRunOutput {
     title?: string
     nodeCount?: number
     edgeCount?: number
+    graphCount?: number
+    childLayerCount?: number
+    clarificationQuestionCount?: number
     errors?: number
     warnings?: number
     info?: number
@@ -488,7 +492,7 @@ export function AiSidebar({
         error?: string
         validation?: ArchitectureDraftValidationResult[]
         canvas?: { nodes: typeof nodes; edges: typeof edges }
-        applied?: { nodes?: number; edges?: number }
+        applied?: { nodes?: number; edges?: number; childGraphs?: number }
       }
 
       if (!response.ok) {
@@ -502,9 +506,10 @@ export function AiSidebar({
 
       const appliedNodes = data.applied?.nodes ?? draftProposal.nodes.length
       const appliedEdges = data.applied?.edges ?? draftProposal.edges.length
+      const childGraphs = data.applied?.childGraphs ?? 0
       removeStoredDraftRunId(draftStorageKey)
       setDraftApplyMessage(
-        `Applied ${appliedNodes} node${appliedNodes === 1 ? "" : "s"} and ${appliedEdges} edge${appliedEdges === 1 ? "" : "s"} to the root canvas.`
+        `Applied ${appliedNodes} node${appliedNodes === 1 ? "" : "s"} and ${appliedEdges} edge${appliedEdges === 1 ? "" : "s"} to this canvas${childGraphs ? `, with ${childGraphs} child layer${childGraphs === 1 ? "" : "s"}` : ""}.`
       )
       broadcastRoomEvent({
         type: "ai.status",
@@ -849,10 +854,10 @@ export function AiSidebar({
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-ai-text" />
                     <div>
                       <p className="text-xs font-semibold text-text-primary">
-                        AI proposes an architecture draft. You stay in control. Arc Forge does not build or execute the app.
+                        AI proposes the architecture. Arc Forge only previews, applies, saves, and protects the canvas.
                       </p>
                       <p className="mt-1 text-[11px] leading-4 text-text-muted">
-                        Review the structured proposal, then append it to the root canvas only when it looks right.
+                        Canvas layers work like a pyramid: root context first, deeper layers for internal detail.
                       </p>
                     </div>
                   </div>
@@ -917,7 +922,7 @@ export function AiSidebar({
                 {isDraftGenerating ? (
                   <div className="flex items-center gap-2 rounded-xl border border-accent-ai/20 bg-accent-ai/10 px-3 py-2 text-xs text-accent-ai-text">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    <span>Drafting semantic architecture proposal...</span>
+                    <span>Drafting architecture proposal...</span>
                   </div>
                 ) : null}
 
@@ -1225,14 +1230,7 @@ function ArchitectureDraftPreview({
   onClear: () => void
 }) {
   const hasErrors = architectureDraftHasErrors(validation)
-  const groupedNodes = proposal.nodes.reduce<Record<string, typeof proposal.nodes>>(
-    (groups, node) => {
-      groups[node.semanticType] = groups[node.semanticType] ?? []
-      groups[node.semanticType].push(node)
-      return groups
-    },
-    {}
-  )
+  const graphs = getArchitectureDraftGraphs(proposal)
   const visibleValidation = validation.filter((item) => item.severity !== "info")
 
   return (
@@ -1256,11 +1254,26 @@ function ArchitectureDraftPreview({
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <MetricPill label="Nodes" value={summary?.nodeCount ?? proposal.nodes.length} />
-        <MetricPill label="Edges" value={summary?.edgeCount ?? proposal.edges.length} />
+      <div className="grid grid-cols-2 gap-2">
+        <MetricPill label="Graphs" value={summary?.graphCount ?? graphs.length} />
+        <MetricPill label="Layers" value={summary?.childLayerCount ?? graphs.filter((graph) => graph.parentGraphId || graph.parentNodeId || graph.parentNodeTempId).length} />
+        <MetricPill label="Nodes" value={summary?.nodeCount ?? graphs.reduce((count, graph) => count + graph.nodes.length, 0)} />
+        <MetricPill label="Edges" value={summary?.edgeCount ?? graphs.reduce((count, graph) => count + graph.edges.length, 0)} />
         <MetricPill label="Issues" value={visibleValidation.length} />
       </div>
+
+      {proposal.clarificationQuestions.length > 0 ? (
+        <div className="grid gap-1.5 rounded-xl border border-accent-ai/25 bg-accent-ai/10 p-2.5">
+          <p className="text-[10px] font-semibold uppercase text-accent-ai-text">
+            Clarification questions
+          </p>
+          {proposal.clarificationQuestions.slice(0, 4).map((question) => (
+            <p key={question} className="text-[11px] leading-4 text-text-secondary">
+              {question}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       {visibleValidation.length > 0 ? (
         <div className="grid gap-1.5">
@@ -1285,7 +1298,7 @@ function ArchitectureDraftPreview({
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-state-success/25 bg-state-success/10 px-2.5 py-2 text-xs text-state-success">
           <Check className="h-3.5 w-3.5" />
-          <span>No blocking validation errors.</span>
+          <span>No blocking safety issues.</span>
         </div>
       )}
 
@@ -1298,37 +1311,69 @@ function ArchitectureDraftPreview({
       />
 
       <div className="grid gap-2">
-        {Object.entries(groupedNodes).map(([semanticType, group]) => (
-          <div key={semanticType} className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
-            <p className="text-[10px] font-semibold uppercase text-text-faint">
-              {semanticType}
-            </p>
-            <div className="mt-2 grid gap-1">
-              {group.map((node) => (
-                <div key={node.id} className="min-w-0">
-                  <p className="truncate text-xs font-medium text-text-primary">{node.label}</p>
-                  <p className="truncate font-mono text-[10px] text-text-faint">{node.id}</p>
+        {graphs.map((graph, graphIndex) => {
+          const graphKey = graph.graphId ?? `graph-${graphIndex}`
+          return (
+            <div key={graphKey} className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-semibold text-text-primary">
+                    {graph.title ?? graph.graphId ?? proposal.title}
+                  </p>
+                  <p className="mt-0.5 truncate font-mono text-[10px] text-text-faint">
+                    {graph.graphId ?? proposal.targetGraphId}
+                  </p>
                 </div>
-              ))}
+                <span className="shrink-0 rounded-full border border-accent-primary/25 bg-accent-primary/10 px-2 py-0.5 text-[10px] text-accent-primary">
+                  {`Layer ${graph.layer ?? graphIndex}`}
+                </span>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <MetricPill label="Nodes" value={graph.nodes.length} />
+                <MetricPill label="Edges" value={graph.edges.length} />
+              </div>
+              {graph.layerKind || graph.summary ? (
+                <p className="mt-2 text-[11px] leading-4 text-text-muted">
+                  {graph.layerKind ? `${graph.layerKind}: ` : ""}
+                  {graph.summary ?? ""}
+                </p>
+              ) : null}
+              {graph.nodes.length > 0 ? (
+                <div className="mt-2 grid gap-1">
+                  {graph.nodes.slice(0, 6).map((node, nodeIndex) => (
+                    <div key={`${graphKey}-node-${node.id ?? nodeIndex}`} className="min-w-0">
+                      <p className="truncate text-xs font-medium text-text-primary">{node.label}</p>
+                      <p className="truncate font-mono text-[10px] text-text-faint">
+                        {node.id ?? "generated-id"} / {node.semanticType ?? node.type ?? "custom"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {proposal.edges.length > 0 ? (
+      {graphs.some((graph) => graph.edges.length > 0) ? (
         <div className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
           <p className="text-[10px] font-semibold uppercase text-text-faint">
             Relations
           </p>
           <div className="mt-2 grid gap-1.5">
-            {proposal.edges.slice(0, 10).map((edge) => (
-              <p key={edge.id} className="truncate text-[11px] text-text-secondary">
-                <span className="text-text-primary">{edge.source}</span>
-                <span className="text-text-faint"> {"->"} </span>
-                <span className="text-text-primary">{edge.target}</span>
-                <span className="text-text-faint"> / {edge.semanticType}</span>
-              </p>
-            ))}
+            {graphs.flatMap((graph, graphIndex) =>
+              graph.edges.slice(0, 6).map((edge, edgeIndex) => (
+                <p
+                  key={`${graph.graphId ?? graphIndex}-edge-${edge.id ?? edgeIndex}`}
+                  className="truncate text-[11px] text-text-secondary"
+                >
+                  <span className="text-text-primary">{edge.source}</span>
+                  <span className="text-text-faint"> {"->"} </span>
+                  <span className="text-text-primary">{edge.target}</span>
+                  <span className="text-text-faint"> / {edge.semanticType ?? edge.type ?? "relation"}</span>
+                </p>
+              ))
+            ).slice(0, 12)}
           </div>
         </div>
       ) : null}

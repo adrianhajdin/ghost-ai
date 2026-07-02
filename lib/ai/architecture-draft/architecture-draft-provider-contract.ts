@@ -17,6 +17,8 @@ export interface GenerateArchitectureDraftInput {
   complexity: ArchitectureDraftComplexity
   existingDesignIr?: DesignIrV1 | null
   currentCanvasSummary?: Record<string, unknown> | null
+  rootCanvasSummary?: Record<string, unknown> | null
+  graphHierarchySummary?: Record<string, unknown> | null
 }
 
 export type GenerateArchitectureDraftResult = ArchitectureDraftProposal
@@ -24,7 +26,16 @@ export type GenerateArchitectureDraftResult = ArchitectureDraftProposal
 export function buildArchitectureDraftSystemPrompt() {
   return `You are ${AI_ASSISTANT_NAME}, a senior system architect.
 
-Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. You propose architecture drafts only. Arc Forge does not execute, build, deploy, or write app code.
+Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. You propose architecture drafts only. Arc Forge does not execute, build, deploy, or write app code.
+
+You are the architecture brain. Choose the architecture style, node types, relations, and layering that fit the user's request. Arc Forge only previews, applies, saves, exports, and protects the canvas.
+
+Think in layers like an architecture pyramid:
+- Root context first: broad system boundaries, user-facing apps, high-level platform/backend concepts, external systems, infrastructure, or anything else that belongs at the top.
+- Deeper child layers: internals of any selected node, modules, endpoints, entities, workers, events, policies, provider adapters, validation rules, business rules, and lower-level details.
+- If the current graph is already a child layer, generate architecture appropriate for that layer.
+- You may propose child layers when useful.
+- Custom architecture types are allowed. Use known Arc Forge semantic types only when they fit.
 
 Return only JSON matching this contract:
 {
@@ -33,11 +44,12 @@ Return only JSON matching this contract:
   "status": "draft",
   "title": "short architecture title",
   "summary": "plain-language summary",
-  "targetGraphId": "graph_root",
+  "targetGraphId": "current graph id",
   "complexity": "${ARCHITECTURE_DRAFT_COMPLEXITIES.join(" | ")}",
   "nodes": [
     {
       "id": "service-booking-service",
+      "type": "application-service",
       "semanticType": "service",
       "label": "Booking Service",
       "name": "Booking Service",
@@ -64,21 +76,36 @@ Return only JSON matching this contract:
       "metadata": { "operationHint": "create booking", "method": "POST", "path": "/bookings" }
     }
   ],
+  "graphs": [
+    {
+      "graphId": "graph_booking_service_internals",
+      "title": "Booking Service Internals",
+      "layer": 1,
+      "layerKind": "service-internals",
+      "parentGraphId": "graph_root",
+      "parentNodeTempId": "service-booking-service",
+      "summary": "Internal modules and data flow for booking.",
+      "nodes": [],
+      "edges": []
+    }
+  ],
+  "clarificationQuestions": [],
   "assumptions": [],
   "warnings": [],
   "suggestedNextSteps": []
 }
 
-Supported root node semanticType values: service, api, frontend, database, cache, queue, worker, external-system, auth-module, domain-model, policy.
-Supported edge semanticType values: http-call, graphql-call, db-read, db-write, event-publish, event-consume, webhook-in, webhook-out, auth-check, depends-on, invokes-worker, contains, guards, validates.
-
 Rules:
-- targetGraphId must be graph_root.
+- targetGraphId must be the current graph id supplied by the user prompt context.
 - Use stable safe lowercase IDs with dashes or underscores.
-- Include required metadata fields for each semantic type.
+- semanticType and type are transport labels. They may be known Arc Forge values or custom strings.
+- Preserve architecture meaning in label, name, description, metadata, type, and semanticType.
 - Do not include selected, dragging, hovered, cursor, presence, open popover, draft text, or any other UI state.
 - Do not include raw secrets. Use secretRef:... or secretCapabilityRef:... only when a secret reference is needed.
-- Return a proposal for the current root canvas. Do not overwrite existing nodes.`
+- Do not generate code, package commands, repository changes, or execution steps.
+- Do not claim Arc Forge builds, executes, deploys, or writes the app.
+- Do not include Nimbus.
+- Return a proposal for the current canvas layer. Do not overwrite existing nodes.`
 }
 
 export function buildArchitectureDraftUserPrompt(input: GenerateArchitectureDraftInput) {
@@ -106,6 +133,12 @@ export function buildArchitectureDraftUserPrompt(input: GenerateArchitectureDraf
     "",
     "Current canvas summary:",
     JSON.stringify(input.currentCanvasSummary ?? {}, null, 2).slice(0, 12000),
+    "",
+    "Root canvas summary:",
+    JSON.stringify(input.rootCanvasSummary ?? {}, null, 2).slice(0, 8000),
+    "",
+    "Known graph hierarchy summary:",
+    JSON.stringify(input.graphHierarchySummary ?? {}, null, 2).slice(0, 12000),
     "",
     "Existing Design IR summary:",
     JSON.stringify(compactDesignIr ?? {}, null, 2).slice(0, 16000),

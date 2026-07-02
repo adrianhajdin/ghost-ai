@@ -20,9 +20,13 @@ import { getStorageProvider } from "@/lib/storage/storage-provider"
 
 export interface CanvasDocWriteOptions {
   graphId?: string
+  parentGraphId?: string | null
   parentNodeId?: string | null
   scopeKind?: CanvasScopeKind
   title?: string
+  layer?: number | null
+  layerKind?: string | null
+  summary?: string | null
 }
 
 function canvasFromDoc(doc: CanvasDocV1): CanvasSnapshot {
@@ -60,8 +64,8 @@ export async function readCanvasDoc(
       ? normalizeCanvasDocV1(canvas, {
           projectId,
           graphId: safeGraphId,
-          scopeKind: "service-internal",
-          title: "Service design",
+          scopeKind: "architecture-layer",
+          title: "Design layer",
         })
       : null
   }
@@ -107,18 +111,26 @@ export async function writeCanvasDoc(
     : createCanvasDocV1(sanitizeCanvasSnapshot(value), {
         projectId,
         graphId,
+        parentGraphId: options.parentGraphId ?? null,
         parentNodeId: options.parentNodeId ?? null,
-        scopeKind: options.scopeKind ?? (graphId === ROOT_GRAPH_ID ? "system-root" : "service-internal"),
-        title: options.title ?? (graphId === ROOT_GRAPH_ID ? "System" : "Service design"),
+        scopeKind: options.scopeKind ?? (graphId === ROOT_GRAPH_ID ? "system-root" : "architecture-layer"),
+        title: options.title ?? (graphId === ROOT_GRAPH_ID ? "System" : "Design layer"),
+        layer: options.layer ?? null,
+        layerKind: options.layerKind ?? null,
+        summary: options.summary ?? null,
       })
 
   const nextDoc: CanvasDocV1 = {
     ...doc,
     projectId,
     graphId,
+    parentGraphId: options.parentGraphId ?? doc.parentGraphId,
     parentNodeId: options.parentNodeId ?? doc.parentNodeId,
     scopeKind: options.scopeKind ?? doc.scopeKind,
     title: options.title ?? doc.title,
+    layer: options.layer ?? doc.layer,
+    layerKind: options.layerKind ?? doc.layerKind,
+    summary: options.summary ?? doc.summary,
   }
   const reference = await getStorageProvider().writeJsonObject(
     graphObjectPath(projectId, graphId),

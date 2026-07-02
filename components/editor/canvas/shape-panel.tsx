@@ -166,7 +166,7 @@ export function ShapePanel({ graphScopeKind }: { graphScopeKind: CanvasScopeKind
 
   const previewSize = drag ? SHAPE_DEFAULTS[drag.shape] : null
   const serviceInternalTemplates =
-    graphScopeKind === "service-internal" ? SERVICE_INTERNAL_NODE_TEMPLATES : []
+    graphScopeKind !== "system-root" ? SERVICE_INTERNAL_NODE_TEMPLATES : []
 
   function renderSemanticTemplate(template: SemanticNodeTemplate, variant: "root" | "internal") {
     const Icon = SEMANTIC_TEMPLATE_ICONS[template.semanticType]

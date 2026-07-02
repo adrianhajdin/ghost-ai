@@ -52,6 +52,22 @@ export function createServiceGraphIdBase(parentNode: CanvasNode): string {
   return truncateGraphId(`graph_service_${slug}`)
 }
 
+export function createLayerGraphIdBase(
+  parentGraphId: string,
+  parentNode: CanvasNode
+): string {
+  const parentSlug =
+    parentGraphId === ROOT_GRAPH_ID
+      ? ""
+      : slugifyGraphPart(parentGraphId.replace(/^graph_/, ""))
+  const rawNodeId = slugifyGraphPart(parentNode.id)
+  const rawName = slugifyGraphPart(parentNode.data.name ?? parentNode.data.label ?? "")
+  const nodeSlug = rawName || rawNodeId || "layer"
+  const scopedSlug = parentSlug ? `${parentSlug}_${nodeSlug}` : nodeSlug
+
+  return truncateGraphId(`graph_${scopedSlug}`)
+}
+
 export function truncateGraphId(value: string) {
   return value.length > MAX_GRAPH_ID_LENGTH
     ? value.slice(0, MAX_GRAPH_ID_LENGTH).replace(/[-_]+$/g, "")

@@ -36,11 +36,11 @@
 ## Storage Model
 
 - **Database**: metadata, ownership, relationships, AI task runs/events/attempts, realtime room events, and project spec records.
-- **Storage provider**: generated artifacts — the root canvas graph remains at `canvas/{projectId}.json`, service/internal graph documents are stored separately at `canvas/{projectId}/graphs/{graphId}.json`, and specs are stored at `specs/{projectId}/{specId}.md`.
+- **Storage provider**: generated artifacts — the root canvas graph remains at `canvas/{projectId}.json`, child architecture layer graph documents are stored separately at `canvas/{projectId}/graphs/{graphId}.json`, and specs are stored at `specs/{projectId}/{specId}.md`.
 - Project records, spec records, AI task run records, and internal realtime room events belong in PostgreSQL.
 - Canvas content and Markdown output are stored in and retrieved from the configured artifact storage provider.
-- Existing canvas storage remains compatible with `{ nodes, edges }` snapshots. New graph-aware canvas writes persist CanvasDoc v1 documents; legacy root reads normalize existing snapshots into `graph_root`, while subcanvas graphs are separate CanvasDoc v1 objects referenced by `node.data.subcanvasRef`.
-- Design IR is machine-readable architecture. It is compiled on demand from the root CanvasDoc and directly linked child graph CanvasDocs, is exposed through a read-only project route, and is not persisted as an additional artifact by default.
+- Existing canvas storage remains compatible with `{ nodes, edges }` snapshots. New graph-aware canvas writes persist CanvasDoc v1 documents; legacy root reads normalize existing snapshots into `graph_root`, while child layer graphs are separate CanvasDoc v1 objects referenced by `node.data.subcanvasRef`.
+- Design IR is machine-readable architecture. It is compiled on demand from the root CanvasDoc and recursively linked child graph CanvasDocs where available, is exposed through a read-only project route, and is not persisted as an additional artifact by default.
 - Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Prompt Pack generation is deterministic, read-only, does not call AI providers, does not persist by default, and does not write back to repositories.
 - Nimbus is not included yet and is not a Prompt Pack target in this version.
 - Local development defaults to filesystem storage under `.local-storage`; external object storage such as Vercel Blob is optional.
@@ -56,7 +56,7 @@
 - Only authenticated users can access protected routes.
 - Only the owner or a collaborator can mutate shared project resources.
 - Owner-only project administration remains restricted to the owner.
-- Internal realtime room tokens are short-lived, signed server-side, scoped to one project graph room, contain only minimal non-PII claims, and are issued only after verifying project membership. Graph-scoped room IDs use the project id plus graph id so root and service drill-down canvas updates do not collide.
+- Internal realtime room tokens are short-lived, signed server-side, scoped to one project graph room, contain only minimal non-PII claims, and are issued only after verifying project membership. Graph-scoped room IDs use the project id plus graph id so root and child layer canvas updates do not collide.
 - Long-lived WebSocket connections run in the standalone realtime service, not in Next.js route handlers.
 - Local development may use HTTP/WS localhost URLs only when server-side `APP_ENV=local` and browser-facing `NEXT_PUBLIC_APP_ENV=local`; every non-local environment must use HTTPS/WSS and fail closed on insecure or missing public URLs.
 
@@ -88,16 +88,16 @@
 
 ### Architecture Draft Generation
 
-- Input: natural-language prompt, project id, `graph_root`, optional current graph summary, optional existing Design IR, and complexity (`simple`, `standard`, `detailed`).
+- Input: natural-language prompt, project id, current graph id, current graph summary, root graph summary, graph hierarchy summary where available, optional existing Design IR, and complexity (`simple`, `standard`, `detailed`).
 - Execution: durable background task via the internal PostgreSQL-backed AI task runner.
 - Provider: selected through the same server-side AI provider factory. The mock provider returns deterministic structured proposals for taxi/booking/dispatch/payments, ecommerce, chat, and generic prompts.
-- Output: an Architecture Draft v1 proposal plus validation summary. The task does not mutate the canvas.
-- Apply: authenticated project route validates the proposal again, strips forbidden transient UI state/secrets through the shared sanitizer, appends nodes and edges to the root CanvasDoc, resolves ID collisions deterministically, preserves existing canvas items, writes through the storage provider, and publishes a graph-scoped realtime snapshot when available.
-- Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. Arc Forge does not execute or build the app.
+- Output: an Architecture Draft v1 proposal plus validation summary. The proposal may be flat for the current graph or layered with child graph definitions. The task does not mutate the canvas.
+- Apply: authenticated project route validates transport/safety constraints again, strips forbidden transient UI state/secrets through the shared sanitizer, appends nodes and edges to the active CanvasDoc, creates or updates child CanvasDoc layers where parent nodes can be resolved, resolves ID collisions deterministically, preserves existing canvas items, writes through the storage provider, and publishes a graph-scoped realtime snapshot when available.
+- Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Arc Forge does not execute or build the app. The LLM is responsible for architecture content and layering; deterministic code does not judge architecture quality, semantic correctness, or layering correctness.
 
 ### Design IR Export
 
-- Input: root `graph_root` CanvasDoc plus one level of child CanvasDocs referenced by root node `subcanvasRef.graphId`.
+- Input: root `graph_root` CanvasDoc plus recursively linked child CanvasDocs referenced by node `subcanvasRef.graphId`.
 - Execution: deterministic in-process compiler, not AI.
 - Output: read-only JSON export containing project defaults, graph hierarchy, typed semantic sections, relations, validation results, and provenance.
 - Missing child graphs, unclassified items, missing required semantic fields, invalid graph IDs, relationship target issues, and raw secret redaction appear as advisory validation results. Export is not blocked.
@@ -127,4 +127,5 @@
 12. Durable canvas data must not include transient UI state such as selected, dragging, hovered, editing drafts, lasso rectangles, reconnect ghosts, or presence cursors.
 13. Raw secret values must not be stored in canvas metadata or exported Design IR; use secretRef-style references only.
 14. Prompt Pack generation must remain read-only: no AI calls, no code execution, no app builder runtime, no repository write-back, and no default persistence.
-15. Architecture Draft generation must remain proposal-first: AI can propose architecture drafts on the canvas, the user approves before applying, and apply is append-only for v1.
+15. Architecture Draft generation must remain proposal-first: AI can propose architecture drafts and layers on the canvas, the user approves before applying, and apply is append-only for v1.
+16. Any node may have an inner architecture layer. Deterministic code must not decide whether a node deserves a layer.

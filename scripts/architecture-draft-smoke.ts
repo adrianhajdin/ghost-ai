@@ -7,8 +7,10 @@ import { baseNodeData } from "@/lib/canvas/semantic-defaults"
 import { createEdgeLabelItems, mirrorEdgeLabelData } from "@/lib/canvas/edge-labels"
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 import {
+  applyArchitectureDraftGraphToCanvasDoc,
   applyArchitectureDraftProposalToCanvasDoc,
   architectureDraftHasErrors,
+  getArchitectureDraftGraphs,
   sanitizeArchitectureDraftProposal,
   validateArchitectureDraftProposal,
   type ArchitectureDraftProposal,
@@ -87,6 +89,11 @@ async function main() {
   assert(proposalA.nodes.some((item) => item.semanticType === "auth-module"), "Missing auth node")
   assert(proposalA.nodes.some((item) => item.semanticType === "frontend"), "Missing frontend node")
   assert(proposalA.nodes.some((item) => item.semanticType === "external-system"), "Missing external system node")
+  assert(proposalA.graphs.length > 0, "Missing layered graph proposal")
+  assert(
+    proposalA.graphs.some((graph) => graph.parentNodeTempId),
+    "Layered proposal did not include parentNodeTempId"
+  )
   assert(!proposalJson.includes("```"), "Proposal contains code fences")
   assert(!proposalJson.includes("npm install"), "Proposal contains app build instructions")
   assert(!proposalJson.toLowerCase().includes("nimbus"), "Proposal mentioned Nimbus")
@@ -96,11 +103,17 @@ async function main() {
   })
   assert(!architectureDraftHasErrors(validation), "Valid taxi proposal has validation errors")
 
-  const invalidSemantic = structuredClone(proposalA) as ArchitectureDraftProposal
-  invalidSemantic.nodes[0].semanticType = "not-a-real-type" as ArchitectureDraftProposal["nodes"][number]["semanticType"]
+  const customSemantic = structuredClone(proposalA) as ArchitectureDraftProposal
+  customSemantic.nodes[0].semanticType = "not-a-real-type"
   assert(
-    architectureDraftHasErrors(validateArchitectureDraftProposal(invalidSemantic)),
-    "Invalid semantic type was not rejected"
+    !architectureDraftHasErrors(validateArchitectureDraftProposal(customSemantic)),
+    "Custom semantic type was rejected"
+  )
+  const customEdgeSemantic = structuredClone(proposalA) as ArchitectureDraftProposal
+  customEdgeSemantic.edges[0].semanticType = "custom-relation"
+  assert(
+    !architectureDraftHasErrors(validateArchitectureDraftProposal(customEdgeSemantic)),
+    "Custom edge type was rejected"
   )
 
   const missingRef = structuredClone(proposalA) as ArchitectureDraftProposal
@@ -137,11 +150,15 @@ async function main() {
 
   const firstNode = proposalA.nodes[0]
   const firstEdge = proposalA.edges[0]
+  assert(firstNode.id, "First proposal node is missing id")
+  assert(firstEdge.id, "First proposal edge is missing id")
+  const firstNodeId = firstNode.id
+  const firstEdgeId = firstEdge.id
   const existingOtherNode = node("existing-target", "Existing Target")
   const rootDoc = createCanvasDocV1(
     {
-      nodes: [node(firstNode.id, "Existing Passenger App"), existingOtherNode],
-      edges: [edge(firstEdge.id, firstNode.id, existingOtherNode.id)],
+      nodes: [node(firstNodeId, "Existing Passenger App"), existingOtherNode],
+      edges: [edge(firstEdgeId, firstNodeId, existingOtherNode.id)],
     },
     {
       projectId: input.projectId,
@@ -160,15 +177,15 @@ async function main() {
     "Existing colliding node was removed"
   )
   assert(
-    applyResult.idMap[firstNode.id] === `${firstNode.id}-2`,
+    applyResult.idMap[firstNodeId] === `${firstNodeId}-2`,
     "Node collision did not resolve deterministically"
   )
   assert(
-    applyResult.idMap[firstEdge.id] === `${firstEdge.id}-2`,
+    applyResult.idMap[firstEdgeId] === `${firstEdgeId}-2`,
     "Edge collision did not resolve deterministically"
   )
   const mappedEdge = applyResult.doc.edges.find(
-    (item) => item.id === applyResult.idMap[firstEdge.id]
+    (item) => item.id === applyResult.idMap[firstEdgeId]
   )
   assert(mappedEdge, "Mapped edge was not created")
   assert(
@@ -183,13 +200,78 @@ async function main() {
     Array.isArray(mappedEdge.data?.labelItems) && mappedEdge.data.labelItems.length > 0,
     "Applied edge labelItems were not created"
   )
+  const customApplyResult = applyArchitectureDraftProposalToCanvasDoc(rootDoc, customSemantic)
+  assert(customApplyResult.ok, "Custom semantic proposal was blocked")
+  const appliedCustomNode = customApplyResult.doc.nodes.find(
+    (item) => item.id === customApplyResult.idMap[customSemantic.nodes[0].id!]
+  )
+  assert(appliedCustomNode, "Custom semantic node was not applied")
+  assert(
+    appliedCustomNode.data.semanticType === "unclassified",
+    "Custom semantic node did not use a safe canvas fallback"
+  )
+  assert(
+    appliedCustomNode.data.llmSemanticType === "not-a-real-type",
+    "Custom semantic node type was not preserved"
+  )
   assert(
     !JSON.stringify(applyResult.doc).includes("selected") &&
       !JSON.stringify(applyResult.doc).includes("dragging"),
     "Applied CanvasDoc persisted UI state"
   )
 
-  const designIrResult = compileCanvasDocsToDesignIrResult([applyResult.doc], {
+  const graphs = getArchitectureDraftGraphs(proposalA)
+  const childGraph = graphs.find((graph) => graph.parentNodeTempId)
+  assert(childGraph?.graphId, "Layered proposal did not expose child graph id")
+  const childDoc = createCanvasDocV1(
+    { nodes: [], edges: [] },
+    {
+      projectId: input.projectId,
+      graphId: childGraph.graphId,
+      parentGraphId: ROOT_GRAPH_ID,
+      parentNodeId: applyResult.idMap[childGraph.parentNodeTempId!],
+      scopeKind: "architecture-layer",
+      title: childGraph.title,
+      layer: childGraph.layer,
+      layerKind: childGraph.layerKind,
+      summary: childGraph.summary,
+    }
+  )
+  const childApplyResult = applyArchitectureDraftGraphToCanvasDoc(
+    childDoc,
+    proposalA,
+    childGraph
+  )
+  assert(childApplyResult.ok, "Layered child graph apply was blocked")
+  assert(
+    childApplyResult.appliedNodes === childGraph.nodes.length,
+    "Child graph did not append all nodes"
+  )
+  const rootWithChildRef = {
+    ...applyResult.doc,
+    nodes: applyResult.doc.nodes.map((item) =>
+      item.id === applyResult.idMap[childGraph.parentNodeTempId!]
+        ? {
+            ...item,
+            data: {
+              ...item.data,
+              subcanvasRef: {
+                graphId: childGraph.graphId!,
+                scopeKind: "architecture-layer" as const,
+                parentGraphId: ROOT_GRAPH_ID,
+                parentNodeId: item.id,
+                layer: childGraph.layer,
+                layerKind: childGraph.layerKind,
+                title: childGraph.title,
+                summary: childGraph.summary,
+              },
+            },
+          }
+        : item
+    ),
+  }
+
+  const designIrResult = compileCanvasDocsToDesignIrResult([rootWithChildRef, childApplyResult.doc], {
     projectId: input.projectId,
     projectName: "Architecture Draft Smoke",
   })
@@ -201,6 +283,7 @@ async function main() {
     designIrResult.ir.dataModels.some((item) => item.name === "Trip Database"),
     "Design IR did not include applied database"
   )
+  assert(designIrResult.ir.graphs.length >= 2, "Design IR did not include child graph")
 
   const promptPack = compileDesignIrToPromptPack(designIrResult.ir, {
     targetAgent: "codex",

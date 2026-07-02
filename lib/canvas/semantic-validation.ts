@@ -2,7 +2,6 @@ import type { CanvasEdge, CanvasEdgeData, CanvasNode } from "@/types/canvas"
 import {
   SEMANTIC_EDGE_DEFINITIONS,
   SEMANTIC_NODE_DEFINITIONS,
-  SUBCANVAS_CAPABLE_NODE_TYPES,
   isSemanticEdgeType,
   isSemanticNodeType,
 } from "@/types/canvas"
@@ -132,17 +131,14 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
     }
   }
 
-  if (
-    (SUBCANVAS_CAPABLE_NODE_TYPES as readonly string[]).includes(semanticType) &&
-    !node.data.subcanvasRef
-  ) {
+  if (!node.data.subcanvasRef) {
     results.push({
       id: `node-${node.id}-subcanvas-ref`,
       severity: "info",
       targetKind: "node",
       targetId: node.id,
       field: "subcanvasRef",
-      message: `${definition.label} can have service design; subcanvas is not created yet.`,
+      message: `${definition.label} can have an inner design layer; layer is not created yet.`,
     })
   }
 

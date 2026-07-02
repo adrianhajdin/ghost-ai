@@ -2,7 +2,9 @@
 
 ## Overview
 
-Arc Forge v1 is an AI-assisted architecture compiler, not an app builder. Users capture application architecture intent on a shared React Flow canvas; AI can propose architecture drafts on the canvas, the user approves before applying, the product normalizes that graph into semantic canvas data, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
+Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Users capture application architecture intent on a shared layered React Flow canvas; AI can propose architecture drafts and deeper design layers, the user approves before applying, the product stores the canvas, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
+
+The canvas is a layered architecture pyramid: root context at the top, deeper layers for internal detail. The LLM is responsible for architectural intelligence and layering. Deterministic code only handles canvas storage, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
 
 Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Arc Forge does not execute or build the app. Nimbus is not included yet and is not a Prompt Pack target in this version.
 
@@ -47,6 +49,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Live cursors, presence indicators, and node/edge editing.
 - Semantic node and edge metadata with validation warnings for unclassified or incomplete technical meaning.
 - Semantic templates for service, database, worker, and auth-module nodes.
+- Any node may have an inner architecture layer. Child layers can be created from the root canvas or another child layer.
 - CanvasDoc v1, Design IR v1, and Prompt Pack v1 foundations for external coding-agent instruction generation.
 - Canvas snapshots persisted through the configured artifact storage provider.
 
@@ -67,9 +70,9 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 ### AI Architecture Drafts
 
 - AI can propose architecture drafts on the canvas from natural language.
-- Draft proposals are structured semantic root-canvas nodes and edges, not Markdown-only output.
+- Draft proposals are structured canvas nodes, edges, and optional child graph layers, not Markdown-only output.
 - The user approves before applying.
-- Accepted drafts are append-only and run through deterministic validation, sanitization, CanvasDoc persistence, and realtime publication.
+- Accepted drafts are append-only and run through deterministic transport/safety validation, sanitization, CanvasDoc persistence, and realtime publication.
 - Arc Forge does not execute or build the app.
 
 ### Spec Generation

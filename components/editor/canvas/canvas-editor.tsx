@@ -207,7 +207,11 @@ export function CanvasEditor({
     status: realtimeStatus,
     graphTitle,
     graphScopeKind,
+    parentGraphId,
     parentNodeId,
+    graphLayer,
+    graphLayerKind,
+    graphSummary,
   } = useRealtimeRoom()
   const router = useRouter()
   const { user } = useCurrentUser()
@@ -341,7 +345,11 @@ export function CanvasEditor({
   const { status: saveStatus, save } = useCanvasAutosave(projectId, graphId, nodes, edges, {
     title: graphTitle,
     scopeKind: graphScopeKind,
+    parentGraphId,
     parentNodeId,
+    layer: graphLayer,
+    layerKind: graphLayerKind,
+    summary: graphSummary,
   })
 
   useEffect(() => {
@@ -921,7 +929,15 @@ export function CanvasEditor({
           projectId={projectId}
           graphId={graphId}
           graphTitle={graphTitle}
+          parentGraphId={parentGraphId}
           onNavigateRoot={() => router.push(`/editor/${projectId}`)}
+          onNavigateGraph={(targetGraphId) =>
+            router.push(
+              targetGraphId === ROOT_GRAPH_ID
+                ? `/editor/${projectId}`
+                : `/editor/${projectId}?graphId=${encodeURIComponent(targetGraphId)}`
+            )
+          }
         />
         <EmptySubcanvasGuide
           graphScopeKind={graphScopeKind}
@@ -949,14 +965,19 @@ function GraphBreadcrumb({
   projectId,
   graphId,
   graphTitle,
+  parentGraphId,
   onNavigateRoot,
+  onNavigateGraph,
 }: {
   projectId: string
   graphId: string
   graphTitle: string
+  parentGraphId: string | null
   onNavigateRoot: () => void
+  onNavigateGraph: (graphId: string) => void
 }) {
   const isRoot = graphId === ROOT_GRAPH_ID
+  const parentLabel = parentGraphId && parentGraphId !== ROOT_GRAPH_ID ? "parent layer" : "System"
 
   return (
     <div className="pointer-events-auto absolute left-4 top-4 z-30 flex max-w-[min(34rem,calc(100%-2rem))] items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/95 px-3 py-2 text-xs shadow-xl backdrop-blur-xl">
@@ -965,17 +986,33 @@ function GraphBreadcrumb({
       ) : (
         <button
           type="button"
-          onClick={onNavigateRoot}
-          aria-label="Back to System canvas"
+          onClick={() =>
+            parentGraphId && parentGraphId !== graphId
+              ? onNavigateGraph(parentGraphId)
+              : onNavigateRoot()
+          }
+          aria-label={`Back to ${parentLabel}`}
           className="flex h-7 shrink-0 items-center gap-1.5 rounded-xl border border-accent-primary/25 bg-accent-primary/10 px-2.5 font-medium text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/45"
         >
           <ArrowLeft className="h-3.5 w-3.5 text-accent-primary" aria-hidden="true" />
-          <span>Back to System canvas</span>
+          <span>{`Back to ${parentLabel}`}</span>
         </button>
       )}
       {!isRoot ? (
         <>
           <span className="text-text-faint">/</span>
+          {parentGraphId && parentGraphId !== ROOT_GRAPH_ID ? (
+            <>
+              <button
+                type="button"
+                onClick={onNavigateRoot}
+                className="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+              >
+                System
+              </button>
+              <span className="text-text-faint">/</span>
+            </>
+          ) : null}
           <span className="truncate text-text-secondary">{graphTitle}</span>
         </>
       ) : null}
@@ -993,15 +1030,15 @@ function EmptySubcanvasGuide({
   graphTitle: string
   isEmpty: boolean
 }) {
-  if (!isEmpty || graphScopeKind !== "service-internal") return null
+  if (!isEmpty || graphScopeKind === "system-root") return null
 
   return (
     <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center px-6">
       <div className="max-w-md rounded-2xl border border-border-default bg-bg-surface/90 px-5 py-4 text-center shadow-xl backdrop-blur-xl">
         <p className="text-sm font-medium text-text-primary">{graphTitle}</p>
         <p className="mt-2 text-xs leading-5 text-text-muted">
-          Design the internals of {graphTitle}: endpoints, entities, workers, events,
-          validations, business rules, and policies.
+          Add internal detail for this architecture layer: modules, endpoints,
+          entities, workers, events, rules, provider adapters, and policies.
         </p>
       </div>
     </div>

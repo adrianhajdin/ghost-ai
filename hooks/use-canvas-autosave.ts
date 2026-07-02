@@ -13,7 +13,11 @@ export function useCanvasAutosave(
   options: {
     title?: string
     scopeKind?: string
+    parentGraphId?: string | null
     parentNodeId?: string | null
+    layer?: number | null
+    layerKind?: string | null
+    summary?: string | null
   } = {}
 ): { status: SaveStatus; save: () => void } {
   const [status, setStatus] = useState<SaveStatus>("idle")
@@ -56,7 +60,11 @@ export function useCanvasAutosave(
           edges: edgesRef.current,
           title: optionsRef.current.title,
           scopeKind: optionsRef.current.scopeKind,
+          parentGraphId: optionsRef.current.parentGraphId,
           parentNodeId: optionsRef.current.parentNodeId,
+          layer: optionsRef.current.layer,
+          layerKind: optionsRef.current.layerKind,
+          summary: optionsRef.current.summary,
         }),
       })
       setStatus(res.ok ? "saved" : "error")

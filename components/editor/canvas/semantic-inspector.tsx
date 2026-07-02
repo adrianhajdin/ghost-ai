@@ -14,7 +14,6 @@ import type {
 import {
   SEMANTIC_EDGE_TYPES,
   SEMANTIC_NODE_TYPES,
-  SUBCANVAS_CAPABLE_NODE_TYPES,
   semanticEdgeTypeLabel,
   semanticNodeTypeLabel,
 } from "@/types/canvas"
@@ -27,7 +26,6 @@ import {
   normalizeEdgeLabelItems,
 } from "@/lib/canvas/edge-labels"
 import { useCanvasMutations } from "@/components/editor/canvas/canvas-mutation-context"
-import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 
 interface SemanticInspectorProps {
   projectId: string
@@ -220,19 +218,9 @@ function SubcanvasNotice({
 }) {
   const router = useRouter()
   const [isCreating, setIsCreating] = useState(false)
-  const semanticType = node.data.semanticType
-  if (
-    !semanticType ||
-    !(SUBCANVAS_CAPABLE_NODE_TYPES as readonly string[]).includes(semanticType)
-  ) {
-    return null
-  }
-
   const subcanvasRef = node.data.subcanvasRef
-  const canCreateServiceDesign =
-    currentGraphId === ROOT_GRAPH_ID && semanticType === "service"
 
-  async function createServiceDesign() {
+  async function openOrCreateLayer() {
     if (subcanvasRef?.graphId) {
       router.push(`/editor/${projectId}?graphId=${encodeURIComponent(subcanvasRef.graphId)}`)
       return
@@ -244,8 +232,10 @@ function SubcanvasNotice({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          parentGraphId: ROOT_GRAPH_ID,
+          parentGraphId: currentGraphId,
           parentNodeId: node.id,
+          title: `${node.data.name || node.data.label || node.id} Layer`,
+          summary: node.data.description ?? undefined,
         }),
       })
 
@@ -265,41 +255,24 @@ function SubcanvasNotice({
     <div className="grid gap-2 rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary">
       <span>
         {subcanvasRef?.graphId
-          ? "Service design metadata is linked."
-          : canCreateServiceDesign
-            ? "Subcanvas not created yet."
-            : "Drill-down for this node type is coming next."}
+          ? "Design layer metadata is linked."
+          : "Create an inner architecture layer for this node."}
       </span>
       {subcanvasRef?.graphId ? (
         <p className="truncate font-mono text-[10px] text-text-faint">
           {subcanvasRef.graphId}
         </p>
       ) : null}
-      {canCreateServiceDesign || subcanvasRef?.graphId ? (
-        <button
-          type="button"
-          onClick={createServiceDesign}
-          disabled={isCreating}
-          aria-label={subcanvasRef?.graphId ? "Open service design" : "Create service design"}
-          className="flex h-8 items-center justify-center gap-2 rounded-xl border border-accent-primary/30 bg-accent-primary/10 text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15 disabled:cursor-wait disabled:opacity-60"
-        >
-          <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-          {isCreating
-            ? "Creating…"
-            : subcanvasRef?.graphId
-              ? "Open service design"
-              : "Create service design"}
-        </button>
-      ) : (
-        <button
-          type="button"
-          disabled
-          className="flex h-8 items-center justify-center gap-2 rounded-xl border border-border-default text-text-faint"
-        >
-          <SquareArrowOutUpRight className="h-3.5 w-3.5" />
-          Open design - coming next
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={openOrCreateLayer}
+        disabled={isCreating}
+        aria-label={subcanvasRef?.graphId ? "Open design layer" : "Create layer"}
+        className="flex h-8 items-center justify-center gap-2 rounded-xl border border-accent-primary/30 bg-accent-primary/10 text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15 disabled:cursor-wait disabled:opacity-60"
+      >
+        <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+        {isCreating ? "Creating..." : subcanvasRef?.graphId ? "Open design layer" : "Create layer"}
+      </button>
     </div>
   )
 }

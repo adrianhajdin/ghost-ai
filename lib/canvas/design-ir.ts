@@ -52,7 +52,11 @@ export interface DesignIrGraph {
   graphId: string
   title: string
   scopeKind: CanvasScopeKind
+  parentGraphId?: string | null
   parentNodeId: string | null
+  layer?: number | null
+  layerKind?: string | null
+  summary?: string | null
   parentServiceId?: string
   parentServiceName?: string
   nodeCount: number
@@ -686,7 +690,11 @@ function buildGraphs(
       graphId: doc.graphId,
       title: doc.title,
       scopeKind: doc.scopeKind,
+      parentGraphId: doc.parentGraphId,
       parentNodeId: doc.parentNodeId,
+      layer: doc.layer,
+      layerKind: doc.layerKind,
+      summary: doc.summary,
       nodeCount: doc.nodes.length,
       edgeCount: doc.edges.length,
     }
