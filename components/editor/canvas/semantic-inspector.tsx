@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AlertTriangle, Info, SquareArrowOutUpRight } from "lucide-react"
 import type {
@@ -395,6 +395,7 @@ export function SemanticInspector({
   warnings,
 }: SemanticInspectorProps) {
   const { updateNodeData, updateEdgeData } = useCanvasMutations()
+  const [isCompactViewport, setIsCompactViewport] = useState(false)
   const selectionWarnings = useMemo(() => {
     const targetId = selectedNode?.id ?? selectedEdge?.id
     return targetId
@@ -402,11 +403,33 @@ export function SemanticInspector({
       : warnings.filter((warning) => warning.severity !== "info")
   }, [selectedEdge?.id, selectedNode?.id, warnings])
 
+  useEffect(() => {
+    function updateCompactViewport() {
+      setIsCompactViewport(window.innerWidth < 1024)
+    }
+
+    updateCompactViewport()
+    window.addEventListener("resize", updateCompactViewport)
+
+    return () => window.removeEventListener("resize", updateCompactViewport)
+  }, [])
+
+  const compactPanelClassName =
+    "pointer-events-auto fixed left-2 right-2 top-16 z-40 max-h-[calc(100vh-5rem)] overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
+  const desktopPanelClassName =
+    "pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
+  const warningPanelClassName = isCompactViewport
+    ? compactPanelClassName
+    : "pointer-events-auto absolute left-4 top-16 z-20 w-80 rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
+  const inspectorPanelClassName = isCompactViewport
+    ? compactPanelClassName
+    : desktopPanelClassName
+
   if (!selectedNode && !selectedEdge) {
     if (warnings.length === 0) return null
 
     return (
-      <aside className="pointer-events-auto absolute left-4 top-16 z-20 w-80 rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl">
+      <aside className={warningPanelClassName}>
         <div className="mb-2 flex items-center justify-between gap-3">
           <p className="text-xs font-semibold text-text-primary">Semantic warnings</p>
           <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted">
@@ -424,7 +447,7 @@ export function SemanticInspector({
       updateNodeData(selectedNode.id, nextPatch)
 
     return (
-      <aside className="pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl">
+      <aside className={inspectorPanelClassName}>
         <div className="mb-3">
           <p className="text-xs font-semibold text-text-primary">Semantic Inspector</p>
           <p className="truncate text-[11px] text-text-muted">{selectedNode.id}</p>
@@ -478,7 +501,7 @@ export function SemanticInspector({
     const edgeLabels = edgeLabelTexts(edgeData)
 
     return (
-      <aside className="pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl">
+      <aside className={inspectorPanelClassName}>
         <div className="mb-3">
           <p className="text-xs font-semibold text-text-primary">Semantic Inspector</p>
           <p className="truncate text-[11px] text-text-muted">{selectedEdge.id}</p>

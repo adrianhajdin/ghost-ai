@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   RectangleHorizontal,
   Diamond,
@@ -137,6 +137,18 @@ interface CanvasDragPayload {
 
 export function ShapePanel({ graphScopeKind }: { graphScopeKind: CanvasScopeKind }) {
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [isCompactViewport, setIsCompactViewport] = useState(false)
+
+  useEffect(() => {
+    function updateCompactViewport() {
+      setIsCompactViewport(window.innerWidth < 1024)
+    }
+
+    updateCompactViewport()
+    window.addEventListener("resize", updateCompactViewport)
+
+    return () => window.removeEventListener("resize", updateCompactViewport)
+  }, [])
 
   function handleDragStart(event: React.DragEvent, payload: CanvasDragPayload) {
     const shape = payload.shape
@@ -225,8 +237,20 @@ export function ShapePanel({ graphScopeKind }: { graphScopeKind: CanvasScopeKind
         </div>
       )}
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center">
-        <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border-default bg-bg-surface/95 px-3 py-2 shadow-xl backdrop-blur-xl">
+      <div
+        className={
+          isCompactViewport
+            ? "pointer-events-none fixed inset-x-2 bottom-4 z-30 flex justify-center"
+            : "pointer-events-none absolute inset-x-0 bottom-4 flex justify-center"
+        }
+      >
+        <div
+          className={
+            isCompactViewport
+              ? "pointer-events-auto flex max-w-[calc(100vw-1rem)] items-center gap-1 overflow-x-auto rounded-full border border-border-default bg-bg-surface/95 px-2 py-2 shadow-xl backdrop-blur-xl"
+              : "pointer-events-auto flex items-center gap-1 rounded-full border border-border-default bg-bg-surface/95 px-3 py-2 shadow-xl backdrop-blur-xl"
+          }
+        >
           {NODE_SHAPES.map((shape) => {
             const Icon = SHAPE_ICONS[shape]
             const payload = { shape, size: SHAPE_DEFAULTS[shape] }
