@@ -61,6 +61,39 @@ interface ArchitectureDraftRunOutput {
   validation?: ArchitectureDraftValidationResult[]
 }
 
+const ARCHITECTURE_DRAFT_STORAGE_PREFIX = "arc-forge:architecture-draft"
+const architectureDraftRunMemory = new Map<string, string>()
+
+function readStoredDraftRunId(storageKey: string): string | null {
+  const memoryRunId = architectureDraftRunMemory.get(storageKey) ?? null
+
+  try {
+    return window.localStorage.getItem(storageKey) ?? memoryRunId
+  } catch {
+    return memoryRunId
+  }
+}
+
+function writeStoredDraftRunId(storageKey: string, runId: string): void {
+  architectureDraftRunMemory.set(storageKey, runId)
+
+  try {
+    window.localStorage.setItem(storageKey, runId)
+  } catch {
+    // The run still exists server-side; storage failures should not block drafting.
+  }
+}
+
+function removeStoredDraftRunId(storageKey: string): void {
+  architectureDraftRunMemory.delete(storageKey)
+
+  try {
+    window.localStorage.removeItem(storageKey)
+  } catch {
+    // Best-effort cleanup for browsers that restrict local storage.
+  }
+}
+
 function getFilename(filePath: string): string {
   const clean = filePath.split("?")[0]
   return clean.split("/").at(-1) ?? "spec.md"
@@ -154,6 +187,8 @@ export function AiSidebar({
   const [draftError, setDraftError] = useState<string | null>(null)
   const [draftApplyMessage, setDraftApplyMessage] = useState<string | null>(null)
   const [isApplyingDraft, setIsApplyingDraft] = useState(false)
+  const draftStorageKey = `${ARCHITECTURE_DRAFT_STORAGE_PREFIX}:${projectId}:${graphId}`
+  const lastDraftStorageKeyRef = useRef(draftStorageKey)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const draftTextareaRef = useRef<HTMLTextAreaElement>(null)
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -233,6 +268,7 @@ export function AiSidebar({
     patchPresence({ thinking: false })
 
     if (status !== "succeeded") {
+      removeStoredDraftRunId(draftStorageKey)
       setDraftError("Architecture draft generation failed. Please try again.")
       broadcastRoomEvent({
         type: "ai.status",
@@ -246,6 +282,7 @@ export function AiSidebar({
 
     const typedOutput = output as ArchitectureDraftRunOutput | null
     if (!typedOutput?.proposal) {
+      removeStoredDraftRunId(draftStorageKey)
       setDraftError("Architecture draft result was empty.")
       return
     }
@@ -262,7 +299,7 @@ export function AiSidebar({
         status: "complete",
       },
     })
-  }, [broadcastRoomEvent, patchPresence])
+  }, [broadcastRoomEvent, draftStorageKey, patchPresence])
 
   // Latest validated feed message for the status strip fallback
   const latestFeedMessage = (() => {
@@ -316,6 +353,45 @@ export function AiSidebar({
     }
   }, [validatedChatMessages.length])
 
+  useEffect(() => {
+    if (draftProposal || draftRunId || isDraftGenerating) return
+
+    const restoredRunId = readStoredDraftRunId(draftStorageKey)
+    if (!restoredRunId) return
+
+    const restoreTimer = window.setTimeout(() => {
+      setDraftError(null)
+      setDraftApplyMessage(null)
+      setDraftValidation([])
+      setDraftSummary(null)
+      setIsDraftGenerating(true)
+      setDraftRunId(restoredRunId)
+      patchPresence({ thinking: true })
+    }, 0)
+
+    return () => window.clearTimeout(restoreTimer)
+  }, [draftProposal, draftRunId, draftStorageKey, isDraftGenerating, patchPresence])
+
+  useEffect(() => {
+    if (lastDraftStorageKeyRef.current === draftStorageKey) return
+
+    lastDraftStorageKeyRef.current = draftStorageKey
+    const restoredRunId = readStoredDraftRunId(draftStorageKey)
+
+    const restoreTimer = window.setTimeout(() => {
+      setDraftProposal(null)
+      setDraftValidation([])
+      setDraftSummary(null)
+      setDraftError(null)
+      setDraftApplyMessage(null)
+      setIsDraftGenerating(Boolean(restoredRunId))
+      setDraftRunId(restoredRunId)
+      patchPresence({ thinking: Boolean(restoredRunId) })
+    }, 0)
+
+    return () => window.clearTimeout(restoreTimer)
+  }, [draftStorageKey, patchPresence])
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value)
     const ta = e.target
@@ -340,6 +416,7 @@ export function AiSidebar({
     setDraftProposal(null)
     setDraftValidation([])
     setDraftSummary(null)
+    removeStoredDraftRunId(draftStorageKey)
     patchPresence({ thinking: true })
     broadcastRoomEvent({
       type: "ai.status",
@@ -363,6 +440,7 @@ export function AiSidebar({
 
       if (!response.ok) throw new Error("Architecture draft request failed")
       const { runId: newRunId } = (await response.json()) as { runId: string }
+      writeStoredDraftRunId(draftStorageKey, newRunId)
       setDraftRunId(newRunId)
     } catch {
       setIsDraftGenerating(false)
@@ -378,6 +456,7 @@ export function AiSidebar({
     }
   }, [
     broadcastRoomEvent,
+    draftStorageKey,
     draftComplexity,
     draftPrompt,
     graphId,
@@ -423,6 +502,7 @@ export function AiSidebar({
 
       const appliedNodes = data.applied?.nodes ?? draftProposal.nodes.length
       const appliedEdges = data.applied?.edges ?? draftProposal.edges.length
+      removeStoredDraftRunId(draftStorageKey)
       setDraftApplyMessage(
         `Applied ${appliedNodes} node${appliedNodes === 1 ? "" : "s"} and ${appliedEdges} edge${appliedEdges === 1 ? "" : "s"} to the root canvas.`
       )
@@ -443,6 +523,7 @@ export function AiSidebar({
   }, [
     broadcastRoomEvent,
     draftProposal,
+    draftStorageKey,
     draftValidation,
     graphId,
     isApplyingDraft,
@@ -456,7 +537,8 @@ export function AiSidebar({
     setDraftSummary(null)
     setDraftError(null)
     setDraftApplyMessage(null)
-  }, [])
+    removeStoredDraftRunId(draftStorageKey)
+  }, [draftStorageKey])
 
   const handleSend = useCallback(async () => {
     const text = input.trim()
@@ -1207,6 +1289,14 @@ function ArchitectureDraftPreview({
         </div>
       )}
 
+      <ArchitectureDraftActions
+        hasErrors={hasErrors}
+        isApplying={isApplying}
+        onApply={onApply}
+        onClear={onClear}
+        className="rounded-xl border border-accent-ai/25 bg-accent-ai/10 p-2"
+      />
+
       <div className="grid gap-2">
         {Object.entries(groupedNodes).map(([semanticType, group]) => (
           <div key={semanticType} className="rounded-xl border border-border-default bg-bg-elevated p-2.5">
@@ -1255,31 +1345,55 @@ function ArchitectureDraftPreview({
         </div>
       ) : null}
 
-      <div className="flex items-center gap-2 border-t border-border-default pt-3">
-        <Button
-          size="sm"
-          onClick={onApply}
-          disabled={hasErrors || isApplying}
-          className="h-8 flex-1 gap-1.5 rounded-lg bg-accent-ai px-3 text-xs text-white hover:bg-accent-ai/80 disabled:opacity-40"
-        >
-          {isApplying ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Check className="h-3 w-3" />
-          )}
-          {isApplying ? "Applying" : "Apply to canvas"}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onClear}
-          disabled={isApplying}
-          className="h-8 gap-1.5 rounded-lg border-border-subtle px-3 text-xs text-text-secondary hover:border-border-default hover:text-text-primary"
-        >
-          <Trash2 className="h-3 w-3" />
-          Clear
-        </Button>
-      </div>
+      <ArchitectureDraftActions
+        hasErrors={hasErrors}
+        isApplying={isApplying}
+        onApply={onApply}
+        onClear={onClear}
+        className="border-t border-border-default pt-3"
+      />
+    </div>
+  )
+}
+
+function ArchitectureDraftActions({
+  hasErrors,
+  isApplying,
+  onApply,
+  onClear,
+  className,
+}: {
+  hasErrors: boolean
+  isApplying: boolean
+  onApply: () => void
+  onClear: () => void
+  className?: string
+}) {
+  return (
+    <div className={cn("flex items-center gap-2", className)}>
+      <Button
+        size="sm"
+        onClick={onApply}
+        disabled={hasErrors || isApplying}
+        className="h-8 flex-1 gap-1.5 rounded-lg bg-accent-ai px-3 text-xs text-white hover:bg-accent-ai/80 disabled:opacity-40"
+      >
+        {isApplying ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : (
+          <Check className="h-3 w-3" />
+        )}
+        {isApplying ? "Applying" : "Apply to canvas"}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onClear}
+        disabled={isApplying}
+        className="h-8 gap-1.5 rounded-lg border-border-subtle px-3 text-xs text-text-secondary hover:border-border-default hover:text-text-primary"
+      >
+        <Trash2 className="h-3 w-3" />
+        Clear
+      </Button>
     </div>
   )
 }
