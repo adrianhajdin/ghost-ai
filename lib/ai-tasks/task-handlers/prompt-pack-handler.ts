@@ -4,8 +4,8 @@ import {
   LLM_PROMPT_PACK_SCOPE_MODES,
   LLM_PROMPT_PACK_TARGET_AGENTS,
   createLlmPromptPackSummary,
+  exportLlmPromptPackMarkdown,
   parseLlmPromptPackProposal,
-  renderLlmPromptPackMarkdown,
 } from "@/lib/prompt-pack/llm-prompt-pack"
 import { loadProjectCanvasPyramid } from "@/lib/canvas/canvas-pyramid"
 import { ROOT_GRAPH_ID, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
@@ -64,7 +64,7 @@ export async function runPromptPackTask(payload: PromptPackPayload) {
     canvasPyramid,
   })
   const proposal = parseLlmPromptPackProposal(providerResult)
-  const markdown = renderLlmPromptPackMarkdown(proposal)
+  const markdown = exportLlmPromptPackMarkdown(proposal)
 
   return {
     proposal,

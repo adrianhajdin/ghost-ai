@@ -15,10 +15,6 @@ import {
   validateArchitectureDraftProposal,
   type ArchitectureDraftProposal,
 } from "@/lib/architecture-draft/architecture-draft"
-import {
-  compileDesignIrToPromptPack,
-  renderPromptPackMarkdown,
-} from "@/lib/prompt-pack/prompt-pack"
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -284,13 +280,6 @@ async function main() {
     "Design IR did not include applied database"
   )
   assert(designIrResult.ir.graphs.length >= 2, "Design IR did not include child graph")
-
-  const promptPack = compileDesignIrToPromptPack(designIrResult.ir, {
-    targetAgent: "codex",
-  })
-  const promptPackMarkdown = renderPromptPackMarkdown(promptPack)
-  assert(promptPackMarkdown.includes("Booking Service"), "Prompt Pack missed applied service")
-  assert(!promptPackMarkdown.toLowerCase().includes("nimbus"), "Prompt Pack mentioned Nimbus")
 
   console.info("Architecture draft smoke passed")
 }

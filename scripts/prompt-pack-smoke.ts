@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import type { CanvasEdge, CanvasNode, SemanticEdgeType } from "@/types/canvas"
@@ -22,6 +22,15 @@ import {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
+}
+
+async function pathExists(filePath: string) {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function node(
@@ -433,14 +442,54 @@ async function main() {
     "utf8"
   )
   assert(panelSource.includes("/api/ai/prompt-pack"), "Prompt Pack UI does not use AI task route")
-  assert(
-    !panelSource.includes("/api/projects/${projectId}/prompt-pack?") &&
-      !panelSource.includes("compileDesignIrToPromptPack"),
-    "Prompt Pack UI still uses deterministic Prompt Pack generation"
-  )
+  const removedProjectRouteFetch = [
+    "/api/projects/",
+    "${projectId}",
+    "/prompt-",
+    "pack?",
+  ].join("")
+  const removedDesignIrCompilerName = [
+    "compile",
+    "DesignIr",
+    "To",
+    "Prompt",
+    "Pack",
+  ].join("")
+  assert(!panelSource.includes(removedProjectRouteFetch), "Prompt Pack UI still calls the old project route")
+  assert(!panelSource.includes(removedDesignIrCompilerName), "Prompt Pack UI still calls the old compiler")
   assert(
     panelSource.includes("Apply canvas improvements"),
     "Prompt Pack UI does not expose user-approved canvas improvement apply"
+  )
+
+  const oldRoutePath = path.join(
+    process.cwd(),
+    "app",
+    "api",
+    "projects",
+    "[projectId]",
+    "prompt-pack",
+    "route.ts"
+  )
+  const oldCompilerPath = path.join(process.cwd(), "lib", "prompt-pack", "prompt-pack.ts")
+  const oldProjectCompilerPath = path.join(
+    process.cwd(),
+    "lib",
+    "prompt-pack",
+    ["prompt", "pack", "project"].join("-") + ".ts"
+  )
+  assert(!(await pathExists(oldRoutePath)), "Old project Prompt Pack route still exists")
+  assert(!(await pathExists(oldCompilerPath)), "Old Prompt Pack compiler module still exists")
+  assert(!(await pathExists(oldProjectCompilerPath)), "Old project Prompt Pack compiler module still exists")
+
+  const promptPackHandlerSource = await readFile(
+    path.join(process.cwd(), "lib/ai-tasks/task-handlers/prompt-pack-handler.ts"),
+    "utf8"
+  )
+  assert(
+    promptPackHandlerSource.includes("loadProjectCanvasPyramid") &&
+      promptPackHandlerSource.includes("generatePromptPack"),
+    "LLM Prompt Pack task no longer uses CanvasDoc pyramid provider flow"
   )
 
   const designIrPanelSource = await readFile(

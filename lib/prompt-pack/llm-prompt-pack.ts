@@ -315,7 +315,7 @@ function listMarkdown(title: string, items: string[]) {
   return [`## ${title}`, "", ...items.map((item) => `- ${item}`), ""].join("\n")
 }
 
-export function renderLlmPromptPackMarkdown(proposal: LlmPromptPackProposal) {
+export function exportLlmPromptPackMarkdown(proposal: LlmPromptPackProposal) {
   const sections: string[] = [
     `# ${proposal.title}`,
     "",

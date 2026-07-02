@@ -87,6 +87,7 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 - Prompt Packs are copy/download instruction artifacts only.
 - Arc Forge does not execute Prompt Packs, generate application code, build the app, or write external repositories.
 - Supported Prompt Pack targets are Codex, Claude Code, and Generic AI Builder.
+- There is no non-LLM Prompt Pack generator, route, or fallback.
 - Deterministic code does not author Prompt Pack content or judge prompt/architecture quality; it only handles save/load, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
 - Optional canvas improvements from the LLM are previewed and applied only after explicit user approval.
 - Nimbus is not included as a Prompt Pack target in this version.

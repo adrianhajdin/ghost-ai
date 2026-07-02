@@ -36,7 +36,7 @@ Target agent guidance:
 - generic-ai-builder: general app-builder instructions with architecture context, build steps, and constraints.
 
 Rules:
-- The canvas JSON is the source of truth. Do not ask Arc Forge to use deterministic Design IR or deterministic Prompt Pack content as the source.
+- The canvas JSON is the source of truth. Do not ask Arc Forge to use Design IR or preauthored prompt content as the source.
 - Generate per-node prompts and per-layer prompts while considering the full application context.
 - Custom architecture types are valid.
 - Do not include Nimbus.
