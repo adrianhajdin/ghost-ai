@@ -115,7 +115,7 @@ shadcn/ui on top of Tailwind. No custom design system. Components live in `compo
 
 - Editor workspace: full-viewport layout with a responsive cockpit shell. On large viewports, open left and right sidebars reserve canvas gutters so canvas tools and semantic inspectors do not sit underneath them.
 - Sidebars: floating glass panels with dark semi-transparent background and subtle border. On smaller viewports, the project sidebar behaves like a modal navigation deck with a strong backdrop instead of competing with canvas inspectors.
-- Canvas graph breadcrumb: a small glass overlay sits below the navbar; it identifies the current graph and lets users jump from a service drill-down back to the system root without overlapping the sidebars or inspector.
+- Canvas graph breadcrumb: a small glass overlay sits below the navbar; it identifies the current graph and, inside service drill-down canvases, exposes an explicit `System canvas` back control so users can return to the root without relying on browser Back. It must avoid overlapping the sidebars or inspector.
 - Workspace navbar actions compress to icon-only controls on small viewports, while desktop keeps text labels for faster scanning.
 - Compact account menu: on small workspaces, the avatar remains the only navbar account trigger and opens a compact cockpit-style popover with Account and Sign out actions layered above the mobile project deck.
 - Design IR preview/export: the workspace navbar exposes a compact `FileJson` action that opens a bounded cockpit-style modal with status, compiled graph IDs, validation counts, JSON preview, Copy JSON, and Download JSON. Design IR is machine-readable architecture.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
 import {
   ReactFlow,
   Background,
@@ -958,15 +959,20 @@ function GraphBreadcrumb({
   const isRoot = graphId === ROOT_GRAPH_ID
 
   return (
-    <div className="pointer-events-auto absolute left-4 top-4 z-30 flex max-w-[min(28rem,calc(100%-2rem))] items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/95 px-3 py-2 text-xs shadow-xl backdrop-blur-xl">
-      <button
-        type="button"
-        onClick={onNavigateRoot}
-        disabled={isRoot}
-        className="font-medium text-text-primary transition-colors enabled:hover:text-accent-primary disabled:cursor-default"
-      >
-        System
-      </button>
+    <div className="pointer-events-auto absolute left-4 top-4 z-30 flex max-w-[min(34rem,calc(100%-2rem))] items-center gap-2 rounded-2xl border border-border-default bg-bg-surface/95 px-3 py-2 text-xs shadow-xl backdrop-blur-xl">
+      {isRoot ? (
+        <span className="font-medium text-text-primary">System</span>
+      ) : (
+        <button
+          type="button"
+          onClick={onNavigateRoot}
+          aria-label="Back to system canvas"
+          className="flex h-7 shrink-0 items-center gap-1.5 rounded-xl border border-accent-primary/25 bg-accent-primary/10 px-2.5 font-medium text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-primary/45"
+        >
+          <ArrowLeft className="h-3.5 w-3.5 text-accent-primary" aria-hidden="true" />
+          <span>System canvas</span>
+        </button>
+      )}
       {!isRoot ? (
         <>
           <span className="text-text-faint">/</span>
