@@ -46,6 +46,8 @@ const CONNECTION_LINE_STYLE: React.CSSProperties = {
   strokeLinecap: "round",
 }
 
+const STACKED_CANVAS_CHROME_WIDTH = 860
+
 let nodeCounter = 0
 let edgeCounter = 0
 
@@ -235,6 +237,7 @@ export function CanvasEditor({
   const selectionBoxRef = useRef<SelectionBox | null>(null)
   const suppressSelectionMouseEventsRef = useRef(false)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
+  const [isCanvasChromeStacked, setIsCanvasChromeStacked] = useState(false)
   const [historyState, setHistoryState] = useState({
     canUndo: false,
     canRedo: false,
@@ -254,6 +257,27 @@ export function CanvasEditor({
   useEffect(() => {
     onSelectedNodeIdsChange?.([...selectedNodeIds])
   }, [onSelectedNodeIdsChange, selectedNodeIds])
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return undefined
+    const target = wrapper
+
+    function updateCanvasChromeLayout() {
+      const width = target.getBoundingClientRect().width
+      setIsCanvasChromeStacked(width > 0 && width < STACKED_CANVAS_CHROME_WIDTH)
+    }
+
+    updateCanvasChromeLayout()
+    const resizeObserver = new ResizeObserver(updateCanvasChromeLayout)
+    resizeObserver.observe(target)
+    window.addEventListener("resize", updateCanvasChromeLayout)
+
+    return () => {
+      resizeObserver.disconnect()
+      window.removeEventListener("resize", updateCanvasChromeLayout)
+    }
+  }, [])
 
   const displayedNodes = useMemo(
     () =>
@@ -930,6 +954,7 @@ export function CanvasEditor({
           onRedo={redo}
           canUndo={canUndo}
           canRedo={canRedo}
+          isStacked={isCanvasChromeStacked}
         />
         <GraphBreadcrumb
           projectId={projectId}
@@ -950,7 +975,10 @@ export function CanvasEditor({
           graphTitle={graphTitle}
           isEmpty={nodes.length === 0 && edges.length === 0}
         />
-        <ShapePanel graphScopeKind={graphScopeKind} />
+        <ShapePanel
+          graphScopeKind={graphScopeKind}
+          isStacked={isCanvasChromeStacked}
+        />
         <SemanticInspector
           projectId={projectId}
           currentGraphId={graphId}
