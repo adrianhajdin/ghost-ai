@@ -1,5 +1,9 @@
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
-import { getAiProvider, getAiProviderName } from "@/lib/ai/providers/provider-factory"
+import {
+  getAiProvider,
+  getAiProviderName,
+  getSafeAiProviderMetadata,
+} from "@/lib/ai/providers/provider-factory"
 import type { CanvasEdge, CanvasNode } from "@/types/canvas"
 
 const trackedEnv = [
@@ -111,6 +115,11 @@ async function main() {
   process.env.AI_PROVIDER = "mock"
   const mockProvider = getAiProvider()
   assert(mockProvider.name === "mock", "mock provider was not selected")
+  const mockProviderMetadata = getSafeAiProviderMetadata(mockProvider.name)
+  assert(
+    mockProviderMetadata.providerName === "mock" && mockProviderMetadata.isMockProvider,
+    "safe mock provider metadata is incorrect"
+  )
   assert(
     !(legacyDesignMethodName in (mockProvider as object)),
     "mock provider must not expose the legacy design action method"
@@ -227,6 +236,8 @@ async function main() {
     projectName: "AI Provider Smoke",
     currentGraphId: ROOT_GRAPH_ID,
     userId: "user-ai-provider-smoke",
+    providerName: mockProviderMetadata.providerName,
+    isMockProvider: mockProviderMetadata.isMockProvider,
     userMessage: "Improve the selected node responsibilities",
     selectedNodeIds: ["billing-service"],
     recentMessages: [
@@ -287,6 +298,55 @@ async function main() {
   assert(
     (architectReply.canvasPatchProposal?.operations.length ?? 0) > 0,
     "mock Architect should return a user-approved canvas patch proposal"
+  )
+  const architectIdentityReply = await mockProvider.generateArchitectReply({
+    projectId: "project-ai-provider-smoke",
+    projectName: "AI Provider Smoke",
+    currentGraphId: ROOT_GRAPH_ID,
+    userId: "user-ai-provider-smoke",
+    providerName: mockProviderMetadata.providerName,
+    isMockProvider: mockProviderMetadata.isMockProvider,
+    userMessage: "Are you a real LLM?",
+    selectedNodeIds: [],
+    recentMessages: [],
+    canvasPyramid: {
+      projectId: "project-ai-provider-smoke",
+      rootGraphId: ROOT_GRAPH_ID,
+      graphs: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          scopeKind: "system-root",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          summary: null,
+          nodes: [],
+          edges: [],
+        },
+      ],
+      graphIndex: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          nodeCount: 0,
+          edgeCount: 0,
+        },
+      ],
+    },
+  })
+  assert(
+    /mock provider|fixture/i.test(architectIdentityReply.assistantMessage.content),
+    "mock Architect identity answer should disclose fixture mode"
+  )
+  assert(
+    !architectIdentityReply.promptPackHandoff.recommended,
+    "mock Architect identity answer should not recommend Prompt Pack"
   )
 
   clearAiEnv()

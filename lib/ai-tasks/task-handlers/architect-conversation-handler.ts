@@ -1,5 +1,8 @@
 import { z } from "zod"
-import { getAiProvider } from "@/lib/ai/providers/provider-factory"
+import {
+  getAiProvider,
+  getSafeAiProviderMetadata,
+} from "@/lib/ai/providers/provider-factory"
 import {
   createArchitectReplySummary,
   parseArchitectConversationReply,
@@ -57,17 +60,22 @@ export async function runArchitectConversationTask(
     projectId: payload.projectId,
     graphId: currentGraphId,
   })
-  const providerResult = await getAiProvider().generateArchitectReply({
+  const provider = getAiProvider()
+  const providerMetadata = getSafeAiProviderMetadata(provider.name)
+  const providerResult = await provider.generateArchitectReply({
     projectId: payload.projectId,
     projectName: payload.projectName,
     currentGraphId,
     userId: payload.userId,
+    providerName: providerMetadata.providerName,
+    isMockProvider: providerMetadata.isMockProvider,
     userMessage: payload.userMessage,
     selectedNodeIds: payload.selectedNodeIds,
     recentMessages,
     canvasPyramid,
   })
   const reply = parseArchitectConversationReply(providerResult)
+  const summary = createArchitectReplySummary(reply, providerMetadata)
   const assistantMessage = await createArchitectConversationMessage({
     projectId: payload.projectId,
     graphId: currentGraphId,
@@ -77,8 +85,11 @@ export async function runArchitectConversationTask(
     linkedRunId: taskRunId,
     metadata: {
       reply,
-      summary: createArchitectReplySummary(reply),
+      summary,
+      provider: providerMetadata,
       intent: reply.intent,
+      providerName: providerMetadata.providerName,
+      isMockProvider: providerMetadata.isMockProvider,
       selectedNodeIds: payload.selectedNodeIds,
       canvasPatchOperationCount: reply.canvasPatchProposal?.operations.length ?? 0,
       promptPackRecommended: reply.promptPackHandoff.recommended,
@@ -88,7 +99,8 @@ export async function runArchitectConversationTask(
   return {
     reply,
     assistantMessage,
-    summary: createArchitectReplySummary(reply),
+    summary,
+    provider: providerMetadata,
     canvasPyramidSummary: pyramidStats(canvasPyramid),
   }
 }
