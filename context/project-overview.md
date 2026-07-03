@@ -2,11 +2,11 @@
 
 ## Overview
 
-Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Users capture application architecture intent on a shared layered React Flow canvas; AI can propose architecture drafts and deeper design layers, the user approves before applying, the product stores the canvas, compiles canonical Design IR, and generates copy/download Prompt Pack instruction artifacts for external coding agents.
+Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Users capture application architecture intent on a shared layered React Flow canvas; AI can propose architecture drafts and deeper design layers, the user approves before applying, the product stores the canvas, compiles canonical Design IR, and lets the LLM generate copy/download Prompt Pack instruction artifacts directly from the canvas pyramid for external coding agents.
 
 The canvas is a layered architecture pyramid: root context at the top, deeper layers for internal detail. The LLM is responsible for architectural intelligence and layering. Deterministic code only handles canvas storage, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
 
-Prompt Packs are generated from Design IR. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs. Arc Forge does not execute or build the app. Nimbus is not included yet and is not a Prompt Pack target in this version.
+The LLM is responsible for Prompt Pack content. Prompt Packs are generated directly from sanitized CanvasDoc pyramid JSON, not from deterministic Design IR summaries. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs, build the app, or write to external repositories. Nimbus is not included yet and is not a Prompt Pack target in this version.
 
 ## Goals
 
@@ -15,7 +15,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 3. Let users import prebuilt starter system designs into the canvas.
 4. Let AI propose an initial architecture draft from a natural language prompt.
 5. Let collaborators refine the generated architecture and attach semantic metadata.
-6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, canonical Design IR, and Prompt Pack instructions for external implementation agents.
+6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, canonical Design IR, and LLM-authored Prompt Pack instructions for external implementation agents.
 
 ## Core User Flow
 
@@ -27,7 +27,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 6. User reviews validation, warnings, nodes, and relations before accepting.
 7. Accepted drafts append semantic nodes and edges to the shared canvas.
 8. Collaborators edit, classify, and refine the design.
-9. User previews or downloads Design IR and Prompt Pack instruction artifacts.
+9. User generates, previews, copies, or downloads LLM-authored Prompt Pack instruction artifacts.
 10. User triggers spec generation when they need a persisted Markdown technical spec.
 11. App persists the generated Markdown spec.
 12. User reviews or downloads the spec.
@@ -50,7 +50,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Semantic node and edge metadata with validation warnings for unclassified or incomplete technical meaning.
 - Semantic templates for service, database, worker, and auth-module nodes.
 - Any node may have an inner architecture layer. Child layers can be created from the root canvas or another child layer.
-- CanvasDoc v1, Design IR v1, and Prompt Pack v1 foundations for external coding-agent instruction generation.
+- CanvasDoc v1, Design IR v1, and LLM Prompt Pack v1 foundations for external coding-agent instruction generation.
 - Canvas snapshots persisted through the configured artifact storage provider.
 
 ### Starter System Designs
@@ -60,13 +60,6 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - Templates are static canvas snapshots loaded directly into the active room.
 - Covers common patterns: monolith, microservices, event-driven, serverless, and more.
 
-### AI Architecture Generation
-
-- AI generates a system design from a user-supplied prompt through the configured AI provider.
-- Local development uses a deterministic mock AI provider by default; Google Gemini and OpenAI-compatible providers can be selected with server-side environment variables.
-- Output is structured as canvas nodes and edges persisted to canvas storage and published through the internal realtime room.
-- Generation runs as a durable PostgreSQL-backed background task.
-
 ### AI Architecture Drafts
 
 - AI can propose architecture drafts on the canvas from natural language.
@@ -74,6 +67,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - The user approves before applying.
 - Accepted drafts are append-only and run through deterministic transport/safety validation, sanitization, CanvasDoc persistence, and realtime publication.
 - Arc Forge does not execute or build the app.
+- Architect is the single LLM architecture surface. There is no legacy design generator route or old canvas-design runtime.
 
 ### Spec Generation
 
@@ -83,10 +77,13 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 
 ### Prompt Pack Generation
 
-- Prompt Packs are generated from Design IR.
+- Prompt Packs are generated by the LLM from the sanitized canvas pyramid: root graph, child graphs, nested layers, nodes, edges, metadata, descriptions, labels, and subcanvasRef values.
 - Prompt Packs are copy/download instruction artifacts only.
-- Arc Forge does not execute Prompt Packs.
+- Arc Forge does not execute Prompt Packs, generate application code, build the app, or write external repositories.
 - Supported Prompt Pack targets are Codex, Claude Code, and Generic AI Builder.
+- There is no non-LLM Prompt Pack generator, route, or fallback.
+- Deterministic code does not author Prompt Pack content or judge prompt/architecture quality; it only handles save/load, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
+- Optional canvas improvements from the LLM are previewed and applied only after explicit user approval.
 - Nimbus is not included as a Prompt Pack target in this version.
 
 ## Scope
@@ -103,7 +100,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 - AI-powered architecture generation from prompts
 - AI-powered architecture draft proposals with preview, validation, and user-approved append-only apply
 - AI-powered Markdown spec generation from the canvas graph
-- Read-only Design IR export and Prompt Pack instruction export
+- Read-only Design IR export and LLM Prompt Pack instruction export
 - Persistent storage for project metadata and generated artifacts
 - Spec download
 
@@ -123,7 +120,7 @@ Prompt Packs are generated from Design IR. Prompt Packs are copy/download instru
 2. Multiple users can collaborate in the same canvas simultaneously.
 3. A user can import a prebuilt starter design into the canvas.
 4. AI can propose an architecture draft from a prompt and apply it only after user approval.
-5. The graph can be converted into Design IR, Prompt Pack instructions, and a persisted Markdown spec.
+5. The graph can be converted into Design IR, LLM-authored Prompt Pack instructions, and a persisted Markdown spec.
 6. Project metadata and generated artifacts are stored in the correct layers.
 7. Internal realtime room access is authenticated before any custom realtime connection is accepted.
 8. Users can verify their email and recover or change passwords without an external auth provider.

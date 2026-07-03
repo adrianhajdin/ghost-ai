@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { EditorNavbar } from "@/components/editor/editor-navbar"
 import type { SaveStatus } from "@/hooks/use-canvas-autosave"
 import { ProjectDialogs } from "@/components/editor/project-dialogs"
@@ -39,13 +39,26 @@ export function EditorWorkspaceClient({
   const [designIrOpen, setDesignIrOpen] = useState(false)
   const [promptPackOpen, setPromptPackOpen] = useState(false)
   const [pendingTemplate, setPendingTemplate] = useState<CanvasTemplate | null>(null)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
+  const [usesDesktopGutters, setUsesDesktopGutters] = useState(false)
   const saveFnRef = useRef<() => void>(() => {})
   const actions = useProjectActions()
   const realtimeRoomId = createRealtimeRoomId(currentProject.id, graphId)
 
   const handleSaveStatusChange = useCallback((status: SaveStatus) => setSaveStatus(status), [])
   const handleSaveReady = useCallback((fn: () => void) => { saveFnRef.current = fn }, [])
+
+  useEffect(() => {
+    function updateDesktopGutters() {
+      setUsesDesktopGutters(window.innerWidth >= 1024)
+    }
+
+    updateDesktopGutters()
+    window.addEventListener("resize", updateDesktopGutters)
+
+    return () => window.removeEventListener("resize", updateDesktopGutters)
+  }, [])
 
   return (
     <InternalRealtimeProvider
@@ -54,7 +67,7 @@ export function EditorWorkspaceClient({
       roomId={realtimeRoomId}
       graphId={graphId}
     >
-        <div className="flex h-screen flex-col bg-bg-base">
+        <div className="flex h-screen w-full max-w-full flex-col overflow-hidden bg-bg-base">
           <EditorNavbar
             isOpen={sidebarOpen}
             onToggle={() => setSidebarOpen((prev) => !prev)}
@@ -71,9 +84,10 @@ export function EditorWorkspaceClient({
 
           <main
             className={cn(
-              "relative min-h-0 flex-1 overflow-hidden transition-[padding] duration-300 ease-out",
-              sidebarOpen && "lg:pl-[19.75rem]",
-              aiSidebarOpen && "lg:pr-[22rem]"
+              "relative min-h-0 min-w-0 max-w-full flex-1 overflow-hidden",
+              usesDesktopGutters ? "transition-[padding] duration-300 ease-out" : "transition-none",
+              usesDesktopGutters && sidebarOpen && "pl-[19.75rem]",
+              usesDesktopGutters && aiSidebarOpen && "pr-[22rem]"
             )}
           >
             <CanvasRoom
@@ -83,6 +97,7 @@ export function EditorWorkspaceClient({
               onTemplateImported={() => setPendingTemplate(null)}
               onSaveStatusChange={handleSaveStatusChange}
               onSaveReady={handleSaveReady}
+              onSelectedNodeIdsChange={setSelectedNodeIds}
             />
           </main>
 
@@ -101,9 +116,9 @@ export function EditorWorkspaceClient({
             isOpen={aiSidebarOpen}
             onClose={() => setAiSidebarOpen(false)}
             roomId={roomId}
-            realtimeRoomId={realtimeRoomId}
             projectId={currentProject.id}
             graphId={graphId}
+            onOpenPromptPack={() => setPromptPackOpen(true)}
           />
 
           <ProjectDialogs {...actions} />
@@ -124,6 +139,8 @@ export function EditorWorkspaceClient({
           />
           <PromptPackPanel
             projectId={currentProject.id}
+            graphId={graphId}
+            selectedNodeIds={selectedNodeIds}
             open={promptPackOpen}
             onOpenChange={setPromptPackOpen}
           />

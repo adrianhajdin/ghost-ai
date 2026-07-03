@@ -12,9 +12,10 @@ interface CanvasRoomProps {
   onTemplateImported?: () => void
   onSaveStatusChange?: (status: SaveStatus) => void
   onSaveReady?: (saveFn: () => void) => void
+  onSelectedNodeIdsChange?: (nodeIds: string[]) => void
 }
 
-export function CanvasRoom({ projectId, graphId, pendingTemplate, onTemplateImported, onSaveStatusChange, onSaveReady }: CanvasRoomProps) {
+export function CanvasRoom({ projectId, graphId, pendingTemplate, onTemplateImported, onSaveStatusChange, onSaveReady, onSelectedNodeIdsChange }: CanvasRoomProps) {
   return (
     <div className="h-full w-full">
       <ReactFlowProvider key={graphId}>
@@ -25,6 +26,7 @@ export function CanvasRoom({ projectId, graphId, pendingTemplate, onTemplateImpo
           onTemplateImported={onTemplateImported}
           onSaveStatusChange={onSaveStatusChange}
           onSaveReady={onSaveReady}
+          onSelectedNodeIdsChange={onSelectedNodeIdsChange}
         />
       </ReactFlowProvider>
     </div>

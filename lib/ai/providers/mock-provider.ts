@@ -2,19 +2,15 @@ import {
   buildSpecContext,
   type GenerateSpecMarkdownInput,
 } from "@/lib/ai/spec/spec-provider-contract"
-import {
-  validateDesignProviderResult,
-  type DesignAction,
-} from "@/lib/ai/design/design-actions"
-import type {
-  GenerateDesignActionsInput,
-  GenerateDesignActionsResult,
-} from "@/lib/ai/design/design-provider-contract"
 import type { AiProvider } from "@/lib/ai/providers/types"
 import type {
   GenerateArchitectureDraftInput,
   GenerateArchitectureDraftResult,
 } from "@/lib/ai/architecture-draft/architecture-draft-provider-contract"
+import type {
+  GeneratePromptPackInput,
+  GeneratePromptPackResult,
+} from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 import {
   ARCHITECTURE_DRAFT_SCHEMA_URL,
   ARCHITECTURE_DRAFT_VERSION,
@@ -24,6 +20,11 @@ import {
   type ArchitectureDraftNode,
   type ArchitectureDraftProposal,
 } from "@/lib/architecture-draft/architecture-draft"
+import {
+  LLM_PROMPT_PACK_SCHEMA_URL,
+  LLM_PROMPT_PACK_VERSION,
+  parseLlmPromptPackProposal,
+} from "@/lib/prompt-pack/llm-prompt-pack"
 import type { SemanticEdgeType, SemanticNodeType } from "@/types/canvas"
 
 function slugify(value: string) {
@@ -43,19 +44,6 @@ function getPromptTopic(prompt: string) {
     .filter((word) => word.length > 2)
     .slice(0, 4)
     .join(" ") || "system"
-}
-
-function uniqueId(baseId: string, existingIds: Set<string>) {
-  let id = baseId
-  let index = 2
-
-  while (existingIds.has(id)) {
-    id = `${baseId}-${index}`
-    index++
-  }
-
-  existingIds.add(id)
-  return id
 }
 
 function formatEdgeLabels(edge: GenerateSpecMarkdownInput["edges"][number]) {
@@ -494,75 +482,174 @@ function architectureForPrompt(input: GenerateArchitectureDraftInput) {
   return genericArchitecture(input)
 }
 
+function nodeLabel(node: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]["nodes"][number]) {
+  const data = node.data
+  return (
+    (typeof data.name === "string" && data.name.trim()) ||
+    (typeof data.label === "string" && data.label.trim()) ||
+    node.id
+  )
+}
+
+function edgeLabel(edge: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]["edges"][number]) {
+  const data = edge.data
+  return (
+    (typeof data.label === "string" && data.label.trim()) ||
+    (Array.isArray(data.labels) && typeof data.labels[0] === "string"
+      ? data.labels[0]
+      : "") ||
+    `${edge.source} -> ${edge.target}`
+  )
+}
+
+function graphInPromptScope(
+  input: GeneratePromptPackInput,
+  graph: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]
+) {
+  if (input.scopeMode === "full-project") return true
+  if (input.scopeMode === "current-layer") return graph.graphId === input.currentGraphId
+  return graph.nodes.some((node) => input.selectedNodeIds.includes(node.id))
+}
+
+function nodesInPromptScope(
+  input: GeneratePromptPackInput,
+  graph: GeneratePromptPackInput["canvasPyramid"]["graphs"][number]
+) {
+  if (input.scopeMode === "selected-nodes") {
+    return graph.nodes.filter((node) => input.selectedNodeIds.includes(node.id))
+  }
+  return graph.nodes
+}
+
+function mockPromptPack(input: GeneratePromptPackInput): GeneratePromptPackResult {
+  const scopedGraphs = input.canvasPyramid.graphs.filter((graph) =>
+    graphInPromptScope(input, graph)
+  )
+  const promptGraphs = scopedGraphs.length > 0 ? scopedGraphs : input.canvasPyramid.graphs
+  const allNodes = promptGraphs.flatMap((graph) =>
+    nodesInPromptScope(input, graph).map((node) => ({ graph, node }))
+  )
+  const firstGraph = promptGraphs[0] ?? input.canvasPyramid.graphs[0]
+  const firstNode = allNodes[0]
+  const graphCount = input.canvasPyramid.graphs.length
+  const nodeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.nodes.length,
+    0
+  )
+  const edgeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.edges.length,
+    0
+  )
+
+  return parseLlmPromptPackProposal({
+    $schema: LLM_PROMPT_PACK_SCHEMA_URL,
+    packVersion: LLM_PROMPT_PACK_VERSION,
+    status: "draft",
+    title: `${input.projectName} AI Prompt Pack`,
+    targetAgent: input.targetAgent,
+    scope: {
+      mode: input.scopeMode,
+      rootGraphId: input.canvasPyramid.rootGraphId,
+      currentGraphId: input.currentGraphId,
+      selectedNodeIds: input.selectedNodeIds,
+    },
+    summary: `Mock fixture Prompt Pack from ${graphCount} canvas graph(s), ${nodeCount} node(s), and ${edgeCount} edge(s).`,
+    globalPrompt: {
+      title: "Global Build Context",
+      markdown: [
+        `You are working from the Arc Forge canvas pyramid for ${input.projectName}.`,
+        "Arc Forge is a prompt composer and architecture canvas; it does not build, execute, deploy, or write to external repositories.",
+        `Use the ${input.targetAgent} target style and preserve secretRef or secretCapabilityRef references.`,
+        input.instructions ? `Extra user instructions: ${input.instructions}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+    },
+    layerPrompts: promptGraphs.map((graph) => ({
+      graphId: graph.graphId,
+      title: `${graph.title} Layer Prompt`,
+      markdown: [
+        `Layer ${graph.graphId} contains ${graph.nodes.length} node(s) and ${graph.edges.length} edge(s).`,
+        graph.summary ? `Layer summary: ${graph.summary}` : "",
+        graph.nodes.length
+          ? `Nodes: ${graph.nodes.map(nodeLabel).join(", ")}.`
+          : "No nodes are present in this layer yet.",
+        graph.edges.length
+          ? `Relationships: ${graph.edges.map(edgeLabel).join("; ")}.`
+          : "No relationships are present in this layer yet.",
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
+      coveredNodeIds: graph.nodes.map((node) => node.id),
+    })),
+    nodePrompts: allNodes.map(({ graph, node }) => ({
+      graphId: graph.graphId,
+      nodeId: node.id,
+      nodeLabel: nodeLabel(node),
+      title: `Build ${nodeLabel(node)}`,
+      markdown: [
+        `Implement the responsibility represented by ${nodeLabel(node)} in graph ${graph.graphId}.`,
+        `Node data: ${JSON.stringify(node.data)}`,
+        "Do not invent raw secrets; keep any secretRef or secretCapabilityRef values as references.",
+        "This is a prompt pack, not generated app code.",
+      ].join("\n\n"),
+      dependsOnNodeIds: graph.edges
+        .filter((edge) => edge.target === node.id)
+        .map((edge) => edge.source),
+      relatedGraphIds:
+        typeof node.data.subcanvasRef === "object" &&
+        node.data.subcanvasRef !== null &&
+        "graphId" in node.data.subcanvasRef &&
+        typeof node.data.subcanvasRef.graphId === "string"
+          ? [node.data.subcanvasRef.graphId]
+          : [],
+    })),
+    canvasImprovementProposal: firstGraph
+      ? {
+          summary:
+            "Mock fixture suggestion for user-approved canvas metadata refinement.",
+          operations: [
+            {
+              op: "update-graph",
+              graphId: firstGraph.graphId,
+              patch: {
+                summary:
+                  firstGraph.summary ??
+                  `Prompt Pack reviewed ${firstGraph.nodes.length} node(s) in ${firstGraph.title}.`,
+              },
+            },
+            ...(firstNode
+              ? [
+                  {
+                    op: "update-node" as const,
+                    graphId: firstNode.graph.graphId,
+                    nodeId: firstNode.node.id,
+                    patch: {
+                      description:
+                        typeof firstNode.node.data.description === "string" &&
+                        firstNode.node.data.description.trim()
+                          ? firstNode.node.data.description
+                          : `Prompt Pack fixture noted ${nodeLabel(firstNode.node)} as an implementation responsibility.`,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        }
+      : { summary: "", operations: [] },
+    clarificationQuestions: [],
+    assumptions: [
+      "Mock provider output is a local fixture used for development and smoke tests.",
+    ],
+    warnings: [],
+    suggestedNextSteps: [
+      "Review the generated prompts before copying or downloading them.",
+    ],
+  })
+}
+
 export class MockAiProvider implements AiProvider {
   readonly name = "mock" as const
-
-  async generateDesignActions(
-    input: GenerateDesignActionsInput
-  ): Promise<GenerateDesignActionsResult> {
-    const topic = getPromptTopic(input.prompt)
-    const slug = slugify(topic)
-    const existingIds = new Set([
-      ...input.currentCanvas.nodes.map((node) => node.id),
-      ...input.currentCanvas.edges.map((edge) => edge.id),
-    ])
-
-    const clientId = uniqueId(`${slug}-client`, existingIds)
-    const serviceId = uniqueId(`${slug}-service`, existingIds)
-    const dataId = uniqueId(`${slug}-data-store`, existingIds)
-    const clientToServiceId = uniqueId(`edge-${clientId}-${serviceId}`, existingIds)
-    const serviceToDataId = uniqueId(`edge-${serviceId}-${dataId}`, existingIds)
-
-    const rowOffset = Math.floor(input.currentCanvas.nodes.length / 3) * 180
-    const actions: DesignAction[] = [
-      {
-        type: "addNode",
-        id: clientId,
-        label: `${topic} Client`,
-        shape: "circle",
-        colorIndex: 5,
-        x: 100,
-        y: 80 + rowOffset,
-      },
-      {
-        type: "addNode",
-        id: serviceId,
-        label: `${topic} Service`,
-        shape: "rectangle",
-        colorIndex: 1,
-        x: 360,
-        y: 90 + rowOffset,
-      },
-      {
-        type: "addNode",
-        id: dataId,
-        label: `${topic} Data Store`,
-        shape: "cylinder",
-        colorIndex: 7,
-        x: 620,
-        y: 80 + rowOffset,
-      },
-      {
-        type: "addEdge",
-        id: clientToServiceId,
-        source: clientId,
-        target: serviceId,
-        label: "requests",
-      },
-      {
-        type: "addEdge",
-        id: serviceToDataId,
-        source: serviceId,
-        target: dataId,
-        label: "persists",
-      },
-    ]
-
-    return validateDesignProviderResult({
-      actions,
-      summary: `Mock AI generated a deterministic ${topic} architecture with a client, service, and data store.`,
-    })
-  }
 
   async generateSpecMarkdown(input: GenerateSpecMarkdownInput): Promise<string> {
     const context = buildSpecContext(input.nodes, input.edges, input.chatHistory)
@@ -610,5 +697,11 @@ export class MockAiProvider implements AiProvider {
     input: GenerateArchitectureDraftInput
   ): Promise<GenerateArchitectureDraftResult> {
     return parseArchitectureDraftProposal(architectureForPrompt(input))
+  }
+
+  async generatePromptPack(
+    input: GeneratePromptPackInput
+  ): Promise<GeneratePromptPackResult> {
+    return mockPromptPack(input)
   }
 }

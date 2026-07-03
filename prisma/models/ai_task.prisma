@@ -1,7 +1,7 @@
 enum AiTaskType {
-  design_agent
   generate_spec
   architecture_draft
+  prompt_pack
 }
 
 enum AiTaskStatus {

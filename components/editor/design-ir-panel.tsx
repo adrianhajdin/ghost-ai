@@ -155,7 +155,7 @@ export function DesignIrPanel({ projectId, open, onOpenChange }: DesignIrPanelPr
                 Design IR
               </DialogTitle>
               <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                Design IR is the machine-readable architecture model. Prompt Packs are not generated yet.
+                Design IR is the machine-readable architecture model. AI Prompt Packs use the canvas pyramid.
               </p>
             </div>
           </div>

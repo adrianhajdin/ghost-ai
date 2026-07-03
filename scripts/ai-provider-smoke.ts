@@ -1,6 +1,6 @@
-import { applyDesignActions, DesignProviderResultSchema } from "@/lib/ai/design/design-actions"
-import { emptyCanvasSnapshot } from "@/lib/canvas/canvas-state"
+import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 import { getAiProvider, getAiProviderName } from "@/lib/ai/providers/provider-factory"
+import type { CanvasEdge, CanvasNode } from "@/types/canvas"
 
 const trackedEnv = [
   "AI_PROVIDER",
@@ -51,6 +51,59 @@ function expectThrows(fn: () => unknown, messageIncludes: string) {
   throw new Error(`Expected function to throw "${messageIncludes}"`)
 }
 
+const legacyDesignMethodName = ["generate", "Design", "Actions"].join("")
+
+const smokeNodes = [
+  {
+    id: "billing-service",
+    type: "canvasNode",
+    position: { x: 80, y: 80 },
+    data: {
+      label: "Billing Service",
+      name: "Billing Service",
+      semanticType: "service",
+      status: "draft",
+      shape: "pill",
+      color: "#10233D",
+      textColor: "#52A8FF",
+      runtime: "node-typescript",
+      framework: "nextjs-api",
+    },
+  },
+  {
+    id: "billing-database",
+    type: "canvasNode",
+    position: { x: 340, y: 80 },
+    data: {
+      label: "Billing Database",
+      name: "Billing Database",
+      semanticType: "database",
+      status: "draft",
+      shape: "cylinder",
+      color: "#062822",
+      textColor: "#0AC7B4",
+      engine: "postgresql",
+      orm: "prisma",
+    },
+  },
+] satisfies CanvasNode[]
+
+const smokeEdges = [
+  {
+    id: "edge-billing-db",
+    type: "canvasEdge",
+    source: "billing-service",
+    target: "billing-database",
+    sourceHandle: null,
+    targetHandle: null,
+    data: {
+      semanticType: "db-write",
+      label: "persists invoices",
+      labels: ["persists invoices"],
+    },
+  },
+] satisfies CanvasEdge[]
+
 async function main() {
   clearAiEnv()
   assert(getAiProviderName() === "mock", "AI_PROVIDER should default to mock")
@@ -58,37 +111,112 @@ async function main() {
   process.env.AI_PROVIDER = "mock"
   const mockProvider = getAiProvider()
   assert(mockProvider.name === "mock", "mock provider was not selected")
+  assert(
+    !(legacyDesignMethodName in (mockProvider as object)),
+    "mock provider must not expose the legacy design action method"
+  )
 
-  const design = await mockProvider.generateDesignActions({
+  const draft = await mockProvider.generateArchitectureDraft({
     prompt: "Design an event-driven billing platform",
     projectId: "project-ai-provider-smoke",
-    roomId: "project-ai-provider-smoke",
-    currentCanvas: emptyCanvasSnapshot(),
+    graphId: ROOT_GRAPH_ID,
+    complexity: "standard",
+    currentCanvasSummary: {
+      graphId: ROOT_GRAPH_ID,
+      title: "System",
+      parentGraphId: null,
+      parentNodeId: null,
+      layer: null,
+      layerKind: null,
+      summary: null,
+      nodeCount: smokeNodes.length,
+      edgeCount: smokeEdges.length,
+      nodeTypes: { service: 1, database: 1 },
+      edgeTypes: { "db-write": 1 },
+      nodes: smokeNodes.map((node) => ({
+        id: node.id,
+        label: node.data.label,
+        name: node.data.name,
+        semanticType: node.data.semanticType,
+      })),
+      edges: smokeEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        semanticType: edge.data?.semanticType,
+        label: edge.data?.label,
+      })),
+    },
+    rootCanvasSummary: null,
+    graphHierarchySummary: null,
+    existingDesignIr: null,
   })
-  const parsedDesign = DesignProviderResultSchema.parse(design)
-  const nodeAdds = parsedDesign.actions.filter((action) => action.type === "addNode")
-  const edgeAdds = parsedDesign.actions.filter((action) => action.type === "addEdge")
-  assert(nodeAdds.length >= 2, "mock design should add at least two nodes")
-  assert(edgeAdds.length >= 1, "mock design should add at least one edge")
-
-  const canvas = applyDesignActions(parsedDesign.actions, emptyCanvasSnapshot())
-  assert(canvas.nodes.length >= 2, "validated design actions did not create nodes")
-  assert(canvas.edges.length >= 1, "validated design actions did not create edges")
+  assert(draft.nodes.length >= 2, "mock architecture draft should include nodes")
+  assert(draft.edges.length >= 1, "mock architecture draft should include edges")
 
   const markdown = await mockProvider.generateSpecMarkdown({
     projectId: "project-ai-provider-smoke",
     roomId: "project-ai-provider-smoke",
     chatHistory: [{ role: "user", content: "Generate a billing platform spec" }],
-    nodes: canvas.nodes,
-    edges: canvas.edges,
+    nodes: smokeNodes,
+    edges: smokeEdges,
   })
   assert(markdown.startsWith("#"), "mock spec should return Markdown")
 
-  const invalidDesign = DesignProviderResultSchema.safeParse({
-    summary: "invalid",
-    actions: [{ type: "addNode", id: "missing-required-fields" }],
+  const promptPack = await mockProvider.generatePromptPack({
+    projectId: "project-ai-provider-smoke",
+    projectName: "AI Provider Smoke",
+    targetAgent: "codex",
+    scopeMode: "full-project",
+    currentGraphId: ROOT_GRAPH_ID,
+    selectedNodeIds: [],
+    canvasPyramid: {
+      projectId: "project-ai-provider-smoke",
+      rootGraphId: ROOT_GRAPH_ID,
+      graphs: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          scopeKind: "system-root",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          summary: null,
+          nodes: smokeNodes.map((node) => ({
+            id: node.id,
+            type: node.type,
+            position: node.position,
+            data: node.data,
+          })),
+          edges: smokeEdges.map((edge) => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            type: edge.type,
+            data: edge.data ?? {},
+          })),
+        },
+      ],
+      graphIndex: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          nodeCount: smokeNodes.length,
+          edgeCount: smokeEdges.length,
+        },
+      ],
+    },
   })
-  assert(!invalidDesign.success, "invalid design actions should be rejected")
+  assert(promptPack.globalPrompt.markdown.length > 0, "mock Prompt Pack should return a global prompt")
+  assert(promptPack.layerPrompts.length === 1, "mock Prompt Pack should return a layer prompt")
+  assert(promptPack.nodePrompts.length >= 1, "mock Prompt Pack should return node prompts")
 
   clearAiEnv()
   process.env.AI_PROVIDER = "unknown"
@@ -97,6 +225,14 @@ async function main() {
   clearAiEnv()
   process.env.AI_PROVIDER = "google"
   expectThrows(() => getAiProvider(), "Missing Google AI API key")
+
+  process.env.GOOGLE_AI_API_KEY = "test-key"
+  const googleProvider = getAiProvider()
+  assert(googleProvider.name === "google", "google provider was not selected after API key was set")
+  assert(
+    !(legacyDesignMethodName in (googleProvider as object)),
+    "google provider must not expose the legacy design action method"
+  )
 
   clearAiEnv()
   process.env.AI_PROVIDER = "openai_compatible"
@@ -113,6 +249,10 @@ async function main() {
   assert(
     openAiCompatibleProvider.name === "openai_compatible",
     "openai_compatible provider was not selected after required env was set"
+  )
+  assert(
+    !(legacyDesignMethodName in (openAiCompatibleProvider as object)),
+    "openai_compatible provider must not expose the legacy design action method"
   )
 
   console.log("ai provider smoke passed")
