@@ -100,6 +100,20 @@ export async function listArchitectConversationMessages(input: {
   return messages.reverse().map(toSafeMessage)
 }
 
+export async function deleteArchitectConversationMessages(input: {
+  projectId: string
+  graphId: string
+}) {
+  const result = await prisma.architectConversationMessage.deleteMany({
+    where: {
+      projectId: input.projectId,
+      graphId: input.graphId,
+    },
+  })
+
+  return result.count
+}
+
 export async function getRecentArchitectMessagesForProvider(input: {
   projectId: string
   graphId: string

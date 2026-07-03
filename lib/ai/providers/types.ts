@@ -14,6 +14,11 @@ import type {
 
 export type AiProviderName = "mock" | "google" | "openai_compatible"
 
+export interface SafeAiProviderMetadata {
+  providerName: AiProviderName
+  isMockProvider: boolean
+}
+
 export interface AiProvider {
   readonly name: AiProviderName
   generateSpecMarkdown(input: GenerateSpecMarkdownInput): Promise<string>

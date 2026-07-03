@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { HelpCircle, Maximize, Minus, Plus, Redo2, Undo2, X } from "lucide-react"
 
 interface CanvasControlsProps {
@@ -11,6 +11,7 @@ interface CanvasControlsProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
+  isStacked: boolean
 }
 
 export function CanvasControls({
@@ -21,32 +22,22 @@ export function CanvasControls({
   onRedo,
   canUndo,
   canRedo,
+  isStacked,
 }: CanvasControlsProps) {
   const [isHelpOpen, setIsHelpOpen] = useState(false)
-  const [isCompactViewport, setIsCompactViewport] = useState(false)
-
-  useEffect(() => {
-    function updateCompactViewport() {
-      setIsCompactViewport(window.innerWidth < 1024)
-    }
-
-    updateCompactViewport()
-    window.addEventListener("resize", updateCompactViewport)
-
-    return () => window.removeEventListener("resize", updateCompactViewport)
-  }, [])
 
   return (
     <div
       className={
-        isCompactViewport
-          ? "pointer-events-none fixed inset-x-2 bottom-20 z-30 flex justify-start"
+        isStacked
+          ? "pointer-events-none absolute inset-x-4 bottom-20 z-10 flex justify-start"
           : "absolute bottom-4 left-4 z-10"
       }
+      data-testid="canvas-controls"
     >
       {isHelpOpen ? (
         <CanvasHelp
-          isCompactViewport={isCompactViewport}
+          isStacked={isStacked}
           onClose={() => setIsHelpOpen(false)}
         />
       ) : null}
@@ -84,17 +75,17 @@ export function CanvasControls({
 }
 
 function CanvasHelp({
-  isCompactViewport,
+  isStacked,
   onClose,
 }: {
-  isCompactViewport: boolean
+  isStacked: boolean
   onClose: () => void
 }) {
   return (
     <div
       className={
-        isCompactViewport
-          ? "pointer-events-auto fixed inset-x-2 bottom-32 max-h-[calc(100vh-9rem)] overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 text-xs text-text-secondary shadow-xl backdrop-blur-xl"
+        isStacked
+          ? "pointer-events-auto absolute bottom-12 left-0 max-h-[calc(100vh-9rem)] w-[min(20rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 text-xs text-text-secondary shadow-xl backdrop-blur-xl"
           : "absolute bottom-12 left-0 w-72 rounded-2xl border border-border-default bg-bg-surface/95 p-3 text-xs text-text-secondary shadow-xl backdrop-blur-xl"
       }
     >

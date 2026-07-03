@@ -11,6 +11,7 @@ import {
   type LlmPromptPackScopeMode,
   type LlmPromptPackTargetAgent,
 } from "@/lib/prompt-pack/llm-prompt-pack"
+import type { SafeAiProviderMetadata } from "@/lib/ai/providers/types"
 
 export const ARCHITECT_CONVERSATION_SCHEMA_URL =
   "https://arcforge.dev/schemas/architect-conversation.v1.json" as const
@@ -83,6 +84,8 @@ export interface GenerateArchitectReplyInput {
   projectName: string
   currentGraphId: string
   userId: string
+  providerName: SafeAiProviderMetadata["providerName"]
+  isMockProvider: boolean
   userMessage: string
   selectedNodeIds: string[]
   recentMessages: ArchitectConversationMessageInput[]
@@ -117,7 +120,10 @@ export function parseArchitectConversationReply(value: unknown) {
   return reply
 }
 
-export function createArchitectReplySummary(reply: ArchitectConversationReply) {
+export function createArchitectReplySummary(
+  reply: ArchitectConversationReply,
+  provider?: SafeAiProviderMetadata
+) {
   return {
     intent: reply.intent,
     hasCanvasPatchProposal: Boolean(reply.canvasPatchProposal),
@@ -125,6 +131,12 @@ export function createArchitectReplySummary(reply: ArchitectConversationReply) {
     clarificationQuestionCount: reply.clarificationQuestions.length,
     warningCount: reply.warnings.length,
     promptPackRecommended: reply.promptPackHandoff.recommended,
+    ...(provider
+      ? {
+          providerName: provider.providerName,
+          isMockProvider: provider.isMockProvider,
+        }
+      : {}),
   }
 }
 
@@ -132,12 +144,16 @@ export function buildArchitectSystemPrompt() {
   return [
     "You are Arc Forge AI Architect, the conversational architecture copilot inside Arc Forge AI.",
     "Arc Forge AI is an architecture canvas and prompt-pack composer. It does not build apps, execute code, deploy infrastructure, or write to external repositories.",
-    "You inspect the provided CanvasDoc pyramid and answer the user's command one step at a time.",
-    "When the user asks to change the canvas, propose a small user-approved canvasPatchProposal. Do not claim that changes were already applied.",
+    "Answer the user's direct question first, in the same language the user used. Romanian input should receive Romanian output; English input should receive English output.",
+    "Do not say you reviewed, inspected, or analyzed the current canvas unless the user asked you to review, inspect, analyze, or find missing pieces.",
+    "When the user asks to change the canvas, explain the intended change before proposing a small user-approved canvasPatchProposal. Do not claim that changes were already applied.",
+    "Ask at most 1-3 clarification questions when required. Prefer concise, concrete guidance over broad boilerplate.",
+    "Only recommend Prompt Pack handoff when the user asks for it or the architecture is clearly ready; do not repeat Prompt Pack guidance after every reply.",
+    "If the user asks whether you are a real LLM, answer truthfully from the provider metadata: mock means local deterministic fixture replies; non-mock means configured external LLM through Arc Forge's provider abstraction. Never pretend to be human.",
     "Only use supported canvas patch operations: update-node, add-node, add-edge, create-layer, update-graph.",
     "Never output raw secrets. Keep secretRef or secretCapabilityRef values as references.",
     "Never include transient UI state such as selected, dragging, cursor, presence, or hover state.",
-    "If the architecture is ready for an external coding agent, set promptPackHandoff.recommended=true and explain why.",
+    "Do not generate application source code, deployment steps, repository write-back plans, or legacy design-agent references.",
     "Return only valid JSON matching the Architect Conversation v1 schema.",
   ].join("\n")
 }
@@ -158,6 +174,10 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
     project: {
       id: input.projectId,
       name: input.projectName,
+    },
+    provider: {
+      providerName: input.providerName,
+      isMockProvider: input.isMockProvider,
     },
     currentGraphId: input.currentGraphId,
     selectedNodeIds: input.selectedNodeIds,
@@ -181,6 +201,13 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
 
   return [
     `User command: ${input.userMessage}`,
+    "",
+    "Behavior reminders:",
+    "- Answer the user directly before giving any canvas critique.",
+    "- Use the user's language.",
+    "- Do not claim a canvas patch was applied unless the user applied it.",
+    "- If the user only asks a question, do not propose canvas changes unless needed.",
+    "- Keep warnings and assumptions secondary.",
     "",
     "Use the following sanitized Arc Forge canvas pyramid JSON as the source of truth.",
     "Do not invent existing node IDs; reference actual IDs for updates and relationships.",

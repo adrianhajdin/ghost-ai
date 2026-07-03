@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import {
   AlertTriangle,
@@ -50,6 +50,11 @@ interface ArchitectMessage {
   metadata?: unknown
 }
 
+interface ArchitectProviderMetadata {
+  providerName: "mock" | "google" | "openai_compatible"
+  isMockProvider: boolean
+}
+
 interface ArchitectReply {
   intent?: string
   assistantMessage?: {
@@ -76,7 +81,10 @@ interface ArchitectRunOutput {
     intent?: string
     canvasPatchOperationCount?: number
     promptPackRecommended?: boolean
+    providerName?: ArchitectProviderMetadata["providerName"]
+    isMockProvider?: boolean
   }
+  provider?: ArchitectProviderMetadata
   canvasPyramidSummary?: {
     graphCount?: number
     nodeCount?: number
@@ -146,7 +154,7 @@ function formatIsoTime(createdAt: string): string {
 
 function scrollScrollAreaToBottom(scrollArea: HTMLDivElement | null) {
   const viewport = scrollArea?.querySelector<HTMLElement>(
-    "[data-radix-scroll-area-viewport]"
+    "[data-slot='scroll-area-viewport'], [data-radix-scroll-area-viewport]"
   )
   const scrollTarget = viewport ?? scrollArea
   if (scrollTarget) {
@@ -154,11 +162,48 @@ function scrollScrollAreaToBottom(scrollArea: HTMLDivElement | null) {
   }
 }
 
+function scrollScrollAreaToBottomAfterRender(scrollArea: HTMLDivElement | null) {
+  scrollScrollAreaToBottom(scrollArea)
+  const frameId = window.requestAnimationFrame(() => {
+    scrollScrollAreaToBottom(scrollArea)
+  })
+  return () => window.cancelAnimationFrame(frameId)
+}
+
 function getArchitectStartErrorMessage(error: unknown) {
   if (error instanceof Error && error.message && error.message !== "Failed to fetch") {
     return error.message
   }
-  return "Architect connection dropped before the request started. Check that local realtime/app services are connected, then try again."
+  return "Architect connection dropped. Reconnect and try again."
+}
+
+function getArchitectRunErrorMessage(error?: string) {
+  if (error && error !== "Failed to fetch") return error
+  return "Architect connection dropped. Reconnect and try again."
+}
+
+function getArchitectProviderCopy(provider: ArchitectProviderMetadata | null) {
+  if (!provider || provider.providerName === "mock" || provider.isMockProvider) {
+    return {
+      label: "Mock mode",
+      detail: "Mock provider — fixture replies",
+      className: "border-state-warning/25 bg-state-warning/10 text-state-warning",
+    }
+  }
+
+  if (provider.providerName === "google") {
+    return {
+      label: "Gemini / Google mode",
+      detail: "Real LLM provider",
+      className: "border-accent-ai/30 bg-accent-ai/10 text-accent-ai-text",
+    }
+  }
+
+  return {
+    label: "OpenAI-compatible mode",
+    detail: "Real LLM provider",
+    className: "border-accent-ai/30 bg-accent-ai/10 text-accent-ai-text",
+  }
 }
 
 export function AiSidebar({
@@ -171,6 +216,7 @@ export function AiSidebar({
   onOpenPromptPack,
 }: AiSidebarProps) {
   const {
+    status: realtimeStatus,
     nodes,
     edges,
     currentUserName,
@@ -191,6 +237,10 @@ export function AiSidebar({
     useState<LlmCanvasImprovementProposal | null>(null)
   const [architectError, setArchitectError] = useState<string | null>(null)
   const [architectApplyMessage, setArchitectApplyMessage] = useState<string | null>(null)
+  const [architectProvider, setArchitectProvider] =
+    useState<ArchitectProviderMetadata | null>(null)
+  const [isClearingArchitectConversation, setIsClearingArchitectConversation] =
+    useState(false)
   const [animatedArchitectMessageIds, setAnimatedArchitectMessageIds] = useState<Set<string>>(
     () => new Set()
   )
@@ -256,9 +306,15 @@ export function AiSidebar({
         `/api/projects/${projectId}/architect/conversation?graphId=${encodeURIComponent(graphId)}`
       )
       if (!response.ok) throw new Error("Failed to load Architect history")
-      const data = (await response.json()) as { messages?: ArchitectMessage[] }
+      const data = (await response.json()) as {
+        messages?: ArchitectMessage[]
+        provider?: ArchitectProviderMetadata
+      }
       const nextMessages = Array.isArray(data.messages) ? data.messages : []
       setArchitectMessages(nextMessages)
+      if (data.provider) {
+        setArchitectProvider(data.provider)
+      }
 
       const latestReply = [...nextMessages]
         .reverse()
@@ -281,12 +337,21 @@ export function AiSidebar({
     return () => window.clearTimeout(timeoutId)
   }, [fetchArchitectHistory, isOpen])
 
-  useEffect(() => {
-    scrollScrollAreaToBottom(architectScrollRef.current)
-  }, [architectMessages.length, architectPatchProposal])
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined
+    return scrollScrollAreaToBottomAfterRender(architectScrollRef.current)
+  }, [
+    architectApplyMessage,
+    architectError,
+    architectMessages.length,
+    architectPatchProposal,
+    architectReply?.promptPackHandoff?.recommended,
+    isArchitectThinking,
+    isOpen,
+  ])
 
   const scrollArchitectToBottom = useCallback(() => {
-    scrollScrollAreaToBottom(architectScrollRef.current)
+    scrollScrollAreaToBottomAfterRender(architectScrollRef.current)
   }, [])
 
   const handleArchitectMessageStreamDone = useCallback((messageId: string) => {
@@ -305,7 +370,7 @@ export function AiSidebar({
       patchPresence({ thinking: false })
 
       if (status !== "succeeded") {
-        setArchitectError("Architect failed to respond. Please try again.")
+        setArchitectError(getArchitectRunErrorMessage())
         broadcastRoomEvent({
           type: "ai.status",
           payload: {
@@ -318,10 +383,18 @@ export function AiSidebar({
 
       const typedOutput = output as ArchitectRunOutput | null
       if (!typedOutput?.reply) {
-        setArchitectError("Architect returned an empty response.")
+        setArchitectError("Architect response was empty. Retry the request.")
         return
       }
 
+      if (typedOutput.provider) {
+        setArchitectProvider(typedOutput.provider)
+      } else if (typedOutput.summary?.providerName) {
+        setArchitectProvider({
+          providerName: typedOutput.summary.providerName,
+          isMockProvider: Boolean(typedOutput.summary.isMockProvider),
+        })
+      }
       setArchitectReply(typedOutput.reply)
       setArchitectPatchProposal(typedOutput.reply.canvasPatchProposal ?? null)
       setArchitectError(null)
@@ -395,9 +468,7 @@ export function AiSidebar({
 
   // Keep the collaborator chat pinned to the latest room message.
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
-    }
+    return scrollScrollAreaToBottomAfterRender(chatScrollRef.current)
   }, [collaboratorChatMessages.length])
 
   const handleArchitectInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -420,6 +491,9 @@ export function AiSidebar({
       }
       setArchitectMessages((prev) => [...prev, tempMessage])
       setArchitectInput("")
+      if (architectTextareaRef.current) {
+        architectTextareaRef.current.style.height = "88px"
+      }
       setArchitectError(null)
       setArchitectApplyMessage(null)
       setIsArchitectThinking(true)
@@ -459,9 +533,6 @@ export function AiSidebar({
           )
         }
         setArchitectRunId(data.runId)
-        if (architectTextareaRef.current) {
-          architectTextareaRef.current.style.height = "88px"
-        }
       } catch (error) {
         setIsArchitectThinking(false)
         patchPresence({ thinking: false })
@@ -574,6 +645,49 @@ export function AiSidebar({
     setArchitectApplyMessage(null)
   }, [])
 
+  const handleClearArchitectConversation = useCallback(async () => {
+    if (isClearingArchitectConversation) return
+    const confirmed = window.confirm(
+      "Clear Architect conversation for this layer? Canvas will not be changed."
+    )
+    if (!confirmed) return
+
+    setIsClearingArchitectConversation(true)
+    setArchitectError(null)
+    setArchitectApplyMessage(null)
+
+    try {
+      const response = await fetch(
+        `/api/projects/${projectId}/architect/conversation?graphId=${encodeURIComponent(graphId)}`,
+        { method: "DELETE" }
+      )
+      const data = (await response.json().catch(() => ({}))) as {
+        deletedCount?: number
+        error?: string
+      }
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Architect conversation reset failed")
+      }
+
+      setArchitectMessages([])
+      setArchitectReply(null)
+      setArchitectPatchProposal(null)
+      setAnimatedArchitectMessageIds(new Set())
+      setArchitectApplyMessage(
+        `Architect conversation cleared${
+          typeof data.deletedCount === "number" ? ` (${data.deletedCount})` : ""
+        }. Canvas was not changed.`
+      )
+    } catch (error) {
+      setArchitectError(
+        getArchitectRunErrorMessage(error instanceof Error ? error.message : undefined)
+      )
+    } finally {
+      setIsClearingArchitectConversation(false)
+    }
+  }, [graphId, isClearingArchitectConversation, projectId])
+
   const handleChatInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setChatInput(e.target.value)
     const ta = e.target
@@ -650,6 +764,9 @@ export function AiSidebar({
 
   const architectHandoff = architectReply?.promptPackHandoff
   const isAiBusy = isArchitectThinking || isApplyingArchitectPatch || isSpecGenerating
+  const providerCopy = getArchitectProviderCopy(architectProvider)
+  const showRealtimeWarning =
+    realtimeStatus === "disconnected" || realtimeStatus === "error"
 
   return (
     <>
@@ -780,9 +897,9 @@ export function AiSidebar({
 
         {/* Architect Tab */}
         <TabsContent value="architect" className="min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full flex-col">
-            <ScrollArea className="flex-1" ref={architectScrollRef as React.Ref<HTMLDivElement>}>
-              <div className="grid gap-3 px-4 py-3">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-border-default bg-bg-surface/95 px-4 py-3">
+              <div className="grid gap-3">
                 <div className="grid grid-cols-3 gap-2">
                   <MetricPill label="Nodes" value={nodes.length} />
                   <MetricPill label="Edges" value={edges.length} />
@@ -801,8 +918,51 @@ export function AiSidebar({
                       </p>
                     </div>
                   </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <div
+                      className={cn(
+                        "min-w-0 rounded-full border px-2.5 py-1 text-[10px]",
+                        providerCopy.className
+                      )}
+                      title={providerCopy.detail}
+                    >
+                      <span className="block truncate font-semibold">{providerCopy.label}</span>
+                      <span className="block truncate opacity-80">{providerCopy.detail}</span>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Clear Architect conversation"
+                      onClick={handleClearArchitectConversation}
+                      disabled={
+                        isClearingArchitectConversation ||
+                        (architectMessages.length === 0 && !architectReply)
+                      }
+                      className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border-subtle bg-bg-elevated px-2 text-[10px] text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {isClearingArchitectConversation ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3 w-3" />
+                      )}
+                      Reset
+                    </button>
+                  </div>
                 </div>
 
+                {showRealtimeWarning ? (
+                  <div className="flex gap-2 rounded-xl border border-state-warning/30 bg-state-warning/10 px-3 py-2 text-xs text-state-warning">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>Realtime disconnected — canvas may not be fully synced.</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <ScrollArea
+              className="min-h-0 flex-1 overflow-hidden"
+              ref={architectScrollRef as React.Ref<HTMLDivElement>}
+            >
+              <div className="grid gap-3 px-4 py-3 pb-4">
                 {architectMessages.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 rounded-2xl border border-border-subtle bg-bg-elevated px-4 py-8 text-center">
                     <Bot className="h-6 w-6 text-accent-ai-text" />
@@ -819,6 +979,7 @@ export function AiSidebar({
                       const isUser = message.role === "user"
                       const shouldAnimate =
                         !isUser && animatedArchitectMessageIds.has(message.id)
+                      const replyDetails = isUser ? null : readReplyFromMessage(message)
                       return (
                         <div
                           key={message.id}
@@ -840,9 +1001,9 @@ export function AiSidebar({
                           </div>
                           <div
                             className={cn(
-                              "max-w-[88%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-xs leading-5 text-text-primary",
+                              "max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-5 text-text-primary",
                               isUser
-                                ? "rounded-br-sm bg-accent-ai font-medium text-white"
+                                ? "whitespace-pre-wrap rounded-br-sm bg-accent-ai font-medium text-white"
                                 : "rounded-bl-sm border border-border-subtle bg-bg-elevated"
                             )}
                             aria-live={shouldAnimate ? "polite" : undefined}
@@ -858,6 +1019,9 @@ export function AiSidebar({
                               />
                             )}
                           </div>
+                          {!isUser && replyDetails ? (
+                            <ArchitectReplyDetails reply={replyDetails} />
+                          ) : null}
                         </div>
                       )
                     })}
@@ -928,7 +1092,7 @@ export function AiSidebar({
                   placeholder="Tell Architect what to change on this canvas..."
                   disabled={isArchitectThinking}
                   style={{ height: "88px", maxHeight: "180px" }}
-                  className="resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
+                  className="resize-none overflow-y-auto border-0 bg-transparent px-0 py-0 pr-2 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-[10px] text-text-faint">
@@ -1043,7 +1207,7 @@ export function AiSidebar({
                   onKeyDown={handleChatKeyDown}
                   placeholder="Message collaborators…"
                   style={{ height: "72px", maxHeight: "160px" }}
-                  className="resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="resize-none overflow-y-auto border-0 bg-transparent px-0 py-0 pr-2 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 />
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-text-faint">Shift+Enter for newline</span>
@@ -1174,12 +1338,87 @@ function StreamingArchitectMessageContent({
   }, [animate, content])
 
   return (
-    <>
-      {visibleContent}
+    <div className="space-y-1.5">
+      <MessageBodyText content={visibleContent} />
       {animate && visibleContent.length < content.length ? (
         <span className="ml-0.5 inline-block h-3 w-1 translate-y-0.5 animate-pulse rounded-full bg-accent-ai-text" />
       ) : null}
-    </>
+    </div>
+  )
+}
+
+function MessageBodyText({ content }: { content: string }) {
+  const lines = content
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) return null
+
+  return (
+    <div className="space-y-1.5">
+      {lines.map((line, index) => {
+        const bulletMatch = line.match(/^[-*\u2022]\s+(.*)$/)
+        if (bulletMatch) {
+          return (
+            <div key={`${line}-${index}`} className="flex gap-2">
+              <span className="mt-[0.45rem] h-1 w-1 shrink-0 rounded-full bg-accent-ai-text/80" />
+              <span>{bulletMatch[1]}</span>
+            </div>
+          )
+        }
+
+        return <p key={`${line}-${index}`}>{line}</p>
+      })}
+    </div>
+  )
+}
+
+function ArchitectReplyDetails({ reply }: { reply: ArchitectReply }) {
+  const clarificationQuestions = (reply.clarificationQuestions ?? [])
+    .map((question) => question.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+  const secondaryNotes = [
+    ...(reply.assumptions ?? []).map((item) => ({ label: "Assumption", item })),
+    ...(reply.warnings ?? []).map((item) => ({ label: "Warning", item })),
+  ].filter((note) => note.item.trim())
+
+  if (clarificationQuestions.length === 0 && secondaryNotes.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="max-w-[88%] space-y-2">
+      {clarificationQuestions.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {clarificationQuestions.map((question) => (
+            <span
+              key={question}
+              className="rounded-full border border-accent-ai/25 bg-accent-ai/10 px-2 py-1 text-[10px] leading-4 text-accent-ai-text"
+            >
+              {question}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {secondaryNotes.length > 0 ? (
+        <details className="rounded-xl border border-border-default bg-bg-subtle px-3 py-2 text-[10px] text-text-muted">
+          <summary className="cursor-pointer select-none text-text-muted">
+            Assumptions / warnings
+          </summary>
+          <div className="mt-2 grid gap-1.5">
+            {secondaryNotes.slice(0, 5).map((note, index) => (
+              <p key={`${note.label}-${index}`}>
+                <span className="font-semibold text-text-secondary">{note.label}: </span>
+                {note.item}
+              </p>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
   )
 }
 

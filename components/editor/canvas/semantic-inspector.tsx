@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertTriangle, Info, SquareArrowOutUpRight } from "lucide-react"
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Info,
+  SquareArrowOutUpRight,
+} from "lucide-react"
 import type {
   CanvasEdge,
   CanvasEdgeData,
@@ -42,10 +48,41 @@ interface DraftFieldProps {
   multiline?: boolean
 }
 
+interface CondensedWarning {
+  id: string
+  message: string
+  severity: SemanticValidationResult["severity"]
+  count: number
+}
+
 function toList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
     : []
+}
+
+function condenseWarnings(warnings: SemanticValidationResult[]): CondensedWarning[] {
+  const byMessage = new Map<string, CondensedWarning>()
+
+  for (const warning of warnings) {
+    const key = `${warning.severity}:${warning.message}`
+    const current = byMessage.get(key)
+    if (current) {
+      current.count += 1
+    } else {
+      byMessage.set(key, {
+        id: warning.id,
+        message: warning.message,
+        severity: warning.severity,
+        count: 1,
+      })
+    }
+  }
+
+  const rank = { error: 0, warning: 1, info: 2 } as const
+  return [...byMessage.values()].sort(
+    (a, b) => rank[a.severity] - rank[b.severity] || b.count - a.count
+  )
 }
 
 function DraftField({ label, value, onCommit, multiline }: DraftFieldProps) {
@@ -184,9 +221,12 @@ function WarningList({ warnings }: { warnings: SemanticValidationResult[] }) {
     )
   }
 
+  const condensedWarnings = condenseWarnings(warnings)
+  const hiddenCount = Math.max(0, condensedWarnings.length - 5)
+
   return (
     <div className="grid gap-1.5">
-      {warnings.slice(0, 5).map((warning) => {
+      {condensedWarnings.slice(0, 5).map((warning) => {
         const Icon = warning.severity === "info" ? Info : AlertTriangle
         const color =
           warning.severity === "info" ? "text-text-muted" : "text-state-warning"
@@ -194,14 +234,121 @@ function WarningList({ warnings }: { warnings: SemanticValidationResult[] }) {
         return (
           <div
             key={warning.id}
-            className="flex gap-2 rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary"
+            className="flex items-start gap-2 rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary"
           >
             <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
-            <span>{warning.message}</span>
+            <span className="min-w-0 flex-1">{warning.message}</span>
+            {warning.count > 1 ? (
+              <span className="shrink-0 rounded-full border border-border-subtle bg-bg-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
+                x{warning.count}
+              </span>
+            ) : null}
           </div>
         )
       })}
+      {hiddenCount > 0 ? (
+        <div className="rounded-xl border border-border-subtle bg-bg-subtle px-2.5 py-2 text-xs text-text-muted">
+          +{hiddenCount} more semantic signal{hiddenCount === 1 ? "" : "s"}
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+function SemanticWarningBeacon({
+  warnings,
+  isCompactViewport,
+}: {
+  warnings: SemanticValidationResult[]
+  isCompactViewport: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const condensedWarnings = useMemo(() => condenseWarnings(warnings), [warnings])
+  const actionableWarnings = warnings.filter((warning) => warning.severity !== "info")
+  const hasErrors = warnings.some((warning) => warning.severity === "error")
+  const statusCopy =
+    actionableWarnings.length > 0
+      ? `${actionableWarnings.length} signal${actionableWarnings.length === 1 ? "" : "s"}`
+      : "Clean"
+
+  return (
+    <aside
+      className={
+        isCompactViewport
+          ? "pointer-events-auto fixed left-2 right-2 top-16 z-40"
+          : "pointer-events-auto absolute left-4 top-16 z-20 max-w-[calc(100%-2rem)]"
+      }
+    >
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-label="Toggle semantic warnings"
+        onClick={() => setIsOpen((current) => !current)}
+        className={
+          "group relative flex max-w-full items-center gap-2 overflow-hidden rounded-full border px-2.5 py-2 text-left shadow-xl backdrop-blur-xl transition-all " +
+          (actionableWarnings.length > 0
+            ? "border-state-warning/25 bg-bg-surface/85 shadow-[0_0_28px_rgba(234,179,8,0.12)] hover:border-state-warning/45"
+            : "border-state-success/25 bg-bg-surface/80 shadow-[0_0_28px_rgba(34,197,94,0.10)] hover:border-state-success/45")
+        }
+        data-testid="semantic-warning-chip"
+      >
+        <span className="pointer-events-none absolute inset-x-3 bottom-0 h-px bg-gradient-to-r from-transparent via-accent-primary/50 to-transparent opacity-70" />
+        <span
+          className={
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border " +
+            (actionableWarnings.length > 0
+              ? "border-state-warning/30 bg-state-warning/10 text-state-warning"
+              : "border-state-success/30 bg-state-success/10 text-state-success")
+          }
+        >
+          {actionableWarnings.length > 0 ? (
+            <AlertTriangle className="h-4 w-4" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4" />
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className="block text-[11px] font-semibold uppercase tracking-normal text-text-primary">
+            Semantic scan
+          </span>
+          <span className="block truncate text-[11px] text-text-muted">
+            {hasErrors ? "Needs review" : statusCopy}
+            {condensedWarnings.length > 0 ? ` · ${condensedWarnings.length} grouped` : ""}
+          </span>
+        </span>
+        <span
+          className={
+            "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold " +
+            (actionableWarnings.length > 0
+              ? "border-state-warning/25 bg-state-warning/10 text-state-warning"
+              : "border-state-success/25 bg-state-success/10 text-state-success")
+          }
+        >
+          {warnings.length}
+        </span>
+        <ChevronDown
+          className={
+            "h-3.5 w-3.5 shrink-0 text-text-muted transition-transform " +
+            (isOpen ? "rotate-180" : "")
+          }
+        />
+      </button>
+
+      {isOpen ? (
+        <div
+          className="mt-2 max-h-[min(22rem,calc(100vh-9rem))] w-full max-w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-2xl backdrop-blur-xl"
+          data-testid="semantic-warning-drawer"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-text-primary">Semantic signals</p>
+            <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted">
+              {warnings.length}
+            </span>
+          </div>
+          <WarningList warnings={warnings} />
+        </div>
+      ) : null}
+    </aside>
   )
 }
 
@@ -418,9 +565,6 @@ export function SemanticInspector({
     "pointer-events-auto fixed left-2 right-2 top-16 z-40 max-h-[calc(100vh-5rem)] overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
   const desktopPanelClassName =
     "pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
-  const warningPanelClassName = isCompactViewport
-    ? compactPanelClassName
-    : "pointer-events-auto absolute left-4 top-16 z-20 w-80 rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
   const inspectorPanelClassName = isCompactViewport
     ? compactPanelClassName
     : desktopPanelClassName
@@ -429,15 +573,10 @@ export function SemanticInspector({
     if (warnings.length === 0) return null
 
     return (
-      <aside className={warningPanelClassName}>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold text-text-primary">Semantic warnings</p>
-          <span className="rounded-full bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted">
-            {warnings.length}
-          </span>
-        </div>
-        <WarningList warnings={selectionWarnings} />
-      </aside>
+      <SemanticWarningBeacon
+        warnings={selectionWarnings}
+        isCompactViewport={isCompactViewport}
+      />
     )
   }
 

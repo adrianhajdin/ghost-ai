@@ -4,12 +4,17 @@ import path from "node:path"
 import type { CanvasEdge, CanvasNode } from "@/types/canvas"
 import { SHAPE_DEFAULTS } from "@/types/canvas"
 import { MockAiProvider } from "@/lib/ai/providers/mock-provider"
+import { getSafeAiProviderMetadata } from "@/lib/ai/providers/provider-factory"
 import { runArchitectConversationTask } from "@/lib/ai-tasks/task-handlers/architect-conversation-handler"
 import {
   createArchitectConversationMessage,
+  deleteArchitectConversationMessages,
   listArchitectConversationMessages,
 } from "@/lib/ai/architect/architect-conversation-store"
-import { parseArchitectConversationReply } from "@/lib/ai/architect/architect-provider-contract"
+import {
+  buildArchitectUserPrompt,
+  parseArchitectConversationReply,
+} from "@/lib/ai/architect/architect-provider-contract"
 import { createCanvasDocV1 } from "@/lib/canvas/canvas-doc"
 import { loadProjectCanvasPyramid } from "@/lib/canvas/canvas-pyramid"
 import { applyLlmCanvasImprovementProposal } from "@/lib/canvas/llm-canvas-patch"
@@ -169,11 +174,32 @@ async function main() {
   )
 
   const provider = new MockAiProvider()
+  const providerMetadata = getSafeAiProviderMetadata(provider.name)
+  assert(providerMetadata.providerName === "mock", "mock provider metadata missing name")
+  assert(providerMetadata.isMockProvider, "mock provider metadata missing mock flag")
+
+  const providerPrompt = buildArchitectUserPrompt({
+    projectId,
+    projectName: "Architect Conversation Smoke",
+    currentGraphId: ROOT_GRAPH_ID,
+    userId,
+    providerName: providerMetadata.providerName,
+    isMockProvider: providerMetadata.isMockProvider,
+    userMessage: "Are you a real LLM?",
+    selectedNodeIds: [],
+    recentMessages: [],
+    canvasPyramid: pyramid,
+  })
+  assert(providerPrompt.includes('"providerName": "mock"'), "provider name missing from Architect prompt")
+  assert(providerPrompt.includes('"isMockProvider": true'), "mock flag missing from Architect prompt")
+
   const reply = await provider.generateArchitectReply({
     projectId,
     projectName: "Architect Conversation Smoke",
     currentGraphId: ROOT_GRAPH_ID,
     userId,
+    providerName: providerMetadata.providerName,
+    isMockProvider: providerMetadata.isMockProvider,
     userMessage: "Improve the selected node responsibilities",
     selectedNodeIds: [serviceNode.id],
     recentMessages: [],
@@ -190,6 +216,8 @@ async function main() {
     projectName: "Architect Conversation Smoke",
     currentGraphId: ROOT_GRAPH_ID,
     userId,
+    providerName: providerMetadata.providerName,
+    isMockProvider: providerMetadata.isMockProvider,
     userMessage: "Ask clarification questions before changing the canvas",
     selectedNodeIds: [],
     recentMessages: [],
@@ -198,6 +226,26 @@ async function main() {
   assert(
     clarificationReply.clarificationQuestions.length > 0,
     "Architect cannot return clarification questions"
+  )
+  const identityReply = await provider.generateArchitectReply({
+    projectId,
+    projectName: "Architect Conversation Smoke",
+    currentGraphId: ROOT_GRAPH_ID,
+    userId,
+    providerName: providerMetadata.providerName,
+    isMockProvider: providerMetadata.isMockProvider,
+    userMessage: "Are you a real LLM?",
+    selectedNodeIds: [],
+    recentMessages: [],
+    canvasPyramid: pyramid,
+  })
+  assert(
+    /mock provider|fixture/i.test(identityReply.assistantMessage.content),
+    "mock Architect identity answer did not disclose mock fixture mode"
+  )
+  assert(
+    !identityReply.promptPackHandoff.recommended,
+    "mock identity answer should not recommend Prompt Pack"
   )
 
   await createArchitectConversationMessage({
@@ -226,6 +274,9 @@ async function main() {
       result.summary.canvasPatchOperationCount > 0,
     "handler summary did not report patch operations"
   )
+  assert(result.summary.providerName === "mock", "handler summary missed provider name")
+  assert(result.summary.isMockProvider, "handler summary missed mock provider flag")
+  assert(result.provider.providerName === "mock", "handler output missed provider metadata")
   const messages = await listArchitectConversationMessages({
     projectId,
     graphId: ROOT_GRAPH_ID,
@@ -277,6 +328,72 @@ async function main() {
     "unsupported delete operation did not return an explicit issue"
   )
 
+  const childGraphId = "graph_architect_child_smoke"
+  await createArchitectConversationMessage({
+    projectId,
+    graphId: childGraphId,
+    userId,
+    role: "user",
+    content: "Keep this child layer thread",
+  })
+  await createArchitectConversationMessage({
+    projectId,
+    graphId: childGraphId,
+    userId,
+    role: "assistant",
+    content: "Child layer Architect reply",
+  })
+  await prisma.realtimeRoomEvent.create({
+    data: {
+      projectId,
+      roomId: `${projectId}:${ROOT_GRAPH_ID}`,
+      userId,
+      type: "event.broadcast",
+      payloadJson: {
+        type: "chat.message",
+        payload: {
+          sender: "Smoke",
+          role: "user",
+          content: "Chat must survive Architect reset",
+          timestamp: new Date().toISOString(),
+        },
+      },
+    },
+  })
+  const realtimeEventsBeforeClear = await prisma.realtimeRoomEvent.count({
+    where: { projectId },
+  })
+  const deletedMessages = await deleteArchitectConversationMessages({
+    projectId,
+    graphId: ROOT_GRAPH_ID,
+  })
+  assert(deletedMessages === 2, "Architect reset deleted the wrong root message count")
+  const rootMessagesAfterClear = await listArchitectConversationMessages({
+    projectId,
+    graphId: ROOT_GRAPH_ID,
+  })
+  assert(rootMessagesAfterClear.length === 0, "Architect reset left root messages behind")
+  const childMessagesAfterClear = await listArchitectConversationMessages({
+    projectId,
+    graphId: childGraphId,
+  })
+  assert(
+    childMessagesAfterClear.length === 2,
+    "Architect reset deleted another graph's messages"
+  )
+  const realtimeEventsAfterClear = await prisma.realtimeRoomEvent.count({
+    where: { projectId },
+  })
+  assert(
+    realtimeEventsAfterClear === realtimeEventsBeforeClear,
+    "Architect reset deleted realtime chat events"
+  )
+  const canvasAfterClear = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
+  assert(
+    canvasAfterClear?.nodes.some((item) => item.id === serviceNode.id),
+    "Architect reset changed the canvas"
+  )
+
   const legacyAiRouteSegments = ["app", "api", "ai", "design", "route.ts"]
   const oldAiDesignRoute = path.join(process.cwd(), ...legacyAiRouteSegments)
   assert(!(await pathExists(oldAiDesignRoute)), "legacy AI design route exists")
@@ -310,6 +427,29 @@ async function main() {
     "Architect UI does not expose patch apply"
   )
   assert(
+    sidebarSource.includes("Mock provider — fixture replies") &&
+      sidebarSource.includes("Real LLM provider"),
+    "Architect UI does not show provider mode"
+  )
+  assert(
+    sidebarSource.includes("Clear Architect conversation for this layer? Canvas will not be changed.") &&
+      sidebarSource.includes('method: "DELETE"'),
+    "Architect UI does not expose safe conversation reset"
+  )
+  assert(
+    sidebarSource.includes("Architect connection dropped. Reconnect and try again."),
+    "Architect UI does not show the concise connection error"
+  )
+  assert(
+    sidebarSource.includes("Realtime disconnected — canvas may not be fully synced."),
+    "Architect UI does not show the realtime warning copy"
+  )
+  assert(
+    sidebarSource.includes("StreamingArchitectMessageContent") &&
+      sidebarSource.includes("ArchitectReplyDetails"),
+    "Architect UI message rendering is missing chat-quality affordances"
+  )
+  assert(
     sidebarSource.includes("collaboratorChatMessages") &&
       sidebarSource.includes('msg.role === "user"'),
     "Chat tab is not collaborator-only"
@@ -324,6 +464,29 @@ async function main() {
   assert(
     !sidebarSource.includes(["", "api", "ai", "design"].join("/")),
     "Architect UI calls the legacy design route"
+  )
+  const architectConversationRoute = await readFile(
+    path.join(
+      process.cwd(),
+      "app",
+      "api",
+      "projects",
+      "[projectId]",
+      "architect",
+      "conversation",
+      "route.ts"
+    ),
+    "utf8"
+  )
+  assert(
+    architectConversationRoute.includes("export async function DELETE") &&
+      architectConversationRoute.includes("deleteArchitectConversationMessages"),
+    "Architect conversation route does not expose graph-scoped DELETE"
+  )
+  assert(
+    architectConversationRoute.includes("getAccessibleProject") &&
+      architectConversationRoute.includes("getCurrentProjectIdentity"),
+    "Architect conversation DELETE route does not enforce project access"
   )
 
   await prisma.project.deleteMany({ where: { id: projectId } })

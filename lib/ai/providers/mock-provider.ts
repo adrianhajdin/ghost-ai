@@ -663,11 +663,53 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
     currentGraph?.nodes.find((node) => input.selectedNodeIds.includes(node.id)) ??
     currentGraph?.nodes[0]
   const selectedLabel = selectedNode ? nodeLabel(selectedNode) : "the current layer"
-  const lower = input.userMessage.toLowerCase()
+  const lower = input.userMessage
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+  const isRomanian = /(esti|sunt|vreau|spune|nod|modifica|canva|aplicat|de ce|cum|da|nu|llm-ul)/.test(lower)
+  const asksIdentity =
+    /(are you|what are you|who are you|cine esti|esti.*(llm|ai|real)|llm.*real|real.*llm|ai.*real|provider.*(mock|real)|mock provider|fixture)/.test(
+      lower
+    )
   const wantsLayer = /(drill|layer|subcanvas|inside|internals|intr|strat|intra)/.test(lower)
-  const wantsPatch = /(add|create|change|update|modify|improve|review|missing|fix|adauga|adaug|modifica|schimba|imbunatat|lips)/.test(lower)
-  const wantsPromptPack = /(prompt pack|handoff|agent|builder|build|code|construi)/.test(lower)
+  const wantsReview = /(review|inspect|missing|lips|analiz|verifica|uita-te|uitate)/.test(lower)
+  const wantsPatch = /(add|create|change|update|modify|improve|fix|adauga|adaug|modifica|schimba|imbunatat)/.test(lower)
+  const wantsPromptPack = /(prompt pack|handoff|builder|build|code|construi|implement)/.test(lower)
   const wantsClarification = /(clarif|question|requirement|cerint|intreab)/.test(lower)
+
+  if (asksIdentity) {
+    return parseArchitectConversationReply({
+      $schema: ARCHITECT_CONVERSATION_SCHEMA_URL,
+      replyVersion: ARCHITECT_CONVERSATION_VERSION,
+      status: "draft",
+      intent: "answer",
+      assistantMessage: {
+        role: "assistant",
+        content: input.isMockProvider
+          ? isRomanian
+            ? "Nu, in acest workspace Architect foloseste providerul local mock: raspunsuri fixture deterministe pentru dezvoltare si smoke tests. Nu este conectat la un LLM extern."
+            : "No. In this workspace Architect is using the local mock provider: deterministic fixture replies for development and smoke tests, not an external LLM."
+          : isRomanian
+            ? "Da, configuratia curenta foloseste un provider LLM extern prin abstractia Arc Forge. Eu propun schimbari pentru canvas; nu construiesc aplicatia si nu aplic modificari fara actiunea ta."
+            : "Yes. The current configuration uses an external LLM through Arc Forge's provider abstraction. I propose canvas changes; I do not build the app or apply changes without your action.",
+      },
+      canvasPatchProposal: null,
+      promptPackHandoff: {
+        recommended: false,
+        reason: "",
+        suggestedTargetAgents: ["codex"],
+        suggestedScopeMode: "full-project",
+      },
+      clarificationQuestions: [],
+      assumptions: input.isMockProvider
+        ? ["Mock provider output is a local fixture used for development and smoke tests."]
+        : [],
+      warnings: [],
+      suggestedNextSteps: [],
+    })
+  }
+
   const operations =
     wantsLayer && currentGraph && selectedNode
       ? [
@@ -724,6 +766,28 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
         : []
 
   const hasPatch = operations.length > 0
+  const graphCount = input.canvasPyramid.graphs.length
+  const nodeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.nodes.length,
+    0
+  )
+  const edgeCount = input.canvasPyramid.graphs.reduce(
+    (count, graph) => count + graph.edges.length,
+    0
+  )
+  const patchContent = isRomanian
+    ? `Am pregatit o propunere pentru ${selectedLabel}. Verific-o in preview si aplic-o doar daca arata bine.`
+    : `I prepared a proposal for ${selectedLabel}. Review the preview and apply it only if it looks right.`
+  const reviewContent = isRomanian
+    ? `Pe acest layer vad ${nodeCount} noduri si ${edgeCount} relatii in ${graphCount} layer(e). Pot rafina un nod selectat, pot crea un subcanvas, sau pot lista piesele lipsa fara sa modific canvasul.`
+    : `On this layer I see ${nodeCount} nodes and ${edgeCount} relationships across ${graphCount} layer(s). I can refine a selected node, create a subcanvas, or list missing pieces without changing the canvas.`
+  const promptPackContent = isRomanian
+    ? "Pot pregati handoff-ul pentru Prompt Pack cand arhitectura este gata. Inainte de asta as pastra modificarile pe canvas mici si aprobate una cate una."
+    : "I can prepare the Prompt Pack handoff when the architecture is ready. Before that, I would keep canvas changes small and user-approved one at a time."
+  const directContent = isRomanian
+    ? "Pot lucra ca Architect pe canvasul existent, comanda cu comanda. Spune-mi nodul sau layerul pe care vrei sa il schimb si iti propun intai patch-ul, fara sa aplic nimic automat."
+    : "I can work as Architect on the existing canvas, one command at a time. Tell me which node or layer to change and I will propose the patch first without applying anything automatically."
+
   return parseArchitectConversationReply({
     $schema: ARCHITECT_CONVERSATION_SCHEMA_URL,
     replyVersion: ARCHITECT_CONVERSATION_VERSION,
@@ -734,12 +798,18 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
         ? "clarify"
       : wantsPromptPack
         ? "prompt-pack-ready"
-        : "inspect-canvas",
+        : wantsReview
+          ? "inspect-canvas"
+          : "answer",
     assistantMessage: {
       role: "assistant",
       content: hasPatch
-        ? `Am pregatit o propunere de modificare pentru ${selectedLabel}. O poti aplica pe canvas daca arata bine.`
-        : `Am revizuit canvasul curent: ${input.canvasPyramid.graphs.length} layer(e), ${input.canvasPyramid.graphs.reduce((count, graph) => count + graph.nodes.length, 0)} noduri si ${input.canvasPyramid.graphs.reduce((count, graph) => count + graph.edges.length, 0)} relatii. Putem rafina nodurile cheie sau putem pregati Prompt Pack-ul cand esti multumit de arhitectura.`,
+        ? patchContent
+        : wantsPromptPack
+          ? promptPackContent
+          : wantsReview
+            ? reviewContent
+            : directContent,
     },
     canvasPatchProposal: hasPatch
       ? {
@@ -750,10 +820,10 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
         }
       : null,
     promptPackHandoff: {
-      recommended: wantsPromptPack || (!hasPatch && currentGraph?.nodes.length > 0),
+      recommended: wantsPromptPack,
       reason: wantsPromptPack
         ? "User asked for build handoff/prompt guidance."
-        : "The canvas has enough architecture context for an initial implementation Prompt Pack.",
+        : "",
       suggestedTargetAgents: ["codex"],
       suggestedScopeMode: "full-project",
     },
@@ -768,7 +838,9 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
     warnings: [],
     suggestedNextSteps: hasPatch
       ? ["Review and apply the proposed canvas patch, then ask for the next refinement."]
-      : ["Ask for a specific node refinement or open Prompt Pack for implementation handoff."],
+      : wantsPromptPack
+        ? ["Open Prompt Pack when you are ready to hand the architecture to an implementation agent."]
+        : ["Ask for a specific node refinement, layer review, or drill-down proposal."],
   })
 }
 
