@@ -17,6 +17,7 @@ model Project {
   specs          ProjectSpec[]
   aiTaskRuns     AiTaskRun[]
   realtimeEvents RealtimeRoomEvent[]
+  architectMessages ArchitectConversationMessage[]
 
   @@index([ownerId])
   @@index([createdAt])
@@ -44,4 +45,28 @@ model ProjectCollaborator {
   @@unique([projectId, email])
   @@index([email])
   @@index([projectId, createdAt])
+}
+
+enum ArchitectConversationRole {
+  user
+  assistant
+}
+
+model ArchitectConversationMessage {
+  id          String                    @id @default(cuid())
+  projectId   String
+  graphId     String
+  userId      String
+  role        ArchitectConversationRole
+  content     String
+  metadata    Json?
+  linkedRunId String?
+  createdAt   DateTime                  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, graphId, createdAt])
+  @@index([userId])
+  @@index([linkedRunId])
 }

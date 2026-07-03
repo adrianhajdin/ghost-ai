@@ -115,6 +115,10 @@ async function main() {
     !(legacyDesignMethodName in (mockProvider as object)),
     "mock provider must not expose the legacy design action method"
   )
+  assert(
+    typeof mockProvider.generateArchitectReply === "function",
+    "mock provider should expose the Architect conversation method"
+  )
 
   const draft = await mockProvider.generateArchitectureDraft({
     prompt: "Design an event-driven billing platform",
@@ -218,6 +222,73 @@ async function main() {
   assert(promptPack.layerPrompts.length === 1, "mock Prompt Pack should return a layer prompt")
   assert(promptPack.nodePrompts.length >= 1, "mock Prompt Pack should return node prompts")
 
+  const architectReply = await mockProvider.generateArchitectReply({
+    projectId: "project-ai-provider-smoke",
+    projectName: "AI Provider Smoke",
+    currentGraphId: ROOT_GRAPH_ID,
+    userId: "user-ai-provider-smoke",
+    userMessage: "Improve the selected node responsibilities",
+    selectedNodeIds: ["billing-service"],
+    recentMessages: [
+      {
+        role: "user",
+        content: "Can you review billing?",
+        createdAt: new Date().toISOString(),
+      },
+    ],
+    canvasPyramid: {
+      projectId: "project-ai-provider-smoke",
+      rootGraphId: ROOT_GRAPH_ID,
+      graphs: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          scopeKind: "system-root",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          summary: null,
+          nodes: smokeNodes.map((node) => ({
+            id: node.id,
+            type: node.type,
+            position: node.position,
+            data: node.data,
+          })),
+          edges: smokeEdges.map((edge) => ({
+            id: edge.id,
+            source: edge.source,
+            target: edge.target,
+            sourceHandle: edge.sourceHandle,
+            targetHandle: edge.targetHandle,
+            type: edge.type,
+            data: edge.data ?? {},
+          })),
+        },
+      ],
+      graphIndex: [
+        {
+          graphId: ROOT_GRAPH_ID,
+          title: "System",
+          parentGraphId: null,
+          parentNodeId: null,
+          layer: null,
+          layerKind: null,
+          nodeCount: smokeNodes.length,
+          edgeCount: smokeEdges.length,
+        },
+      ],
+    },
+  })
+  assert(
+    architectReply.assistantMessage.content.length > 0,
+    "mock Architect should return an assistant message"
+  )
+  assert(
+    (architectReply.canvasPatchProposal?.operations.length ?? 0) > 0,
+    "mock Architect should return a user-approved canvas patch proposal"
+  )
+
   clearAiEnv()
   process.env.AI_PROVIDER = "unknown"
   expectThrows(() => getAiProvider(), "AI_PROVIDER")
@@ -232,6 +303,10 @@ async function main() {
   assert(
     !(legacyDesignMethodName in (googleProvider as object)),
     "google provider must not expose the legacy design action method"
+  )
+  assert(
+    typeof googleProvider.generateArchitectReply === "function",
+    "google provider should expose the Architect conversation method"
   )
 
   clearAiEnv()
@@ -253,6 +328,10 @@ async function main() {
   assert(
     !(legacyDesignMethodName in (openAiCompatibleProvider as object)),
     "openai_compatible provider must not expose the legacy design action method"
+  )
+  assert(
+    typeof openAiCompatibleProvider.generateArchitectReply === "function",
+    "openai_compatible provider should expose the Architect conversation method"
   )
 
   console.log("ai provider smoke passed")

@@ -12,6 +12,10 @@ import {
   runPromptPackTask,
 } from "@/lib/ai-tasks/task-handlers/prompt-pack-handler"
 import {
+  ArchitectConversationPayloadSchema,
+  runArchitectConversationTask,
+} from "@/lib/ai-tasks/task-handlers/architect-conversation-handler"
+import {
   appendAiTaskEvent,
   getSafeWorkerError,
   heartbeatTask,
@@ -67,6 +71,10 @@ async function runHandler(run: AiTaskRun) {
     case AiTaskType.prompt_pack: {
       const payload = PromptPackPayloadSchema.parse(run.payloadJson)
       return runPromptPackTask(payload)
+    }
+    case AiTaskType.architect_conversation: {
+      const payload = ArchitectConversationPayloadSchema.parse(run.payloadJson)
+      return runArchitectConversationTask(payload, run.id)
     }
     default: {
       const exhaustive: never = run.type

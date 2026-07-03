@@ -118,6 +118,7 @@ export function EditorWorkspaceClient({
             roomId={roomId}
             projectId={currentProject.id}
             graphId={graphId}
+            selectedNodeIds={selectedNodeIds}
             onOpenPromptPack={() => setPromptPackOpen(true)}
           />
 

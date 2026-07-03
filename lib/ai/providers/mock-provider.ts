@@ -12,6 +12,13 @@ import type {
   GeneratePromptPackResult,
 } from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 import {
+  ARCHITECT_CONVERSATION_SCHEMA_URL,
+  ARCHITECT_CONVERSATION_VERSION,
+  parseArchitectConversationReply,
+  type GenerateArchitectReplyInput,
+  type GenerateArchitectReplyResult,
+} from "@/lib/ai/architect/architect-provider-contract"
+import {
   ARCHITECTURE_DRAFT_SCHEMA_URL,
   ARCHITECTURE_DRAFT_VERSION,
   parseArchitectureDraftProposal,
@@ -648,6 +655,123 @@ function mockPromptPack(input: GeneratePromptPackInput): GeneratePromptPackResul
   })
 }
 
+function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchitectReplyResult {
+  const currentGraph =
+    input.canvasPyramid.graphs.find((graph) => graph.graphId === input.currentGraphId) ??
+    input.canvasPyramid.graphs[0]
+  const selectedNode =
+    currentGraph?.nodes.find((node) => input.selectedNodeIds.includes(node.id)) ??
+    currentGraph?.nodes[0]
+  const selectedLabel = selectedNode ? nodeLabel(selectedNode) : "the current layer"
+  const lower = input.userMessage.toLowerCase()
+  const wantsLayer = /(drill|layer|subcanvas|inside|internals|intr|strat|intra)/.test(lower)
+  const wantsPatch = /(add|create|change|update|modify|improve|review|missing|fix|adauga|adaug|modifica|schimba|imbunatat|lips)/.test(lower)
+  const wantsPromptPack = /(prompt pack|handoff|agent|builder|build|code|construi)/.test(lower)
+  const wantsClarification = /(clarif|question|requirement|cerint|intreab)/.test(lower)
+  const operations =
+    wantsLayer && currentGraph && selectedNode
+      ? [
+          {
+            op: "create-layer" as const,
+            parentGraphId: currentGraph.graphId,
+            parentNodeId: selectedNode.id,
+            graph: {
+              title: `${selectedLabel} Internals`,
+              layerKind: "service-internals",
+              summary: `Mock Architect proposed a focused drill-down layer for ${selectedLabel}.`,
+              nodes: [
+                {
+                  id: "entrypoint",
+                  label: `${selectedLabel} Entrypoint`,
+                  semanticType: "endpoint-group",
+                  description: `Defines the public operations owned by ${selectedLabel}.`,
+                },
+                {
+                  id: "core-module",
+                  label: `${selectedLabel} Core Module`,
+                  semanticType: "module",
+                  description: `Coordinates validation, orchestration, and domain behavior for ${selectedLabel}.`,
+                },
+              ],
+              edges: [
+                {
+                  source: "entrypoint",
+                  target: "core-module",
+                  semanticType: "invokes",
+                  label: "routes command",
+                  labels: ["routes command"],
+                },
+              ],
+            },
+          },
+        ]
+      : wantsPatch && currentGraph && selectedNode
+        ? [
+            {
+              op: "update-node" as const,
+              graphId: currentGraph.graphId,
+              nodeId: selectedNode.id,
+              patch: {
+                description:
+                  typeof selectedNode.data.description === "string" &&
+                  selectedNode.data.description.trim()
+                    ? selectedNode.data.description
+                    : `Architect review: ${selectedLabel} should declare its runtime responsibility, ownership boundary, and data contracts before handoff.`,
+                status: "approved",
+              },
+            },
+          ]
+        : []
+
+  const hasPatch = operations.length > 0
+  return parseArchitectConversationReply({
+    $schema: ARCHITECT_CONVERSATION_SCHEMA_URL,
+    replyVersion: ARCHITECT_CONVERSATION_VERSION,
+    status: "draft",
+    intent: hasPatch
+      ? "propose-canvas-changes"
+      : wantsClarification
+        ? "clarify"
+      : wantsPromptPack
+        ? "prompt-pack-ready"
+        : "inspect-canvas",
+    assistantMessage: {
+      role: "assistant",
+      content: hasPatch
+        ? `Am pregatit o propunere de modificare pentru ${selectedLabel}. O poti aplica pe canvas daca arata bine.`
+        : `Am revizuit canvasul curent: ${input.canvasPyramid.graphs.length} layer(e), ${input.canvasPyramid.graphs.reduce((count, graph) => count + graph.nodes.length, 0)} noduri si ${input.canvasPyramid.graphs.reduce((count, graph) => count + graph.edges.length, 0)} relatii. Putem rafina nodurile cheie sau putem pregati Prompt Pack-ul cand esti multumit de arhitectura.`,
+    },
+    canvasPatchProposal: hasPatch
+      ? {
+          summary: wantsLayer
+            ? `Create a drill-down layer for ${selectedLabel}.`
+            : `Refine ${selectedLabel} metadata from the Architect conversation.`,
+          operations,
+        }
+      : null,
+    promptPackHandoff: {
+      recommended: wantsPromptPack || (!hasPatch && currentGraph?.nodes.length > 0),
+      reason: wantsPromptPack
+        ? "User asked for build handoff/prompt guidance."
+        : "The canvas has enough architecture context for an initial implementation Prompt Pack.",
+      suggestedTargetAgents: ["codex"],
+      suggestedScopeMode: "full-project",
+    },
+    clarificationQuestions: wantsClarification
+      ? [
+          "Which user roles and tenant boundary should this architecture prioritize first?",
+        ]
+      : [],
+    assumptions: [
+      "Mock provider output is a local fixture used for development and smoke tests.",
+    ],
+    warnings: [],
+    suggestedNextSteps: hasPatch
+      ? ["Review and apply the proposed canvas patch, then ask for the next refinement."]
+      : ["Ask for a specific node refinement or open Prompt Pack for implementation handoff."],
+  })
+}
+
 export class MockAiProvider implements AiProvider {
   readonly name = "mock" as const
 
@@ -703,5 +827,11 @@ export class MockAiProvider implements AiProvider {
     input: GeneratePromptPackInput
   ): Promise<GeneratePromptPackResult> {
     return mockPromptPack(input)
+  }
+
+  async generateArchitectReply(
+    input: GenerateArchitectReplyInput
+  ): Promise<GenerateArchitectReplyResult> {
+    return mockArchitectReply(input)
   }
 }

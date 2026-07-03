@@ -2,6 +2,7 @@ enum AiTaskType {
   generate_spec
   architecture_draft
   prompt_pack
+  architect_conversation
 }
 
 enum AiTaskStatus {

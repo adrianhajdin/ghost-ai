@@ -27,6 +27,7 @@
     "test:design-ir": "tsx scripts/design-ir-smoke.ts",
     "test:prompt-pack": "tsx scripts/prompt-pack-smoke.ts",
     "test:architecture-draft": "tsx scripts/architecture-draft-smoke.ts",
+    "test:architect-conversation": "tsx scripts/architect-conversation-smoke.ts",
     "db:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

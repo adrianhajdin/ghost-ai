@@ -25,6 +25,14 @@ import {
   type GeneratePromptPackResult,
 } from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 import {
+  ArchitectConversationReplySchema,
+  buildArchitectSystemPrompt,
+  buildArchitectUserPrompt,
+  parseArchitectConversationReply,
+  type GenerateArchitectReplyInput,
+  type GenerateArchitectReplyResult,
+} from "@/lib/ai/architect/architect-provider-contract"
+import {
   LlmPromptPackProposalSchema,
   parseLlmPromptPackProposal,
 } from "@/lib/prompt-pack/llm-prompt-pack"
@@ -82,5 +90,19 @@ export class GoogleAiProvider implements AiProvider {
     })
 
     return parseLlmPromptPackProposal(result.object)
+  }
+
+  async generateArchitectReply(
+    input: GenerateArchitectReplyInput
+  ): Promise<GenerateArchitectReplyResult> {
+    const google = createGoogleGenerativeAI({ apiKey: this.apiKey })
+    const result = await generateObject({
+      model: google(getGoogleSpecModel()),
+      schema: ArchitectConversationReplySchema,
+      system: buildArchitectSystemPrompt(),
+      prompt: buildArchitectUserPrompt(input),
+    })
+
+    return parseArchitectConversationReply(result.object)
   }
 }

@@ -503,8 +503,14 @@ async function main() {
     "utf8"
   )
   assert(
-    aiSidebarSource.includes("architecture-draft"),
-    "Architecture Draft flow is not reachable from AI sidebar"
+    aiSidebarSource.includes("/api/ai/architect") &&
+      aiSidebarSource.includes("Open Prompt Pack"),
+    "Architect conversation or Prompt Pack handoff is not reachable from AI sidebar"
+  )
+  const legacyAiDesignRoute = ["", "api", "ai", "design"].join("/")
+  assert(
+    !aiSidebarSource.includes(legacyAiDesignRoute),
+    "AI sidebar still calls the legacy design route"
   )
   const semanticInspectorSource = await readFile(
     path.join(process.cwd(), "components/editor/canvas/semantic-inspector.tsx"),
