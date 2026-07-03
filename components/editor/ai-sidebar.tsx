@@ -144,6 +144,23 @@ function formatIsoTime(createdAt: string): string {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
+function scrollScrollAreaToBottom(scrollArea: HTMLDivElement | null) {
+  const viewport = scrollArea?.querySelector<HTMLElement>(
+    "[data-radix-scroll-area-viewport]"
+  )
+  const scrollTarget = viewport ?? scrollArea
+  if (scrollTarget) {
+    scrollTarget.scrollTop = scrollTarget.scrollHeight
+  }
+}
+
+function getArchitectStartErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message && error.message !== "Failed to fetch") {
+    return error.message
+  }
+  return "Architect connection dropped before the request started. Check that local realtime/app services are connected, then try again."
+}
+
 export function AiSidebar({
   isOpen,
   onClose,
@@ -174,6 +191,9 @@ export function AiSidebar({
     useState<LlmCanvasImprovementProposal | null>(null)
   const [architectError, setArchitectError] = useState<string | null>(null)
   const [architectApplyMessage, setArchitectApplyMessage] = useState<string | null>(null)
+  const [animatedArchitectMessageIds, setAnimatedArchitectMessageIds] = useState<Set<string>>(
+    () => new Set()
+  )
   const [isApplyingArchitectPatch, setIsApplyingArchitectPatch] = useState(false)
   const architectTextareaRef = useRef<HTMLTextAreaElement>(null)
   const architectScrollRef = useRef<HTMLDivElement>(null)
@@ -262,10 +282,21 @@ export function AiSidebar({
   }, [fetchArchitectHistory, isOpen])
 
   useEffect(() => {
-    if (architectScrollRef.current) {
-      architectScrollRef.current.scrollTop = architectScrollRef.current.scrollHeight
-    }
+    scrollScrollAreaToBottom(architectScrollRef.current)
   }, [architectMessages.length, architectPatchProposal])
+
+  const scrollArchitectToBottom = useCallback(() => {
+    scrollScrollAreaToBottom(architectScrollRef.current)
+  }, [])
+
+  const handleArchitectMessageStreamDone = useCallback((messageId: string) => {
+    setAnimatedArchitectMessageIds((prev) => {
+      if (!prev.has(messageId)) return prev
+      const next = new Set(prev)
+      next.delete(messageId)
+      return next
+    })
+  }, [])
 
   const handleArchitectRunTerminal = useCallback(
     (status: string, output: unknown) => {
@@ -298,6 +329,11 @@ export function AiSidebar({
 
       if (typedOutput.assistantMessage) {
         const assistantMessage = typedOutput.assistantMessage
+        setAnimatedArchitectMessageIds((prev) => {
+          const next = new Set(prev)
+          next.add(assistantMessage.id)
+          return next
+        })
         setArchitectMessages((prev) => {
           if (prev.some((message) => message.id === assistantMessage.id)) {
             return prev
@@ -432,9 +468,7 @@ export function AiSidebar({
         setArchitectMessages((prev) =>
           prev.filter((item) => item.id !== tempMessage.id)
         )
-        setArchitectError(
-          error instanceof Error ? error.message : "Failed to start Architect."
-        )
+        setArchitectError(getArchitectStartErrorMessage(error))
         broadcastRoomEvent({
           type: "ai.status",
           payload: {
@@ -783,6 +817,8 @@ export function AiSidebar({
                   <div className="flex flex-col gap-3">
                     {architectMessages.map((message) => {
                       const isUser = message.role === "user"
+                      const shouldAnimate =
+                        !isUser && animatedArchitectMessageIds.has(message.id)
                       return (
                         <div
                           key={message.id}
@@ -809,8 +845,18 @@ export function AiSidebar({
                                 ? "rounded-br-sm bg-accent-ai font-medium text-white"
                                 : "rounded-bl-sm border border-border-subtle bg-bg-elevated"
                             )}
+                            aria-live={shouldAnimate ? "polite" : undefined}
                           >
-                            {message.content}
+                            {isUser ? (
+                              message.content
+                            ) : (
+                              <StreamingArchitectMessageContent
+                                content={message.content}
+                                animate={shouldAnimate}
+                                onStep={scrollArchitectToBottom}
+                                onDone={() => handleArchitectMessageStreamDone(message.id)}
+                              />
+                            )}
                           </div>
                         </div>
                       )
@@ -1081,6 +1127,58 @@ export function AiSidebar({
         </TabsContent>
       </Tabs>
     </aside>
+    </>
+  )
+}
+
+function StreamingArchitectMessageContent({
+  content,
+  animate,
+  onStep,
+  onDone,
+}: {
+  content: string
+  animate: boolean
+  onStep: () => void
+  onDone: () => void
+}) {
+  const [visibleLength, setVisibleLength] = useState(animate ? 0 : content.length)
+  const onStepRef = useRef(onStep)
+  const onDoneRef = useRef(onDone)
+  const visibleContent = animate ? content.slice(0, visibleLength) : content
+
+  useEffect(() => {
+    onStepRef.current = onStep
+    onDoneRef.current = onDone
+  }, [onDone, onStep])
+
+  useEffect(() => {
+    if (!animate) return
+
+    let cursor = 0
+
+    const intervalId = window.setInterval(() => {
+      const remaining = content.length - cursor
+      const step = remaining > 480 ? 12 : remaining > 220 ? 8 : 4
+      cursor = Math.min(content.length, cursor + step)
+      setVisibleLength(cursor)
+      onStepRef.current()
+
+      if (cursor >= content.length) {
+        window.clearInterval(intervalId)
+        onDoneRef.current()
+      }
+    }, 26)
+
+    return () => window.clearInterval(intervalId)
+  }, [animate, content])
+
+  return (
+    <>
+      {visibleContent}
+      {animate && visibleContent.length < content.length ? (
+        <span className="ml-0.5 inline-block h-3 w-1 translate-y-0.5 animate-pulse rounded-full bg-accent-ai-text" />
+      ) : null}
     </>
   )
 }
