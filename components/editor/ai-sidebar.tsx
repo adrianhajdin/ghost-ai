@@ -882,9 +882,9 @@ export function AiSidebar({
 
         {/* Architect Tab */}
         <TabsContent value="architect" className="min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full flex-col">
-            <ScrollArea className="flex-1" ref={architectScrollRef as React.Ref<HTMLDivElement>}>
-              <div className="grid gap-3 px-4 py-3">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="shrink-0 border-b border-border-default bg-bg-surface/95 px-4 py-3">
+              <div className="grid gap-3">
                 <div className="grid grid-cols-3 gap-2">
                   <MetricPill label="Nodes" value={nodes.length} />
                   <MetricPill label="Edges" value={edges.length} />
@@ -940,7 +940,14 @@ export function AiSidebar({
                     <span>Realtime disconnected — canvas may not be fully synced.</span>
                   </div>
                 ) : null}
+              </div>
+            </div>
 
+            <ScrollArea
+              className="min-h-0 flex-1 overflow-hidden"
+              ref={architectScrollRef as React.Ref<HTMLDivElement>}
+            >
+              <div className="grid gap-3 px-4 py-3 pb-4">
                 {architectMessages.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 rounded-2xl border border-border-subtle bg-bg-elevated px-4 py-8 text-center">
                     <Bot className="h-6 w-6 text-accent-ai-text" />
