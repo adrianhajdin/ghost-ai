@@ -2,9 +2,9 @@
 
 ## Overview
 
-Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Users capture application architecture intent on a shared layered React Flow canvas; AI can propose architecture drafts and deeper design layers, the user approves before applying, the product stores the canvas, compiles canonical Design IR, and lets the LLM generate copy/download Prompt Pack instruction artifacts directly from the canvas pyramid for external coding agents.
+Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. Users capture application architecture intent on a shared layered React Flow canvas; Architect is the single LLM architecture surface where users can talk with the LLM, clarify requirements, inspect layers, and preview/apply LLM-proposed canvas changes. The product stores the canvas, compiles canonical Design IR, and lets the LLM generate copy/download Prompt Pack instruction artifacts directly from the canvas pyramid for external coding agents.
 
-The canvas is a layered architecture pyramid: root context at the top, deeper layers for internal detail. The LLM is responsible for architectural intelligence and layering. Deterministic code only handles canvas storage, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
+The canvas is a layered architecture pyramid: root context at the top, deeper layers for internal detail. The LLM is responsible for architectural intelligence, layering, and prompt writing. Deterministic code only handles canvas storage, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, conversation persistence, and export/download.
 
 The LLM is responsible for Prompt Pack content. Prompt Packs are generated directly from sanitized CanvasDoc pyramid JSON, not from deterministic Design IR summaries. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs, build the app, or write to external repositories. Nimbus is not included yet and is not a Prompt Pack target in this version.
 
@@ -13,7 +13,7 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 1. Let authenticated users create and manage architecture projects.
 2. Provide a collaborative real-time semantic canvas for system design.
 3. Let users import prebuilt starter system designs into the canvas.
-4. Let AI propose an initial architecture draft from a natural language prompt.
+4. Let users refine architecture through a conversational LLM Architect workspace.
 5. Let collaborators refine the generated architecture and attach semantic metadata.
 6. Convert the final graph into durable architecture artifacts such as Markdown technical specs, canonical Design IR, and LLM-authored Prompt Pack instructions for external implementation agents.
 
@@ -23,11 +23,11 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 2. User creates or selects a project.
 3. User enters the project workspace.
 4. User optionally imports a starter system design template into the canvas.
-5. User asks AI for an architecture draft proposal.
-6. User reviews validation, warnings, nodes, and relations before accepting.
-7. Accepted drafts append semantic nodes and edges to the shared canvas.
-8. Collaborators edit, classify, and refine the design.
-9. User generates, previews, copies, or downloads LLM-authored Prompt Pack instruction artifacts.
+5. User talks with Architect to inspect the current canvas/layer, ask questions, refine selected nodes, add missing pieces, or prepare for Prompt Pack generation.
+6. Architect replies conversationally and may propose non-destructive canvas changes.
+7. User previews proposed changes and explicitly applies them before the canvas mutates.
+8. Collaborators edit, classify, and refine the design while Chat remains human collaborator chat.
+9. User generates, previews, copies, or downloads LLM-authored Prompt Pack instruction artifacts through the Prompt Pack flow.
 10. User triggers spec generation when they need a persisted Markdown technical spec.
 11. App persists the generated Markdown spec.
 12. User reviews or downloads the spec.
@@ -68,6 +68,14 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 - Accepted drafts are append-only and run through deterministic transport/safety validation, sanitization, CanvasDoc persistence, and realtime publication.
 - Arc Forge does not execute or build the app.
 - Architect is the single LLM architecture surface. There is no legacy design generator route or old canvas-design runtime.
+
+### Architect Conversational Workspace
+
+- Architect is conversational: users can describe an app, ask questions, clarify requirements, inspect the current layer, refine nodes/edges/layers, ask what is missing, create deeper layers, and prepare the architecture before Prompt Pack generation.
+- Architect reads the sanitized CanvasDoc pyramid JSON directly, including root graph, linked child graphs, nested layers, metadata, custom architecture types, labels, descriptions, assumptions, warnings, and subcanvasRef values.
+- Architect conversation messages are persisted per project/graph and kept separate from collaborator Chat.
+- Architect may return clarification questions, assumptions, warnings, suggested next steps, Prompt Pack handoff guidance, and optional canvas patch proposals.
+- LLM canvas changes are previewed and applied only after explicit user approval. Arc Forge does not auto-apply, execute, build apps, generate app source code, or write external repositories.
 
 ### Spec Generation
 

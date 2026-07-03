@@ -22,6 +22,13 @@ import {
   type GeneratePromptPackResult,
 } from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
 import { parseLlmPromptPackProposal } from "@/lib/prompt-pack/llm-prompt-pack"
+import {
+  buildArchitectSystemPrompt,
+  buildArchitectUserPrompt,
+  parseArchitectConversationReply,
+  type GenerateArchitectReplyInput,
+  type GenerateArchitectReplyResult,
+} from "@/lib/ai/architect/architect-provider-contract"
 
 const ChatCompletionResponseSchema = z.object({
   choices: z
@@ -147,5 +154,20 @@ export class OpenAiCompatibleProvider implements AiProvider {
     })
 
     return parseLlmPromptPackProposal(extractJsonObject(content))
+  }
+
+  async generateArchitectReply(
+    input: GenerateArchitectReplyInput
+  ): Promise<GenerateArchitectReplyResult> {
+    const content = await this.chatCompletion({
+      model: this.specModel,
+      json: true,
+      messages: [
+        { role: "system", content: buildArchitectSystemPrompt() },
+        { role: "user", content: buildArchitectUserPrompt(input) },
+      ],
+    })
+
+    return parseArchitectConversationReply(extractJsonObject(content))
   }
 }

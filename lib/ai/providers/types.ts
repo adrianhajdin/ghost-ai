@@ -7,6 +7,10 @@ import type {
   GeneratePromptPackInput,
   GeneratePromptPackResult,
 } from "@/lib/ai/prompt-pack/prompt-pack-provider-contract"
+import type {
+  GenerateArchitectReplyInput,
+  GenerateArchitectReplyResult,
+} from "@/lib/ai/architect/architect-provider-contract"
 
 export type AiProviderName = "mock" | "google" | "openai_compatible"
 
@@ -17,6 +21,9 @@ export interface AiProvider {
     input: GenerateArchitectureDraftInput
   ): Promise<GenerateArchitectureDraftResult>
   generatePromptPack(input: GeneratePromptPackInput): Promise<GeneratePromptPackResult>
+  generateArchitectReply(
+    input: GenerateArchitectReplyInput
+  ): Promise<GenerateArchitectReplyResult>
 }
 
 export class AiProviderConfigError extends Error {

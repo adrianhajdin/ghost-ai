@@ -8,7 +8,7 @@ import { getAccessibleProject, getCurrentProjectIdentity } from "@/lib/project-a
 
 const AI_USER_ID = "arc-forge-ai"
 
-const ApplyPromptPackCanvasPatchSchema = z.object({
+const ApplyArchitectCanvasPatchSchema = z.object({
   graphId: z.string().trim().min(1).default("graph_root"),
   proposal: z.unknown(),
 })
@@ -29,9 +29,9 @@ export async function POST(
   if (!project) return Response.json({ error: "Not found" }, { status: 404 })
 
   const body: unknown = await request.json().catch(() => ({}))
-  const parsed = ApplyPromptPackCanvasPatchSchema.safeParse(body)
+  const parsed = ApplyArchitectCanvasPatchSchema.safeParse(body)
   if (!parsed.success) {
-    return Response.json({ error: "Invalid Prompt Pack canvas patch request" }, { status: 400 })
+    return Response.json({ error: "Invalid Architect canvas patch request" }, { status: 400 })
   }
 
   let graphId: string

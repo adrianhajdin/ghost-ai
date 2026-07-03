@@ -300,5 +300,6 @@ export function getSafeWorkerError(error: unknown) {
 export function taskTypeLabel(type: AiTaskType) {
   if (type === "architecture_draft") return "Architecture draft"
   if (type === "prompt_pack") return "Prompt Pack"
+  if (type === "architect_conversation") return "Architect conversation"
   return "Spec generation"
 }

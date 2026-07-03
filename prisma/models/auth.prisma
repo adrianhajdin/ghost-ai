@@ -12,6 +12,7 @@ model User {
   passwordResetTokens     PasswordResetToken[]
   aiTaskRuns              AiTaskRun[]
   realtimeEvents          RealtimeRoomEvent[]
+  architectMessages       ArchitectConversationMessage[]
 }
 
 model PasswordCredential {
