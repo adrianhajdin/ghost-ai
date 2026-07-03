@@ -1,9 +1,5 @@
 import { AiTaskType, type AiTaskRun } from "@/app/generated/prisma/client"
 import {
-  DesignAgentPayloadSchema,
-  runDesignAgentTask,
-} from "@/lib/ai-tasks/task-handlers/design-agent-handler"
-import {
   GenerateSpecPayloadSchema,
   runGenerateSpecTask,
 } from "@/lib/ai-tasks/task-handlers/generate-spec-handler"
@@ -60,10 +56,6 @@ function sleep(ms: number, signal?: AbortSignal) {
 
 async function runHandler(run: AiTaskRun) {
   switch (run.type) {
-    case AiTaskType.design_agent: {
-      const payload = DesignAgentPayloadSchema.parse(run.payloadJson)
-      return runDesignAgentTask(payload)
-    }
     case AiTaskType.generate_spec: {
       const payload = GenerateSpecPayloadSchema.parse(run.payloadJson)
       return runGenerateSpecTask(payload)
@@ -75,6 +67,10 @@ async function runHandler(run: AiTaskRun) {
     case AiTaskType.prompt_pack: {
       const payload = PromptPackPayloadSchema.parse(run.payloadJson)
       return runPromptPackTask(payload)
+    }
+    default: {
+      const exhaustive: never = run.type
+      throw new Error(`Unsupported AI task type: ${exhaustive}`)
     }
   }
 }

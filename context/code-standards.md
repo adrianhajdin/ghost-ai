@@ -60,7 +60,7 @@
 ## File Organization
 
 - `lib/` — shared infrastructure: Prisma client, auth helpers, utilities.
-- `lib/ai/` — AI provider contracts, provider factory, provider adapters, and design/spec use-case helpers.
+- `lib/ai/` — AI provider contracts, provider factory, provider adapters, and spec/draft/prompt-pack helpers.
 - `lib/ai-tasks/` — durable AI task leasing, handlers, and worker orchestration.
 - `lib/email/` — server-only account email provider abstraction.
 - `lib/realtime/` — signed room tokens, protocol types, access checks, room state, and standalone WebSocket server logic.

@@ -11,16 +11,16 @@
 | Canvas           | React Flow              | Permanent canvas renderer and interaction layer                |
 | Realtime         | Internal WebSocket service | Collaboration runtime for room tokens, presence, canvas sync, chat/status events |
 | Background tasks | Internal AI task runner | PostgreSQL-backed durable AI generation workflows              |
-| AI providers     | Provider abstraction    | Mock, Google Gemini, and OpenAI-compatible design/spec/draft/prompt-pack generation |
+| AI providers     | Provider abstraction    | Mock, Google Gemini, and OpenAI-compatible spec/draft/prompt-pack generation |
 | Email delivery   | Email provider abstraction | Local console delivery and SMTP account email delivery      |
 | Artifact storage | Storage provider        | Canvas snapshots and generated Markdown specs                  |
 
 ## System Boundaries
 
 - `app/api` — Authenticated request handlers: input validation, ownership checks, task triggering, read-only exports, and persistence.
-- `lib/ai-tasks` — Long-running background jobs: task leasing, retries, AI design generation, spec generation, architecture drafts, and Prompt Pack generation.
+- `lib/ai-tasks` — Long-running background jobs: task leasing, retries, spec generation, architecture drafts, and Prompt Pack generation.
 - `lib/ai/providers` — Server-side AI provider selection and external model adapters.
-- `lib/ai/design` / `lib/ai/spec` / `lib/ai/architecture-draft` / `lib/ai/prompt-pack` — Provider contracts, structured design actions, draft proposals, Prompt Pack requests, and spec context helpers.
+- `lib/ai/spec` / `lib/ai/architecture-draft` / `lib/ai/prompt-pack` — Provider contracts for specs, architecture draft proposals, and LLM Prompt Pack requests.
 - `lib/architecture-draft` — Pure Architecture Draft v1 schema, validator, sanitizer, CanvasDoc append-only apply helper, collision resolution, and smoke-testable proposal utilities.
 - `lib/canvas` — Canvas snapshot sanitization, CanvasDoc v1 compatibility helpers, semantic validation, deterministic Design IR v1 compilation/export, and sanitized canvas pyramid transport for LLM Prompt Packs.
 - `lib/prompt-pack` — LLM Prompt Pack v1 transport schema, mechanical Markdown/JSON export of LLM-authored output, and canvas improvement patch apply mechanics.
@@ -71,13 +71,7 @@
 
 ## AI Generation Model
 
-### Design Generation
-
-- Input: user prompt, project context, and current canvas state.
-- Execution: durable background task via the internal PostgreSQL-backed AI task runner.
-- Provider: selected with `AI_PROVIDER=mock | google | openai_compatible`; local defaults to `mock` and requires no external key.
-- Output: structured node and edge updates written to the active provider-backed canvas graph and published into the matching internal realtime room.
-- Design provider output is validated against the allowed action schema before it can mutate canvas state.
+Architect is the single LLM architecture surface. Arc Forge no longer exposes a legacy design generator route, old canvas-design task runtime, or provider method that directly mutates canvas designs from an old action schema.
 
 ### Spec Generation
 

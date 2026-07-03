@@ -60,13 +60,6 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 - Templates are static canvas snapshots loaded directly into the active room.
 - Covers common patterns: monolith, microservices, event-driven, serverless, and more.
 
-### AI Architecture Generation
-
-- AI generates a system design from a user-supplied prompt through the configured AI provider.
-- Local development uses a deterministic mock AI provider by default; Google Gemini and OpenAI-compatible providers can be selected with server-side environment variables.
-- Output is structured as canvas nodes and edges persisted to canvas storage and published through the internal realtime room.
-- Generation runs as a durable PostgreSQL-backed background task.
-
 ### AI Architecture Drafts
 
 - AI can propose architecture drafts on the canvas from natural language.
@@ -74,6 +67,7 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 - The user approves before applying.
 - Accepted drafts are append-only and run through deterministic transport/safety validation, sanitization, CanvasDoc persistence, and realtime publication.
 - Arc Forge does not execute or build the app.
+- Architect is the single LLM architecture surface. There is no legacy design generator route or old canvas-design runtime.
 
 ### Spec Generation
 
