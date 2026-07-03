@@ -4,6 +4,12 @@ import {
   SESSION_TTL_SECONDS,
 } from "@/lib/auth/constants"
 
+function assertAuthSessionCookieName(name: string) {
+  if (!name) {
+    throw new Error("Invalid auth session cookie configuration: cookie name is empty.")
+  }
+}
+
 function getCookieOptions(expires?: Date) {
   return {
     httpOnly: true,
@@ -15,6 +21,8 @@ function getCookieOptions(expires?: Date) {
 }
 
 export async function setAuthSessionCookie(token: string, expiresAt: Date) {
+  assertAuthSessionCookieName(AUTH_SESSION_COOKIE_NAME)
+
   const cookieStore = await cookies()
 
   cookieStore.set(
@@ -25,6 +33,8 @@ export async function setAuthSessionCookie(token: string, expiresAt: Date) {
 }
 
 export async function clearAuthSessionCookie() {
+  assertAuthSessionCookieName(AUTH_SESSION_COOKIE_NAME)
+
   const cookieStore = await cookies()
 
   cookieStore.set(AUTH_SESSION_COOKIE_NAME, "", {
