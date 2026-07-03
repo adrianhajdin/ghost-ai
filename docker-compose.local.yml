@@ -26,6 +26,9 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       APP_ENV: local
       NEXT_PUBLIC_APP_ENV: local
@@ -39,7 +42,6 @@ services:
       INTERNAL_REALTIME_INTERNAL_URL: http://realtime:3001/internal/broadcast
       STORAGE_PROVIDER: local_fs
       LOCAL_STORAGE_ROOT: /app/.local-storage
-      AI_PROVIDER: mock
       EMAIL_PROVIDER: dev_console
       EMAIL_FROM: Arc Forge AI <no-reply@localhost>
     volumes:
@@ -61,7 +63,7 @@ services:
       export INTERNAL_REALTIME_INTERNAL_URL='http://realtime:3001/internal/broadcast' &&
       export STORAGE_PROVIDER='local_fs' &&
       export LOCAL_STORAGE_ROOT='/app/.local-storage' &&
-      export AI_PROVIDER='mock' &&
+      export AI_PROVIDER="$${AI_PROVIDER:-mock}" &&
       export EMAIL_PROVIDER='dev_console' &&
       export EMAIL_FROM='Arc Forge AI <no-reply@localhost>' &&
       npm install &&
@@ -90,6 +92,9 @@ services:
       app:
         condition: service_healthy
     restart: unless-stopped
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       APP_ENV: local
       DATABASE_URL: postgresql://arcforge:arcforge@postgres:5432/arcforge_ai?schema=public
@@ -100,7 +105,6 @@ services:
       INTERNAL_REALTIME_INTERNAL_URL: http://realtime:3001/internal/broadcast
       STORAGE_PROVIDER: local_fs
       LOCAL_STORAGE_ROOT: /app/.local-storage
-      AI_PROVIDER: mock
     volumes:
       - .:/app
       - ./.local-storage:/app/.local-storage
@@ -117,7 +121,7 @@ services:
       export INTERNAL_REALTIME_INTERNAL_URL='http://realtime:3001/internal/broadcast' &&
       export STORAGE_PROVIDER='local_fs' &&
       export LOCAL_STORAGE_ROOT='/app/.local-storage' &&
-      export AI_PROVIDER='mock' &&
+      export AI_PROVIDER="$${AI_PROVIDER:-mock}" &&
       npm run ai:worker"
 
   realtime:
