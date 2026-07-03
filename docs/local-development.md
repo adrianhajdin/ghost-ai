@@ -53,7 +53,7 @@ You can also press Play in Docker Desktop for `docker-compose.local.yml`.
 
 The app container installs dependencies if needed, generates Prisma Client, applies committed migrations with `prisma migrate deploy`, then starts Next.js on `0.0.0.0:3000`.
 
-The worker container waits for the app healthcheck, then starts the internal PostgreSQL-backed AI task runner. Docker local mode sets `AI_PROVIDER=mock`, so design and spec tasks complete deterministically without Google, OpenAI-compatible, or other external AI credentials.
+The worker container waits for the app healthcheck, then starts the internal PostgreSQL-backed AI task runner. Docker local mode defaults `AI_PROVIDER` to `mock`, so design and spec tasks complete deterministically without Google, OpenAI-compatible, or other external AI credentials. The app and worker also load `.env.local` as an optional Compose env file, so if `.env.local` sets `AI_PROVIDER=google` or `AI_PROVIDER=openai_compatible`, both services preserve that value for real LLM testing.
 
 The realtime container waits for PostgreSQL and the app healthcheck, then starts the internal WebSocket service. It provides authenticated room tokens, room joins, presence updates, chat/status events, canvas synchronization, and bounded payload handling. React Flow remains the canvas renderer.
 
