@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from "react"
 import ReactMarkdown from "react-markdown"
 import {
   AlertTriangle,
@@ -154,12 +154,20 @@ function formatIsoTime(createdAt: string): string {
 
 function scrollScrollAreaToBottom(scrollArea: HTMLDivElement | null) {
   const viewport = scrollArea?.querySelector<HTMLElement>(
-    "[data-radix-scroll-area-viewport]"
+    "[data-slot='scroll-area-viewport'], [data-radix-scroll-area-viewport]"
   )
   const scrollTarget = viewport ?? scrollArea
   if (scrollTarget) {
     scrollTarget.scrollTop = scrollTarget.scrollHeight
   }
+}
+
+function scrollScrollAreaToBottomAfterRender(scrollArea: HTMLDivElement | null) {
+  scrollScrollAreaToBottom(scrollArea)
+  const frameId = window.requestAnimationFrame(() => {
+    scrollScrollAreaToBottom(scrollArea)
+  })
+  return () => window.cancelAnimationFrame(frameId)
 }
 
 function getArchitectStartErrorMessage(error: unknown) {
@@ -329,12 +337,21 @@ export function AiSidebar({
     return () => window.clearTimeout(timeoutId)
   }, [fetchArchitectHistory, isOpen])
 
-  useEffect(() => {
-    scrollScrollAreaToBottom(architectScrollRef.current)
-  }, [architectMessages.length, architectPatchProposal])
+  useLayoutEffect(() => {
+    if (!isOpen) return undefined
+    return scrollScrollAreaToBottomAfterRender(architectScrollRef.current)
+  }, [
+    architectApplyMessage,
+    architectError,
+    architectMessages.length,
+    architectPatchProposal,
+    architectReply?.promptPackHandoff?.recommended,
+    isArchitectThinking,
+    isOpen,
+  ])
 
   const scrollArchitectToBottom = useCallback(() => {
-    scrollScrollAreaToBottom(architectScrollRef.current)
+    scrollScrollAreaToBottomAfterRender(architectScrollRef.current)
   }, [])
 
   const handleArchitectMessageStreamDone = useCallback((messageId: string) => {
@@ -451,9 +468,7 @@ export function AiSidebar({
 
   // Keep the collaborator chat pinned to the latest room message.
   useEffect(() => {
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
-    }
+    return scrollScrollAreaToBottomAfterRender(chatScrollRef.current)
   }, [collaboratorChatMessages.length])
 
   const handleArchitectInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -476,6 +491,9 @@ export function AiSidebar({
       }
       setArchitectMessages((prev) => [...prev, tempMessage])
       setArchitectInput("")
+      if (architectTextareaRef.current) {
+        architectTextareaRef.current.style.height = "88px"
+      }
       setArchitectError(null)
       setArchitectApplyMessage(null)
       setIsArchitectThinking(true)
@@ -515,9 +533,6 @@ export function AiSidebar({
           )
         }
         setArchitectRunId(data.runId)
-        if (architectTextareaRef.current) {
-          architectTextareaRef.current.style.height = "88px"
-        }
       } catch (error) {
         setIsArchitectThinking(false)
         patchPresence({ thinking: false })
@@ -1077,7 +1092,7 @@ export function AiSidebar({
                   placeholder="Tell Architect what to change on this canvas..."
                   disabled={isArchitectThinking}
                   style={{ height: "88px", maxHeight: "180px" }}
-                  className="resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50"
+                  className="resize-none overflow-y-auto border-0 bg-transparent px-0 py-0 pr-2 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 disabled:opacity-50 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 />
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-[10px] text-text-faint">
@@ -1192,7 +1207,7 @@ export function AiSidebar({
                   onKeyDown={handleChatKeyDown}
                   placeholder="Message collaborators…"
                   style={{ height: "72px", maxHeight: "160px" }}
-                  className="resize-none overflow-y-auto border-0 bg-transparent p-0 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0"
+                  className="resize-none overflow-y-auto border-0 bg-transparent px-0 py-0 pr-2 text-sm text-text-primary shadow-none placeholder:text-text-faint focus-visible:ring-0 focus-visible:ring-offset-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 />
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-text-faint">Shift+Enter for newline</span>
