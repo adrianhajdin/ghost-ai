@@ -308,6 +308,13 @@ function issue(
   issues.push({ operationIndex, severity, message })
 }
 
+function getExistingSubcanvasGraphId(parentNode: CanvasNode) {
+  const graphId = parentNode.data.subcanvasRef?.graphId
+  if (typeof graphId !== "string") return null
+  const trimmed = graphId.trim()
+  return isValidGraphId(trimmed) ? trimmed : null
+}
+
 function addNodeToDoc(
   doc: CanvasDocV1,
   operation: AddNodeOperation,
@@ -387,16 +394,10 @@ async function createLayer(
     issue(issues, operationIndex, "Canvas patch references a missing node.")
     return false
   }
-  if (parentNode.data.subcanvasRef?.graphId) {
-    issue(
-      issues,
-      operationIndex,
-      `Layer skipped because ${parentNode.id} already has a subcanvasRef.`
-    )
-    return false
-  }
 
-  const graphId = await uniqueGraphId(projectId, parentDoc.graphId, parentNode)
+  const existingGraphId = getExistingSubcanvasGraphId(parentNode)
+  const graphId =
+    existingGraphId ?? (await uniqueGraphId(projectId, parentDoc.graphId, parentNode))
   const now = new Date().toISOString()
   const layer =
     typeof parentDoc.layer === "number"
@@ -404,17 +405,36 @@ async function createLayer(
       : parentDoc.graphId === "graph_root"
         ? 1
         : 1
-  const childDoc = createCanvasDocV1(emptyCanvasSnapshot(), {
-    projectId,
-    graphId,
-    parentGraphId: parentDoc.graphId,
-    parentNodeId: parentNode.id,
-    scopeKind: "architecture-layer",
-    title: operation.graph.title,
-    layer,
-    layerKind: operation.graph.layerKind ?? "architecture-layer",
-    summary: operation.graph.summary ?? null,
-  })
+  const existingChildDoc = existingGraphId
+    ? await getDoc(projectId, existingGraphId, docsByGraphId)
+    : null
+  const childDoc = existingChildDoc
+    ? sanitizeDoc({
+        ...existingChildDoc,
+        parentGraphId: existingChildDoc.parentGraphId ?? parentDoc.graphId,
+        parentNodeId: existingChildDoc.parentNodeId ?? parentNode.id,
+        scopeKind:
+          existingChildDoc.scopeKind === "system-root"
+            ? "architecture-layer"
+            : existingChildDoc.scopeKind,
+        layer: existingChildDoc.layer ?? layer,
+        layerKind:
+          existingChildDoc.layerKind ??
+          operation.graph.layerKind ??
+          "architecture-layer",
+        summary: existingChildDoc.summary ?? operation.graph.summary ?? null,
+      })
+    : createCanvasDocV1(emptyCanvasSnapshot(), {
+        projectId,
+        graphId,
+        parentGraphId: parentDoc.graphId,
+        parentNodeId: parentNode.id,
+        scopeKind: "architecture-layer",
+        title: operation.graph.title,
+        layer,
+        layerKind: operation.graph.layerKind ?? "architecture-layer",
+        summary: operation.graph.summary ?? null,
+      })
   const tempIdMap = new Map<string, string>()
   let nextChildDoc = childDoc
   operation.graph.nodes.forEach((node, index) => {
@@ -435,31 +455,34 @@ async function createLayer(
     else issue(issues, operationIndex, `Child layer edge ${index + 1} references a missing node.`)
   })
 
-  const subcanvasRef = {
-    graphId,
-    scopeKind: "architecture-layer" as const,
-    title: operation.graph.title,
-    parentGraphId: parentDoc.graphId,
-    parentNodeId: parentNode.id,
-    layer,
-    layerKind: operation.graph.layerKind ?? "architecture-layer",
-    summary: operation.graph.summary,
-    createdAt: now,
-    updatedAt: now,
-    llmLayerPurpose: operation.graph.summary,
-  }
-  const nextParentDoc = sanitizeDoc({
-    ...parentDoc,
-    nodes: parentDoc.nodes.map((node) =>
-      node.id === parentNode.id
-        ? { ...node, data: { ...node.data, subcanvasRef } }
-        : node
-    ),
-  })
+  if (!existingGraphId) {
+    const subcanvasRef = {
+      graphId,
+      scopeKind: "architecture-layer" as const,
+      title: operation.graph.title,
+      parentGraphId: parentDoc.graphId,
+      parentNodeId: parentNode.id,
+      layer,
+      layerKind: operation.graph.layerKind ?? "architecture-layer",
+      summary: operation.graph.summary,
+      createdAt: now,
+      updatedAt: now,
+      llmLayerPurpose: operation.graph.summary,
+    }
+    const nextParentDoc = sanitizeDoc({
+      ...parentDoc,
+      nodes: parentDoc.nodes.map((node) =>
+        node.id === parentNode.id
+          ? { ...node, data: { ...node.data, subcanvasRef } }
+          : node
+      ),
+    })
 
-  docsByGraphId.set(parentDoc.graphId, nextParentDoc)
+    docsByGraphId.set(parentDoc.graphId, nextParentDoc)
+    dirtyGraphIds.add(parentDoc.graphId)
+  }
+
   docsByGraphId.set(graphId, nextChildDoc)
-  dirtyGraphIds.add(parentDoc.graphId)
   dirtyGraphIds.add(graphId)
   return true
 }

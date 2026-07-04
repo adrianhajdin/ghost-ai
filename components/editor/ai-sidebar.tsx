@@ -613,8 +613,11 @@ export function AiSidebar({
 
       const appliedOps = data.applied?.operations ?? architectPatchProposal.operations.length
       const skippedOps = data.applied?.skippedOperations ?? 0
+      const firstIssue = data.issues?.[0]?.message
+      const skippedSummary = skippedOps ? `, skipped ${skippedOps}` : ""
+      const issueSummary = skippedOps && firstIssue ? `: ${firstIssue}` : ""
       setArchitectApplyMessage(
-        `Applied ${appliedOps} canvas operation${appliedOps === 1 ? "" : "s"}${skippedOps ? `, skipped ${skippedOps}` : ""}.`
+        `Applied ${appliedOps} canvas operation${appliedOps === 1 ? "" : "s"}${skippedSummary}${issueSummary}.`
       )
       setArchitectPatchProposal(null)
       broadcastRoomEvent({
