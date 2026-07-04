@@ -192,6 +192,10 @@ async function main() {
   })
   assert(providerPrompt.includes('"providerName": "mock"'), "provider name missing from Architect prompt")
   assert(providerPrompt.includes('"isMockProvider": true'), "mock flag missing from Architect prompt")
+  assert(
+    providerPrompt.includes("include starter internal graph.nodes"),
+    "Architect prompt does not discourage blank create-layer proposals"
+  )
 
   const reply = await provider.generateArchitectReply({
     projectId,
@@ -326,6 +330,110 @@ async function main() {
   assert(
     skippedDelete.issues.some((issue) => issue.message.includes("Unsupported patch operation")),
     "unsupported delete operation did not return an explicit issue"
+  )
+
+  const existingLayerGraphId = "graph_architect_existing_layer_smoke"
+  const rootBeforeExistingLayerApply = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
+  assert(rootBeforeExistingLayerApply, "root graph missing before existing layer smoke")
+  await writeCanvasDoc(
+    projectId,
+    {
+      ...rootBeforeExistingLayerApply,
+      nodes: rootBeforeExistingLayerApply.nodes.map((item) =>
+        item.id === customNode.id
+          ? {
+              ...item,
+              data: {
+                ...item.data,
+                subcanvasRef: {
+                  graphId: existingLayerGraphId,
+                  scopeKind: "architecture-layer",
+                  title: "AI Orchestrator Internals",
+                },
+              },
+            }
+          : item
+      ),
+    },
+    {
+      graphId: ROOT_GRAPH_ID,
+      scopeKind: "system-root",
+      title: "Architect Conversation Smoke",
+    }
+  )
+  await writeCanvasDoc(
+    projectId,
+    createCanvasDocV1(
+      { nodes: [], edges: [] },
+      {
+        projectId,
+        graphId: existingLayerGraphId,
+        parentGraphId: ROOT_GRAPH_ID,
+        parentNodeId: customNode.id,
+        scopeKind: "architecture-layer",
+        title: "AI Orchestrator Internals",
+        layer: 1,
+        layerKind: "custom-ai-layer",
+      }
+    ),
+    {
+      graphId: existingLayerGraphId,
+      parentGraphId: ROOT_GRAPH_ID,
+      parentNodeId: customNode.id,
+      scopeKind: "architecture-layer",
+      title: "AI Orchestrator Internals",
+      layer: 1,
+      layerKind: "custom-ai-layer",
+    }
+  )
+  const existingLayerApply = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: {
+      summary: "Populate an existing drill-down layer.",
+      operations: [
+        {
+          op: "create-layer",
+          parentGraphId: ROOT_GRAPH_ID,
+          parentNodeId: customNode.id,
+          graph: {
+            title: "AI Orchestrator Internals",
+            layerKind: "custom-ai-layer",
+            summary: "Reuse the existing child layer and add starter internals.",
+            nodes: [
+              {
+                id: "routing-policy",
+                label: "Routing Policy",
+                semanticType: "policy",
+                description: "Chooses which model/tool path handles each request.",
+              },
+            ],
+            edges: [],
+          },
+        },
+      ],
+    },
+  })
+  assert(
+    existingLayerApply.applied.createLayers === 1,
+    "existing create-layer was not applied"
+  )
+  assert(
+    existingLayerApply.applied.skippedOperations === 0,
+    "existing create-layer should not be skipped"
+  )
+  const existingLayerDoc = await readCanvasDoc(projectId, existingLayerGraphId)
+  assert(
+    existingLayerDoc?.nodes.some((item) => item.id === "routing-policy"),
+    "existing child layer did not receive proposed nodes"
+  )
+  const rootAfterExistingLayerApply = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
+  const customNodeAfterExistingLayerApply = rootAfterExistingLayerApply?.nodes.find(
+    (item) => item.id === customNode.id
+  )
+  assert(
+    customNodeAfterExistingLayerApply?.data.subcanvasRef?.graphId === existingLayerGraphId,
+    "existing child layer reference was not preserved"
   )
 
   const childGraphId = "graph_architect_child_smoke"
