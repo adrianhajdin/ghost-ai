@@ -81,7 +81,8 @@ export async function createArchitectConversationMessage(input: {
 
 export async function listArchitectConversationMessages(input: {
   projectId: string
-  graphId: string
+  graphId?: string
+  scope?: "project" | "graph"
   take?: number
 }) {
   const take = Math.min(
@@ -91,7 +92,9 @@ export async function listArchitectConversationMessages(input: {
   const messages = await prisma.architectConversationMessage.findMany({
     where: {
       projectId: input.projectId,
-      graphId: input.graphId,
+      ...(input.scope === "graph" && input.graphId
+        ? { graphId: input.graphId }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
     take,
@@ -102,12 +105,15 @@ export async function listArchitectConversationMessages(input: {
 
 export async function deleteArchitectConversationMessages(input: {
   projectId: string
-  graphId: string
+  graphId?: string
+  scope?: "project" | "graph"
 }) {
   const result = await prisma.architectConversationMessage.deleteMany({
     where: {
       projectId: input.projectId,
-      graphId: input.graphId,
+      ...(input.scope === "graph" && input.graphId
+        ? { graphId: input.graphId }
+        : {}),
     },
   })
 
@@ -116,7 +122,8 @@ export async function deleteArchitectConversationMessages(input: {
 
 export async function getRecentArchitectMessagesForProvider(input: {
   projectId: string
-  graphId: string
+  graphId?: string
+  scope?: "project" | "graph"
   take?: number
 }) {
   const messages = await listArchitectConversationMessages(input)
@@ -124,5 +131,6 @@ export async function getRecentArchitectMessagesForProvider(input: {
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
+    graphId: message.graphId,
   }))
 }

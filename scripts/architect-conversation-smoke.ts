@@ -9,6 +9,7 @@ import { runArchitectConversationTask } from "@/lib/ai-tasks/task-handlers/archi
 import {
   createArchitectConversationMessage,
   deleteArchitectConversationMessages,
+  getRecentArchitectMessagesForProvider,
   listArchitectConversationMessages,
 } from "@/lib/ai/architect/architect-conversation-store"
 import {
@@ -428,12 +429,78 @@ async function main() {
     "existing child layer did not receive proposed nodes"
   )
   const rootAfterExistingLayerApply = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
+  assert(
+    rootAfterExistingLayerApply,
+    "root graph missing after existing layer apply"
+  )
   const customNodeAfterExistingLayerApply = rootAfterExistingLayerApply?.nodes.find(
     (item) => item.id === customNode.id
   )
   assert(
     customNodeAfterExistingLayerApply?.data.subcanvasRef?.graphId === existingLayerGraphId,
     "existing child layer reference was not preserved"
+  )
+  const missingLayerGraphId = "graph_architect_missing_layer_smoke"
+  const missingLayerNode = node("custom-missing-layer", "Missing Layer Host", {
+    semanticType: "unclassified",
+    subcanvasRef: {
+      graphId: missingLayerGraphId,
+      scopeKind: "architecture-layer",
+      title: "Missing Layer Internals",
+    },
+  })
+  await writeCanvasDoc(
+    projectId,
+    {
+      ...rootAfterExistingLayerApply,
+      nodes: [...rootAfterExistingLayerApply.nodes, missingLayerNode],
+    },
+    {
+      graphId: ROOT_GRAPH_ID,
+      scopeKind: "system-root",
+      title: "Architect Conversation Smoke",
+    }
+  )
+  const missingLayerApply = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: {
+      summary: "Create a missing referenced drill-down document.",
+      operations: [
+        {
+          op: "create-layer",
+          parentGraphId: ROOT_GRAPH_ID,
+          parentNodeId: missingLayerNode.id,
+          graph: {
+            title: "Missing Layer Internals",
+            layerKind: "custom-ai-layer",
+            summary: "Create the missing child document and add starter internals.",
+            nodes: [
+              {
+                id: "missing-layer-worker",
+                label: "Missing Layer Worker",
+                semanticType: "worker",
+                description: "Processes the work inside the newly created layer.",
+              },
+            ],
+            edges: [],
+          },
+        },
+      ],
+    },
+  })
+  assert(
+    missingLayerApply.applied.createLayers === 1,
+    "missing referenced child layer was not created"
+  )
+  assert(
+    missingLayerApply.applied.skippedOperations === 0,
+    "missing referenced child layer should not be skipped"
+  )
+  const missingLayerDoc = await readCanvasDoc(projectId, missingLayerGraphId)
+  assert(
+    missingLayerDoc?.nodes.some((item) => item.id === "missing-layer-worker"),
+    "missing referenced child layer did not receive proposed nodes"
   )
 
   const childGraphId = "graph_architect_child_smoke"
@@ -451,6 +518,23 @@ async function main() {
     role: "assistant",
     content: "Child layer Architect reply",
   })
+  const projectThreadBeforeClear = await listArchitectConversationMessages({
+    projectId,
+    graphId: ROOT_GRAPH_ID,
+  })
+  assert(
+    projectThreadBeforeClear.some((message) => message.graphId === childGraphId) &&
+      projectThreadBeforeClear.some((message) => message.graphId === ROOT_GRAPH_ID),
+    "Architect thread is not project-wide across graph layers"
+  )
+  const providerRecentMessages = await getRecentArchitectMessagesForProvider({
+    projectId,
+    graphId: ROOT_GRAPH_ID,
+  })
+  assert(
+    providerRecentMessages.some((message) => message.graphId === childGraphId),
+    "Architect provider history does not include child graph provenance"
+  )
   await prisma.realtimeRoomEvent.create({
     data: {
       projectId,
@@ -473,21 +557,21 @@ async function main() {
   })
   const deletedMessages = await deleteArchitectConversationMessages({
     projectId,
-    graphId: ROOT_GRAPH_ID,
   })
-  assert(deletedMessages === 2, "Architect reset deleted the wrong root message count")
+  assert(deletedMessages === 4, "Architect reset deleted the wrong project message count")
   const rootMessagesAfterClear = await listArchitectConversationMessages({
     projectId,
     graphId: ROOT_GRAPH_ID,
   })
-  assert(rootMessagesAfterClear.length === 0, "Architect reset left root messages behind")
+  assert(rootMessagesAfterClear.length === 0, "Architect reset left project messages behind")
   const childMessagesAfterClear = await listArchitectConversationMessages({
     projectId,
     graphId: childGraphId,
+    scope: "graph",
   })
   assert(
-    childMessagesAfterClear.length === 2,
-    "Architect reset deleted another graph's messages"
+    childMessagesAfterClear.length === 0,
+    "Architect reset left child graph messages behind"
   )
   const realtimeEventsAfterClear = await prisma.realtimeRoomEvent.count({
     where: { projectId },
@@ -540,9 +624,9 @@ async function main() {
     "Architect UI does not show provider mode"
   )
   assert(
-    sidebarSource.includes("Clear Architect conversation for this layer? Canvas will not be changed.") &&
+    sidebarSource.includes("Clear Architect conversation for this project? Canvas will not be changed.") &&
       sidebarSource.includes('method: "DELETE"'),
-    "Architect UI does not expose safe conversation reset"
+    "Architect UI does not expose safe project conversation reset"
   )
   assert(
     sidebarSource.includes("Architect connection dropped. Reconnect and try again."),
@@ -588,13 +672,42 @@ async function main() {
   )
   assert(
     architectConversationRoute.includes("export async function DELETE") &&
-      architectConversationRoute.includes("deleteArchitectConversationMessages"),
-    "Architect conversation route does not expose graph-scoped DELETE"
+      architectConversationRoute.includes("deleteArchitectConversationMessages") &&
+      architectConversationRoute.includes('scope: "project"'),
+    "Architect conversation route does not expose project-scoped DELETE"
   )
   assert(
     architectConversationRoute.includes("getAccessibleProject") &&
       architectConversationRoute.includes("getCurrentProjectIdentity"),
     "Architect conversation DELETE route does not enforce project access"
+  )
+  const architectCanvasPatchRoute = await readFile(
+    path.join(
+      process.cwd(),
+      "app",
+      "api",
+      "projects",
+      "[projectId]",
+      "architect",
+      "canvas-patch",
+      "apply",
+      "route.ts"
+    ),
+    "utf8"
+  )
+  assert(
+    architectCanvasPatchRoute.includes("for (const doc of result.docs)") &&
+      architectCanvasPatchRoute.includes("broadcastedGraphIds"),
+    "Architect canvas patch route does not broadcast all modified graphs"
+  )
+  const realtimeServerSource = await readFile(
+    path.join(process.cwd(), "lib", "realtime", "server.ts"),
+    "utf8"
+  )
+  assert(
+    realtimeServerSource.includes("userId: null") &&
+      realtimeServerSource.includes("broadcastInternal"),
+    "Internal realtime broadcasts should persist as system events while still broadcasting"
   )
 
   await prisma.project.deleteMany({ where: { id: projectId } })

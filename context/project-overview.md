@@ -73,8 +73,8 @@ The LLM is responsible for Prompt Pack content. Prompt Packs are generated direc
 
 - Architect is conversational: users can describe an app, ask questions, clarify requirements, inspect the current layer, refine nodes/edges/layers, ask what is missing, create deeper layers, and prepare the architecture before Prompt Pack generation.
 - Architect reads the sanitized CanvasDoc pyramid JSON directly, including root graph, linked child graphs, nested layers, metadata, custom architecture types, labels, descriptions, assumptions, warnings, and subcanvasRef values.
-- Architect conversation messages are persisted per project/graph and kept separate from collaborator Chat.
-- Architect may return clarification questions, assumptions, warnings, suggested next steps, Prompt Pack handoff guidance, and optional canvas patch proposals.
+- Architect conversation messages are persisted as one project-wide thread with each message retaining graphId provenance, and kept separate from collaborator Chat.
+- Architect may return clarification questions, assumptions, warnings, suggested next steps, Prompt Pack handoff guidance, and optional canvas patch proposals that can target any graph in the canvas pyramid when the requested design change belongs in a parent, child, or deeper layer.
 - LLM canvas changes are previewed and applied only after explicit user approval. Arc Forge does not auto-apply, execute, build apps, generate app source code, or write external repositories.
 
 ### Spec Generation

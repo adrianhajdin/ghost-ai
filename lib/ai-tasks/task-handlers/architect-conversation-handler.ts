@@ -58,7 +58,6 @@ export async function runArchitectConversationTask(
 
   const recentMessages = await getRecentArchitectMessagesForProvider({
     projectId: payload.projectId,
-    graphId: currentGraphId,
   })
   const provider = getAiProvider()
   const providerMetadata = getSafeAiProviderMetadata(provider.name)

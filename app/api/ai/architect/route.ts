@@ -16,6 +16,7 @@ const ArchitectRequestSchema = z.object({
       z.object({
         role: z.enum(["user", "assistant"]),
         content: z.string().trim().max(8000),
+        graphId: z.string().trim().min(1).max(120).optional(),
         createdAt: z.string().trim().optional(),
       })
     )

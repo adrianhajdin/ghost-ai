@@ -46,6 +46,7 @@ interface ArchitectMessage {
   id: string
   role: "user" | "assistant"
   content: string
+  graphId: string
   createdAt: string
   metadata?: unknown
 }
@@ -487,6 +488,7 @@ export function AiSidebar({
         id: `local-${Date.now()}`,
         role: "user",
         content: message,
+        graphId,
         createdAt: new Date().toISOString(),
       }
       setArchitectMessages((prev) => [...prev, tempMessage])
@@ -651,7 +653,7 @@ export function AiSidebar({
   const handleClearArchitectConversation = useCallback(async () => {
     if (isClearingArchitectConversation) return
     const confirmed = window.confirm(
-      "Clear Architect conversation for this layer? Canvas will not be changed."
+      "Clear Architect conversation for this project? Canvas will not be changed."
     )
     if (!confirmed) return
 
