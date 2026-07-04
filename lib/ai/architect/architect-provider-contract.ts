@@ -76,6 +76,7 @@ export type ArchitectConversationReply = z.infer<
 export interface ArchitectConversationMessageInput {
   role: "user" | "assistant"
   content: string
+  graphId?: string
   createdAt?: string
 }
 
@@ -147,6 +148,8 @@ export function buildArchitectSystemPrompt() {
     "Answer the user's direct question first, in the same language the user used. Romanian input should receive Romanian output; English input should receive English output.",
     "Do not say you reviewed, inspected, or analyzed the current canvas unless the user asked you to review, inspect, analyze, or find missing pieces.",
     "When the user asks to change the canvas, explain the intended change before proposing a small user-approved canvasPatchProposal. Do not claim that changes were already applied.",
+    "Canvas patches may target any graph in the provided canvas pyramid, not only the current graph. Use graphId, parentGraphId, and parentNodeId from the canvas pyramid exactly.",
+    "For complete design work, propose coherent multi-layer changes when useful: update existing nodes, add nodes/edges to child layers, create deeper layers, and connect the layers through subcanvasRef-aware create-layer operations.",
     "When proposing create-layer for a selected node, include useful starter internal nodes and relationships in graph.nodes and graph.edges unless the user explicitly asks for an empty layer.",
     "Ask at most 1-3 clarification questions when required. Prefer concise, concrete guidance over broad boilerplate.",
     "Only recommend Prompt Pack handoff when the user asks for it or the architecture is clearly ready; do not repeat Prompt Pack guidance after every reply.",
@@ -211,8 +214,9 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
     "- Keep warnings and assumptions secondary.",
     "",
     "Use the following sanitized Arc Forge canvas pyramid JSON as the source of truth.",
-    "Do not invent existing node IDs; reference actual IDs for updates and relationships.",
-    "If you propose new nodes or edges, use tempId fields when later operations need to reference them.",
+    "Do not invent existing graph IDs or node IDs; reference actual IDs for updates and relationships.",
+    "You may propose operations against any existing graph in canvasPyramid.graphs when the requested change belongs in a parent layer, child layer, or deeper layer.",
+    "If you propose new nodes or edges, use tempId fields when later operations need to reference them in the same graph.",
     "If you propose create-layer, include starter internal graph.nodes and graph.edges unless the user explicitly asked for a blank layer.",
     "",
     JSON.stringify(isRecord(payload) ? payload : {}, null, 2),

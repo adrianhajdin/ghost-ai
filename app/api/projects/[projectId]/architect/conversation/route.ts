@@ -33,11 +33,15 @@ export async function GET(
 
   const messages = await listArchitectConversationMessages({
     projectId: project.id,
-    graphId,
     take: ARCHITECT_RECENT_MESSAGE_LIMIT,
   })
 
-  return Response.json({ messages, provider: getSafeAiProviderMetadata() })
+  return Response.json({
+    messages,
+    currentGraphId: graphId,
+    scope: "project",
+    provider: getSafeAiProviderMetadata(),
+  })
 }
 
 export async function DELETE(
@@ -65,8 +69,7 @@ export async function DELETE(
 
   const deletedCount = await deleteArchitectConversationMessages({
     projectId: project.id,
-    graphId,
   })
 
-  return Response.json({ deletedCount, graphId })
+  return Response.json({ deletedCount, currentGraphId: graphId, scope: "project" })
 }

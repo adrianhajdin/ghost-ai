@@ -25,12 +25,18 @@ import {
   RealtimeTokenError,
   verifyRealtimeRoomToken,
 } from "@/lib/realtime/token"
-import type { JsonValue, RealtimeTokenPayload } from "@/lib/realtime/types"
+import type { JsonValue } from "@/lib/realtime/types"
 import { verifyRealtimeTokenProjectAccess } from "@/lib/realtime/access"
 import { WebSocketServer, type RawData, type WebSocket } from "ws"
 
 const DEFAULT_REALTIME_PORT = 3001
 const INTERNAL_PUBLISH_USER_ID = "arc-forge-ai"
+
+interface PersistRealtimeEventInput {
+  projectId: string
+  roomId: string
+  userId: string | null
+}
 
 const InternalBroadcastSchema = z.object({
   projectId: z.string().trim().min(1).max(100),
@@ -155,7 +161,7 @@ function validateBrowserUpgrade(request: IncomingMessage) {
 }
 
 async function persistRealtimeEvent(
-  connection: RealtimeTokenPayload,
+  connection: PersistRealtimeEventInput,
   eventType: string,
   payload: JsonValue
 ) {
@@ -338,12 +344,9 @@ async function handleInternalBroadcast(
 
   await persistRealtimeEvent(
     {
-      sub: payload.userId ?? INTERNAL_PUBLISH_USER_ID,
-      userId: payload.userId ?? INTERNAL_PUBLISH_USER_ID,
+      userId: null,
       projectId: payload.projectId,
       roomId: payload.roomId,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 60,
     },
     payload.event.type,
     eventPayload
