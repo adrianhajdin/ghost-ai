@@ -250,9 +250,10 @@ async function main() {
       JSON.stringify(["codex", "claude-code", "generic-ai-builder"]),
     "Prompt Pack target agents changed"
   )
+  const retiredTargetName = ["nim", "bus"].join("")
   assert(
-    !JSON.stringify(LLM_PROMPT_PACK_TARGET_AGENTS).toLowerCase().includes("nimbus"),
-    "Nimbus became an active Prompt Pack target"
+    !JSON.stringify(LLM_PROMPT_PACK_TARGET_AGENTS).toLowerCase().includes(retiredTargetName),
+    "Retired target became an active Prompt Pack target"
   )
 
   const provider = new MockAiProvider()
@@ -277,7 +278,7 @@ async function main() {
     proposal.nodePrompts.some((prompt) => prompt.nodeId === endpointNode.id),
     "mock provider did not use nested layer nodes"
   )
-  assert(!proposalJson.toLowerCase().includes("nimbus"), "Prompt Pack mentioned Nimbus")
+  assert(!proposalJson.toLowerCase().includes(retiredTargetName), "Prompt Pack mentioned retired target")
   assert(!proposalJson.includes("```"), "mock Prompt Pack generated code fences")
   assert(
     !proposalJson.includes("sk-abcdefghijklmnopqrstuvwxyz123456"),

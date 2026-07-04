@@ -24,6 +24,10 @@ Prompt Packs are LLM-authored from CanvasDoc pyramid JSON. Mechanical rendering,
 
 New node types or modes should be added only when they materially improve architecture clarity, LLM reasoning, Prompt Pack quality, and common modern software architecture modeling without making the default palette harder for non-experts. Prefer generic/custom nodes, metadata, and tags when a concept is niche, domain-specific, classificatory, or already representable by an existing type plus metadata.
 
+Canvas v2 Phase 1 uses a compact semantic foundation rather than a large diagramming notation. Default root node types are actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, and generic-component; advanced root types add cache-store and object-store. Child layers can use internal detail types such as endpoint, entity, event-contract, business-rule, validation-rule, policy, and spec-note. Legacy frontend, queue, cache, and auth-module data is normalized into the new taxonomy while preserving custom or unknown architecture type metadata.
+
+Edges carry a relationshipType separate from freeform labels. Fast relationship choices are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, and runs_on; advanced choices are triggers, monitors, depends_on, and syncs_with. Edge labels remain multi-label friendly, and legacy edge semantic names normalize into this relationship model.
+
 ## Goals
 
 1. Let authenticated users create and manage architecture projects.
@@ -63,8 +67,8 @@ New node types or modes should be added only when they materially improve archit
 - Shared real-time canvas using the internal WebSocket collaboration engine and React Flow.
 - Internal realtime provides authenticated room tokens, presence, chat/status events, and canvas synchronization.
 - Live cursors, presence indicators, and node/edge editing.
-- Semantic node and edge metadata with validation warnings for unclassified or incomplete technical meaning.
-- Semantic templates for service, database, worker, and auth-module nodes.
+- Canvas v2 semantic node taxonomy, typed edge relationships, compact architecture metadata, and advisory validation warnings for incomplete technical meaning.
+- Semantic templates for actor, client surface, service, worker, database, event channel, external system, identity/auth, generic component, cache store, object store, and internal child-layer detail nodes.
 - Any node may have an inner architecture layer. Child layers can be created from the root canvas or another child layer.
 - CanvasDoc v1, Design IR v1, and LLM Prompt Pack v1 foundations for external coding-agent instruction generation.
 - Canvas snapshots persisted through the configured artifact storage provider.

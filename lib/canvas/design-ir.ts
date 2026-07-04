@@ -11,6 +11,8 @@ import {
   SEMANTIC_TAXONOMY_VERSION,
   isSemanticEdgeType,
   isSemanticNodeType,
+  normalizeEdgeRelationshipType,
+  normalizeSemanticNodeType,
 } from "@/types/canvas"
 import type { CanvasDocV1, CanvasScopeKind } from "@/lib/canvas/canvas-doc"
 import { createCanvasDocV1, normalizeCanvasDocV1 } from "@/lib/canvas/canvas-doc"
@@ -134,7 +136,9 @@ export interface DesignIrV1 {
   policies: DesignIrNode[]
   businessRules: DesignIrNode[]
   validationRules: DesignIrNode[]
+  actors: DesignIrNode[]
   frontends: DesignIrNode[]
+  genericComponents: DesignIrNode[]
   externalSystems: DesignIrNode[]
   notes: DesignIrNode[]
   unclassifiedNodes: DesignIrNode[]
@@ -361,11 +365,11 @@ function exportMetadata(
 }
 
 function semanticNodeType(value: unknown): SemanticNodeType {
-  return isSemanticNodeType(value) ? value : "unclassified"
+  return normalizeSemanticNodeType(value) ?? (isSemanticNodeType(value) ? value : "unclassified")
 }
 
 function semanticEdgeType(value: unknown): SemanticEdgeType {
-  return isSemanticEdgeType(value) ? value : "unclassified"
+  return normalizeEdgeRelationshipType(value) ?? (isSemanticEdgeType(value) ? value : "unclassified")
 }
 
 function collectLabels(edge: CanvasEdge): string[] {
@@ -438,7 +442,7 @@ function toIrRelation(
     targetId: edge.id,
     warnings,
   }
-  const kind = semanticEdgeType(data.semanticType)
+  const kind = semanticEdgeType(data.relationshipType ?? data.semanticType)
   const sourceNodeType = semanticNodeType(
     nodesByGraphAndId.get(`${doc.graphId}:${edge.source}`)?.data.semanticType
   )
@@ -781,13 +785,27 @@ export function compileCanvasDocsToDesignIrResult(
     endpoints: sortNodes(irNodes.filter((node) => node.semanticType === "endpoint")),
     dataModels: sortNodes(
       irNodes.filter((node) =>
-        ["database", "domain-model", "entity", "cache", "queue"].includes(node.semanticType)
+        [
+          "database",
+          "domain-model",
+          "entity",
+          "cache",
+          "queue",
+          "cache-store",
+          "object-store",
+        ].includes(node.semanticType)
       )
     ),
     workers: sortNodes(irNodes.filter((node) => node.semanticType === "worker")),
-    events: sortNodes(irNodes.filter((node) => node.semanticType === "event-contract")),
+    events: sortNodes(
+      irNodes.filter((node) =>
+        ["event-contract", "event-channel", "queue"].includes(node.semanticType)
+      )
+    ),
     policies: sortNodes(
-      irNodes.filter((node) => ["policy", "auth-module"].includes(node.semanticType))
+      irNodes.filter((node) =>
+        ["policy", "identity-auth", "auth-module"].includes(node.semanticType)
+      )
     ),
     businessRules: sortNodes(
       irNodes.filter((node) => node.semanticType === "business-rule")
@@ -795,7 +813,15 @@ export function compileCanvasDocsToDesignIrResult(
     validationRules: sortNodes(
       irNodes.filter((node) => node.semanticType === "validation-rule")
     ),
-    frontends: sortNodes(irNodes.filter((node) => node.semanticType === "frontend")),
+    actors: sortNodes(irNodes.filter((node) => node.semanticType === "actor")),
+    frontends: sortNodes(
+      irNodes.filter((node) =>
+        ["client-surface", "frontend"].includes(node.semanticType)
+      )
+    ),
+    genericComponents: sortNodes(
+      irNodes.filter((node) => node.semanticType === "generic-component")
+    ),
     externalSystems: sortNodes(
       irNodes.filter((node) => node.semanticType === "external-system")
     ),

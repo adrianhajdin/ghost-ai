@@ -90,6 +90,7 @@ function draftEdge(
     id: slugify(`edge-${source}-${target}-${semanticType}`).slice(0, 120),
     source,
     target,
+    relationshipType: semanticType,
     semanticType,
     label,
     labels: [label],
@@ -190,14 +191,14 @@ function policyMetadata(policyKind = "security") {
 function taxiArchitecture(input: GenerateArchitectureDraftInput) {
   const nodes = [
     draftNode(
-      "frontend",
+      "client-surface",
       "Passenger App",
       frontendMetadata("web-mobile"),
       { x: 80, y: 80 },
       "Customer-facing booking and ride tracking experience."
     ),
     draftNode(
-      "auth-module",
+      "identity-auth",
       "Session Auth",
       authMetadata(),
       { x: 320, y: 80 },
@@ -252,49 +253,49 @@ function taxiArchitecture(input: GenerateArchitectureDraftInput) {
     draftEdge(
       byLabel.get("Passenger App")!,
       byLabel.get("Session Auth")!,
-      "auth-check",
+      "authenticates_via",
       "session required",
       { authMode: "internal-cookie-session", requiredScopes: ["rides:write"] }
     ),
     draftEdge(
       byLabel.get("Passenger App")!,
       byLabel.get("Booking Service")!,
-      "http-call",
+      "calls",
       "POST /rides",
       { operationHint: "create ride booking", method: "POST", path: "/rides" }
     ),
     draftEdge(
       byLabel.get("Booking Service")!,
       byLabel.get("Trip Database")!,
-      "db-write",
+      "writes",
       "persist booking",
       { entityRefs: ["Ride", "Passenger"], transactionality: "required", idempotent: true }
     ),
     draftEdge(
       byLabel.get("Booking Service")!,
       byLabel.get("Dispatch Worker")!,
-      "invokes-worker",
+      "triggers",
       "queue dispatch job",
       { triggerMode: "event", payloadRef: "RideRequested" }
     ),
     draftEdge(
       byLabel.get("Dispatch Worker")!,
       byLabel.get("Dispatch Service")!,
-      "http-call",
+      "calls",
       "assign driver",
       { operationHint: "assign nearest driver", method: "POST", path: "/dispatch/assign" }
     ),
     draftEdge(
       byLabel.get("Dispatch Service")!,
       byLabel.get("Trip Database")!,
-      "db-read",
+      "reads",
       "read driver availability",
       { entityRefs: ["Driver", "Ride"], consistency: "read-committed" }
     ),
     draftEdge(
       byLabel.get("Booking Service")!,
       byLabel.get("Payment Gateway")!,
-      "http-call",
+      "calls",
       "authorize payment",
       { operationHint: "authorize ride payment", method: "POST", path: "/payments/authorize" }
     ),
@@ -342,13 +343,13 @@ function taxiArchitecture(input: GenerateArchitectureDraftInput) {
     draftEdge(
       childIds.get("Ride Booking API")!,
       childIds.get("Booking Workflow Module")!,
-      "invokes",
+      "calls",
       "routes commands to workflow"
     ),
     draftEdge(
       childIds.get("Booking Workflow Module")!,
       childIds.get("Ride Aggregate")!,
-      "persists aggregate",
+      "writes",
       "writes ride lifecycle state"
     ),
     draftEdge(
@@ -391,23 +392,23 @@ function taxiArchitecture(input: GenerateArchitectureDraftInput) {
 
 function ecommerceArchitecture(input: GenerateArchitectureDraftInput) {
   const nodes = [
-    draftNode("frontend", "Storefront", frontendMetadata(), { x: 80, y: 80 }, "Customer shopping experience."),
+    draftNode("client-surface", "Storefront", frontendMetadata(), { x: 80, y: 80 }, "Customer shopping experience."),
     draftNode("service", "Catalog Service", serviceMetadata(), { x: 320, y: 80 }, "Serves product and inventory data."),
     draftNode("service", "Checkout Service", serviceMetadata(), { x: 560, y: 80 }, "Owns cart checkout and order creation."),
     draftNode("database", "Commerce Database", databaseMetadata(), { x: 800, y: 80 }, "Stores products, carts, orders, and payment references."),
     draftNode("worker", "Fulfillment Worker", workerMetadata(), { x: 560, y: 260 }, "Processes paid orders for fulfillment."),
     draftNode("external-system", "Payment Gateway", externalMetadata(), { x: 800, y: 260 }, "External payment authorization provider."),
-    draftNode("auth-module", "Customer Auth", authMetadata(), { x: 320, y: 260 }, "Authenticates customers and sessions."),
+    draftNode("identity-auth", "Customer Auth", authMetadata(), { x: 320, y: 260 }, "Authenticates customers and sessions."),
   ]
   const ids = new Map(nodes.map((node) => [node.label, node.id]))
   const edges = [
-    draftEdge(ids.get("Storefront")!, ids.get("Customer Auth")!, "auth-check", "customer session"),
-    draftEdge(ids.get("Storefront")!, ids.get("Catalog Service")!, "http-call", "GET /products", { operationHint: "list products", method: "GET", path: "/products" }),
-    draftEdge(ids.get("Storefront")!, ids.get("Checkout Service")!, "http-call", "POST /checkout", { operationHint: "submit checkout", method: "POST", path: "/checkout" }),
-    draftEdge(ids.get("Catalog Service")!, ids.get("Commerce Database")!, "db-read", "read catalog"),
-    draftEdge(ids.get("Checkout Service")!, ids.get("Commerce Database")!, "db-write", "write order"),
-    draftEdge(ids.get("Checkout Service")!, ids.get("Payment Gateway")!, "http-call", "authorize payment", { operationHint: "authorize payment", method: "POST", path: "/payments/authorize" }),
-    draftEdge(ids.get("Checkout Service")!, ids.get("Fulfillment Worker")!, "invokes-worker", "fulfill order"),
+    draftEdge(ids.get("Storefront")!, ids.get("Customer Auth")!, "authenticates_via", "customer session"),
+    draftEdge(ids.get("Storefront")!, ids.get("Catalog Service")!, "calls", "GET /products", { operationHint: "list products", method: "GET", path: "/products" }),
+    draftEdge(ids.get("Storefront")!, ids.get("Checkout Service")!, "calls", "POST /checkout", { operationHint: "submit checkout", method: "POST", path: "/checkout" }),
+    draftEdge(ids.get("Catalog Service")!, ids.get("Commerce Database")!, "reads", "read catalog"),
+    draftEdge(ids.get("Checkout Service")!, ids.get("Commerce Database")!, "writes", "write order"),
+    draftEdge(ids.get("Checkout Service")!, ids.get("Payment Gateway")!, "calls", "authorize payment", { operationHint: "authorize payment", method: "POST", path: "/payments/authorize" }),
+    draftEdge(ids.get("Checkout Service")!, ids.get("Fulfillment Worker")!, "triggers", "fulfill order"),
   ]
   return baseProposal(
     input,
@@ -422,19 +423,19 @@ function ecommerceArchitecture(input: GenerateArchitectureDraftInput) {
 
 function chatArchitecture(input: GenerateArchitectureDraftInput) {
   const nodes = [
-    draftNode("frontend", "Chat Client", frontendMetadata(), { x: 80, y: 80 }, "Realtime chat client."),
+    draftNode("client-surface", "Chat Client", frontendMetadata(), { x: 80, y: 80 }, "Realtime chat client."),
     draftNode("service", "Messaging Service", serviceMetadata("websocket-api"), { x: 320, y: 80 }, "Owns message send, fetch, and room membership APIs."),
     draftNode("database", "Message Database", databaseMetadata(), { x: 560, y: 80 }, "Stores rooms, memberships, and messages."),
     draftNode("worker", "Notification Worker", workerMetadata("event"), { x: 320, y: 260 }, "Delivers async notifications."),
-    draftNode("auth-module", "Chat Auth", authMetadata(), { x: 80, y: 260 }, "Protects rooms and sessions."),
+    draftNode("identity-auth", "Chat Auth", authMetadata(), { x: 80, y: 260 }, "Protects rooms and sessions."),
     draftNode("policy", "Room Access Policy", policyMetadata("security"), { x: 560, y: 260 }, "Guards room membership and message visibility."),
   ]
   const ids = new Map(nodes.map((node) => [node.label, node.id]))
   const edges = [
-    draftEdge(ids.get("Chat Client")!, ids.get("Chat Auth")!, "auth-check", "session check"),
-    draftEdge(ids.get("Chat Client")!, ids.get("Messaging Service")!, "http-call", "POST /messages", { operationHint: "send message", method: "POST", path: "/messages" }),
-    draftEdge(ids.get("Messaging Service")!, ids.get("Message Database")!, "db-write", "persist message"),
-    draftEdge(ids.get("Messaging Service")!, ids.get("Notification Worker")!, "invokes-worker", "fan out notifications"),
+    draftEdge(ids.get("Chat Client")!, ids.get("Chat Auth")!, "authenticates_via", "session check"),
+    draftEdge(ids.get("Chat Client")!, ids.get("Messaging Service")!, "calls", "POST /messages", { operationHint: "send message", method: "POST", path: "/messages" }),
+    draftEdge(ids.get("Messaging Service")!, ids.get("Message Database")!, "writes", "persist message"),
+    draftEdge(ids.get("Messaging Service")!, ids.get("Notification Worker")!, "triggers", "fan out notifications"),
     draftEdge(ids.get("Room Access Policy")!, ids.get("Messaging Service")!, "guards", "guard room access", { enforcementPoint: "service", blocking: true }),
   ]
   return baseProposal(
@@ -451,18 +452,18 @@ function chatArchitecture(input: GenerateArchitectureDraftInput) {
 function genericArchitecture(input: GenerateArchitectureDraftInput) {
   const topic = getPromptTopic(input.prompt)
   const nodes = [
-    draftNode("frontend", `${topic} Console`, frontendMetadata(), { x: 80, y: 80 }, "User-facing product surface."),
-    draftNode("auth-module", `${topic} Auth`, authMetadata(), { x: 320, y: 80 }, "Session and access boundary."),
+    draftNode("client-surface", `${topic} Console`, frontendMetadata(), { x: 80, y: 80 }, "User-facing product surface."),
+    draftNode("identity-auth", `${topic} Auth`, authMetadata(), { x: 320, y: 80 }, "Session and access boundary."),
     draftNode("service", `${topic} Service`, serviceMetadata(), { x: 560, y: 80 }, "Primary application service."),
     draftNode("database", `${topic} Database`, databaseMetadata(), { x: 800, y: 80 }, "Durable application data store."),
     draftNode("worker", `${topic} Worker`, workerMetadata(), { x: 560, y: 260 }, "Async background processor."),
   ]
   const ids = new Map(nodes.map((node) => [node.label, node.id]))
   const edges = [
-    draftEdge(ids.get(`${topic} Console`)!, ids.get(`${topic} Auth`)!, "auth-check", "session check"),
-    draftEdge(ids.get(`${topic} Console`)!, ids.get(`${topic} Service`)!, "http-call", "POST /actions", { operationHint: "submit action", method: "POST", path: "/actions" }),
-    draftEdge(ids.get(`${topic} Service`)!, ids.get(`${topic} Database`)!, "db-write", "persist state"),
-    draftEdge(ids.get(`${topic} Service`)!, ids.get(`${topic} Worker`)!, "invokes-worker", "process async work"),
+    draftEdge(ids.get(`${topic} Console`)!, ids.get(`${topic} Auth`)!, "authenticates_via", "session check"),
+    draftEdge(ids.get(`${topic} Console`)!, ids.get(`${topic} Service`)!, "calls", "POST /actions", { operationHint: "submit action", method: "POST", path: "/actions" }),
+    draftEdge(ids.get(`${topic} Service`)!, ids.get(`${topic} Database`)!, "writes", "persist state"),
+    draftEdge(ids.get(`${topic} Service`)!, ids.get(`${topic} Worker`)!, "triggers", "process async work"),
   ]
   return baseProposal(
     input,
@@ -739,7 +740,8 @@ function mockArchitectReply(input: GenerateArchitectReplyInput): GenerateArchite
                 {
                   source: "entrypoint",
                   target: "core-module",
-                  semanticType: "invokes",
+                  relationshipType: "calls",
+                  semanticType: "calls",
                   label: "routes command",
                   labels: ["routes command"],
                 },

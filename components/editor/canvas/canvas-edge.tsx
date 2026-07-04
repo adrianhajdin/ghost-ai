@@ -5,7 +5,7 @@ import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath } from "@xyflow/react"
 import type { EdgeProps } from "@xyflow/react"
 import { Plus, Trash2, X } from "lucide-react"
 import type { CanvasEdge } from "@/types/canvas"
-import { semanticEdgeTypeLabel } from "@/types/canvas"
+import { edgeRelationshipTypeLabel, normalizeEdgeRelationshipType } from "@/types/canvas"
 import {
   createEdgeLabelItems,
   edgeLabelTexts,
@@ -37,7 +37,9 @@ export function CanvasEdgeComponent({
   const { deleteEdge, updateEdgeData } = useCanvasMutations()
   const labelItems = useMemo(() => normalizeEdgeLabelItems(data), [data])
   const labels = useMemo(() => edgeLabelTexts(data), [data])
-  const semanticType = data?.semanticType ?? "unclassified"
+  const relationshipType = normalizeEdgeRelationshipType(
+    data?.relationshipType ?? data?.semanticType
+  )
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -237,9 +239,9 @@ export function CanvasEdgeComponent({
             </div>
           ))}
 
-          {isActive && semanticType !== "unclassified" ? (
+          {isActive && relationshipType ? (
             <div className="rounded-full border border-accent-primary/25 bg-bg-surface/90 px-2 py-0.5 text-[10px] font-medium text-accent-primary shadow-xl">
-              {semanticEdgeTypeLabel(semanticType)}
+              {edgeRelationshipTypeLabel(relationshipType)}
             </div>
           ) : null}
 

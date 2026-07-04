@@ -2,7 +2,7 @@ import type { Node, Edge } from "@xyflow/react"
 
 export const CANVAS_DOC_VERSION = "1.0.0" as const
 export const DESIGN_IR_VERSION = "1.0.0" as const
-export const SEMANTIC_TAXONOMY_VERSION = "1.0.0" as const
+export const SEMANTIC_TAXONOMY_VERSION = "2.0.0" as const
 
 export const NODE_SHAPES = [
   "rectangle",
@@ -15,17 +15,25 @@ export const NODE_SHAPES = [
 
 export type NodeShape = (typeof NODE_SHAPES)[number]
 
-export const SEMANTIC_NODE_TYPES = [
-  "unclassified",
+export const DEFAULT_SEMANTIC_NODE_TYPES = [
+  "client-surface",
   "service",
-  "api",
-  "frontend",
-  "database",
-  "cache",
-  "queue",
   "worker",
+  "database",
+  "event-channel",
   "external-system",
-  "auth-module",
+  "identity-auth",
+  "generic-component",
+] as const
+
+export const ADVANCED_SEMANTIC_NODE_TYPES = [
+  "actor",
+  "cache-store",
+  "object-store",
+] as const
+
+export const INTERNAL_SEMANTIC_NODE_TYPES = [
+  "api",
   "domain-model",
   "entity",
   "endpoint-group",
@@ -37,10 +45,66 @@ export const SEMANTIC_NODE_TYPES = [
   "spec-note",
 ] as const
 
-export type SemanticNodeType = (typeof SEMANTIC_NODE_TYPES)[number]
+export const LEGACY_SEMANTIC_NODE_TYPES = [
+  "frontend",
+  "cache",
+  "queue",
+  "auth-module",
+] as const
 
-export const SEMANTIC_EDGE_TYPES = [
+export const SEMANTIC_NODE_TYPES = [
   "unclassified",
+  ...DEFAULT_SEMANTIC_NODE_TYPES,
+  ...ADVANCED_SEMANTIC_NODE_TYPES,
+  ...INTERNAL_SEMANTIC_NODE_TYPES,
+  ...LEGACY_SEMANTIC_NODE_TYPES,
+] as const
+
+export const SEMANTIC_NODE_PICKER_TYPES = [
+  ...DEFAULT_SEMANTIC_NODE_TYPES,
+  ...ADVANCED_SEMANTIC_NODE_TYPES,
+  ...INTERNAL_SEMANTIC_NODE_TYPES,
+] as const
+
+export const SEMANTIC_NODE_TYPE_ALIASES = {
+  frontend: "client-surface",
+  cache: "cache-store",
+  queue: "event-channel",
+  "auth-module": "identity-auth",
+} as const
+
+export type SemanticNodeType = (typeof SEMANTIC_NODE_TYPES)[number]
+export type CanonicalSemanticNodeType = Exclude<
+  SemanticNodeType,
+  (typeof LEGACY_SEMANTIC_NODE_TYPES)[number]
+>
+
+export const QUICK_EDGE_RELATIONSHIP_TYPES = [
+  "interacts_with",
+  "calls",
+  "reads",
+  "writes",
+  "publishes",
+  "consumes",
+  "authenticates_via",
+  "runs_on",
+] as const
+
+export const ADVANCED_EDGE_RELATIONSHIP_TYPES = [
+  "triggers",
+  "monitors",
+  "depends_on",
+  "syncs_with",
+] as const
+
+export const EDGE_RELATIONSHIP_TYPES = [
+  ...QUICK_EDGE_RELATIONSHIP_TYPES,
+  ...ADVANCED_EDGE_RELATIONSHIP_TYPES,
+] as const
+
+export type EdgeRelationshipType = (typeof EDGE_RELATIONSHIP_TYPES)[number]
+
+export const LEGACY_SEMANTIC_EDGE_TYPES = [
   "http-call",
   "graphql-call",
   "db-read",
@@ -57,9 +121,33 @@ export const SEMANTIC_EDGE_TYPES = [
   "validates",
 ] as const
 
+export const LEGACY_EDGE_RELATIONSHIP_ALIASES = {
+  "http-call": "calls",
+  "graphql-call": "calls",
+  "db-read": "reads",
+  "db-write": "writes",
+  "event-publish": "publishes",
+  "event-consume": "consumes",
+  "webhook-in": "calls",
+  "webhook-out": "calls",
+  "auth-check": "authenticates_via",
+  "depends-on": "depends_on",
+  "invokes-worker": "triggers",
+  contains: "depends_on",
+  guards: "depends_on",
+  validates: "depends_on",
+} as const satisfies Record<(typeof LEGACY_SEMANTIC_EDGE_TYPES)[number], EdgeRelationshipType>
+
+export const SEMANTIC_EDGE_TYPES = [
+  "unclassified",
+  ...EDGE_RELATIONSHIP_TYPES,
+  ...LEGACY_SEMANTIC_EDGE_TYPES,
+] as const
+
 export type SemanticEdgeType = (typeof SEMANTIC_EDGE_TYPES)[number]
 
 export type CanvasMetadataStatus = "draft" | "approved" | "deprecated"
+export type CanvasSyncMode = "sync" | "async" | "unknown"
 
 export interface CanvasEdgeLabelItem {
   id: string
@@ -104,6 +192,20 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     requiredFields: ["id"],
     recommendedFields: ["name", "description"],
   },
+  actor: {
+    type: "actor",
+    label: "Actor",
+    purpose: "Human, organization, or external persona that interacts with the system.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "responsibilities", "boundary", "interfacesConsumed"],
+  },
+  "client-surface": {
+    type: "client-surface",
+    label: "Client Surface",
+    purpose: "Web app, mobile shell, admin panel, integration client, or other user-facing surface.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "owner", "interfacesConsumed", "authMode", "privacyClass"],
+  },
   service: {
     type: "service",
     label: "Service",
@@ -132,40 +234,75 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     requiredFields: ["id", "name", "dbKind"],
     recommendedFields: ["engine", "schemaMode", "orm", "backupClass", "retention"],
   },
+  "cache-store": {
+    type: "cache-store",
+    label: "Cache / Session Store",
+    purpose: "Cache, session store, or short-lived lookup store.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "owner", "dataOwned", "ttlPolicy", "evictionPolicy"],
+  },
+  "object-store": {
+    type: "object-store",
+    label: "Object / File Store",
+    purpose: "Blob, object, document, or file storage boundary.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "owner", "dataOwned", "retention", "privacyClass"],
+  },
   cache: {
     type: "cache",
-    label: "Cache",
-    purpose: "Cache or ephemeral storage.",
+    label: "Cache / Session Store",
+    purpose: "Legacy alias for cache-store.",
     requiredFields: ["id", "name", "cacheKind"],
     recommendedFields: ["ttlPolicy", "evictionPolicy", "sharedAcrossTenants"],
   },
+  "event-channel": {
+    type: "event-channel",
+    label: "Event Channel",
+    purpose: "Broker, queue, topic bus, stream, or async messaging channel.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "owner", "eventsEmitted", "eventsConsumed", "deliverySemantics"],
+  },
   queue: {
     type: "queue",
-    label: "Queue",
-    purpose: "Broker, queue, topic bus, or async messaging channel.",
+    label: "Event Channel",
+    purpose: "Legacy alias for event-channel.",
     requiredFields: ["id", "name", "messagingKind"],
     recommendedFields: ["deliverySemantics", "ordering", "deadLetterPolicy"],
   },
   worker: {
     type: "worker",
-    label: "Worker",
+    label: "Worker / Job",
     purpose: "Background processor or job runner.",
     requiredFields: ["id", "name", "triggerType"],
     recommendedFields: ["concurrency", "retryPolicy", "idempotencyRequired"],
   },
   "external-system": {
     type: "external-system",
-    label: "External System",
+    label: "External System / Provider",
     purpose: "External dependency or vendor service.",
     requiredFields: ["id", "name", "vendorType"],
     recommendedFields: ["authType", "rateLimit", "slaAssumption", "webhookSupport"],
   },
+  "identity-auth": {
+    type: "identity-auth",
+    label: "Identity / Auth",
+    purpose: "Authentication, authorization, session, identity, and token flow boundary.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["authStrategy", "sessionMode", "emailVerification", "securityNotes"],
+  },
   "auth-module": {
     type: "auth-module",
-    label: "Auth Module",
-    purpose: "Authentication, session, and token flow boundary.",
+    label: "Identity / Auth",
+    purpose: "Legacy alias for identity-auth.",
     requiredFields: ["id", "name", "authStrategy"],
     recommendedFields: ["sessionMode", "passwordPolicy", "emailVerification", "oauthProviders"],
+  },
+  "generic-component": {
+    type: "generic-component",
+    label: "Generic Component",
+    purpose: "Safe escape hatch for custom, unknown, or not-yet-classified architecture components.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["description", "responsibilities", "owner", "boundary"],
   },
   "domain-model": {
     type: "domain-model",
@@ -239,6 +376,90 @@ export const SEMANTIC_EDGE_DEFINITIONS = {
     purpose: "Compatibility placeholder until the user chooses a semantic edge type.",
     requiredFields: ["id", "source", "target"],
     recommendedFields: ["label"],
+  },
+  interacts_with: {
+    type: "interacts_with",
+    label: "Interacts With",
+    purpose: "General user, client, or component interaction.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["mechanism", "protocol", "syncMode"],
+  },
+  calls: {
+    type: "calls",
+    label: "Calls",
+    purpose: "Directional request, API call, webhook, or provider call.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["mechanism", "protocol", "method", "path", "securityNotes"],
+  },
+  reads: {
+    type: "reads",
+    label: "Reads",
+    purpose: "Read from a data source or stateful component.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["dataSubject", "consistency", "protocol"],
+  },
+  writes: {
+    type: "writes",
+    label: "Writes",
+    purpose: "Write to a data source or stateful component.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["dataSubject", "transactionality", "idempotent"],
+  },
+  publishes: {
+    type: "publishes",
+    label: "Publishes",
+    purpose: "Publish an event, command, or message to an async channel.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["eventSubject", "topic", "deliveryGuarantee"],
+  },
+  consumes: {
+    type: "consumes",
+    label: "Consumes",
+    purpose: "Consume an event, command, or message from an async channel.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["eventSubject", "retryPolicy", "idempotencyRequired"],
+  },
+  authenticates_via: {
+    type: "authenticates_via",
+    label: "Authenticates Via",
+    purpose: "Authentication, authorization, token, or session dependency.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["securityNotes", "authMode", "requiredScopes"],
+  },
+  runs_on: {
+    type: "runs_on",
+    label: "Runs On",
+    purpose: "Runtime, platform, container, or execution environment relationship.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["runtimeKind", "operationalNotes"],
+  },
+  triggers: {
+    type: "triggers",
+    label: "Triggers",
+    purpose: "Trigger a job, worker, workflow, or follow-up action.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["mechanism", "syncMode", "retryPolicy"],
+  },
+  monitors: {
+    type: "monitors",
+    label: "Monitors",
+    purpose: "Observability, audit, alerting, or control relationship.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["mechanism", "operationalNotes"],
+  },
+  depends_on: {
+    type: "depends_on",
+    label: "Depends On",
+    purpose: "Neutral structural or ordering dependency.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["criticality", "fallback"],
+  },
+  syncs_with: {
+    type: "syncs_with",
+    label: "Syncs With",
+    purpose: "Intentional bidirectional or synchronization relationship.",
+    requiredFields: ["id", "source", "target", "label"],
+    recommendedFields: ["mechanism", "syncMode", "dataSubject"],
   },
   "http-call": {
     type: "http-call",
@@ -365,12 +586,29 @@ export interface CanvasNodeData extends Record<string, unknown> {
   semanticType?: SemanticNodeType
   name?: string
   description?: string
+  responsibilities?: string[]
   tags?: string[]
   status?: CanvasMetadataStatus
+  maturity?: CanvasMetadataStatus | string
   sourceRefs?: string[]
   assumptions?: string[]
   decisionRefs?: string[]
   owner?: string | null
+  boundary?: string
+  layerRole?: string
+  interfacesExposed?: string[]
+  interfacesConsumed?: string[]
+  dataOwned?: string[]
+  dataRead?: string[]
+  eventsEmitted?: string[]
+  eventsConsumed?: string[]
+  technology?: string
+  runtimeKind?: string
+  securityNotes?: string
+  privacyClass?: string
+  operationalNotes?: string
+  openQuestions?: string[]
+  promptPackNotes?: string
   createdAt?: string
   updatedAt?: string
   subcanvasRef?: CanvasSubcanvasRef | null
@@ -411,6 +649,7 @@ export interface CanvasNodeData extends Record<string, unknown> {
 
 export interface CanvasEdgeData extends Record<string, unknown> {
   semanticType?: SemanticEdgeType
+  relationshipType?: EdgeRelationshipType
   name?: string
   label?: string
   labels?: string[]
@@ -426,6 +665,13 @@ export interface CanvasEdgeData extends Record<string, unknown> {
   updatedAt?: string
   operationHint?: string
   operationName?: string
+  mechanism?: string
+  protocol?: string
+  dataSubject?: string
+  eventSubject?: string
+  syncMode?: CanvasSyncMode
+  securityNotes?: string
+  trustNotes?: string
   method?: string
   path?: string
   auth?: string
@@ -446,14 +692,53 @@ export function isSemanticEdgeType(value: unknown): value is SemanticEdgeType {
   return typeof value === "string" && SEMANTIC_EDGE_TYPES.includes(value as SemanticEdgeType)
 }
 
+export function isEdgeRelationshipType(value: unknown): value is EdgeRelationshipType {
+  return typeof value === "string" && EDGE_RELATIONSHIP_TYPES.includes(value as EdgeRelationshipType)
+}
+
+export function normalizeSemanticNodeType(value: unknown): CanonicalSemanticNodeType | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (trimmed in SEMANTIC_NODE_TYPE_ALIASES) {
+    return SEMANTIC_NODE_TYPE_ALIASES[
+      trimmed as keyof typeof SEMANTIC_NODE_TYPE_ALIASES
+    ]
+  }
+  return isSemanticNodeType(trimmed) && !(LEGACY_SEMANTIC_NODE_TYPES as readonly string[]).includes(trimmed)
+    ? (trimmed as CanonicalSemanticNodeType)
+    : null
+}
+
+export function normalizeEdgeRelationshipType(value: unknown): EdgeRelationshipType | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (isEdgeRelationshipType(trimmed)) return trimmed
+  if (trimmed in LEGACY_EDGE_RELATIONSHIP_ALIASES) {
+    return LEGACY_EDGE_RELATIONSHIP_ALIASES[
+      trimmed as keyof typeof LEGACY_EDGE_RELATIONSHIP_ALIASES
+    ]
+  }
+  return null
+}
+
 export function semanticNodeTypeLabel(type: string | undefined): string {
-  return isSemanticNodeType(type)
-    ? SEMANTIC_NODE_DEFINITIONS[type].label
-    : SEMANTIC_NODE_DEFINITIONS.unclassified.label
+  const normalized = normalizeSemanticNodeType(type)
+  if (normalized) return SEMANTIC_NODE_DEFINITIONS[normalized].label
+  if (typeof type === "string" && type.trim()) return `Custom: ${type.trim()}`
+  return SEMANTIC_NODE_DEFINITIONS.unclassified.label
 }
 
 export function semanticEdgeTypeLabel(type: string | undefined): string {
   return isSemanticEdgeType(type)
     ? SEMANTIC_EDGE_DEFINITIONS[type].label
     : SEMANTIC_EDGE_DEFINITIONS.unclassified.label
+}
+
+export function edgeRelationshipTypeLabel(type: string | undefined): string {
+  const normalized = normalizeEdgeRelationshipType(type)
+  if (normalized) return SEMANTIC_EDGE_DEFINITIONS[normalized].label
+  if (typeof type === "string" && type.trim()) return `Custom: ${type.trim()}`
+  return SEMANTIC_EDGE_DEFINITIONS.unclassified.label
 }

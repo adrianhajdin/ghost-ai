@@ -1,11 +1,11 @@
 import { z } from "zod"
 import {
   NODE_COLORS,
-  SEMANTIC_EDGE_TYPES,
-  SEMANTIC_NODE_TYPES,
   SHAPE_DEFAULTS,
   isSemanticEdgeType,
   isSemanticNodeType,
+  normalizeEdgeRelationshipType,
+  normalizeSemanticNodeType,
   type CanvasEdge,
   type CanvasNode,
   type NodeShape,
@@ -94,6 +94,7 @@ export const ArchitectureDraftEdgeSchema = z
     target: safeIdSchema,
     type: z.string().trim().min(1).max(120).optional(),
     semanticType: z.string().trim().min(1).max(120).optional(),
+    relationshipType: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().max(240).optional(),
     labels: z.array(z.string().trim().max(240)).max(8).default([]),
     metadata: metadataSchema,
@@ -536,11 +537,13 @@ export function sanitizeArchitectureDraftProposal(
 }
 
 function knownNodeSemanticType(value: unknown): SemanticNodeType {
-  return isSemanticNodeType(value) ? value : SEMANTIC_NODE_TYPES[0]
+  if (value === "unclassified") return "unclassified"
+  return normalizeSemanticNodeType(value) ?? "generic-component"
 }
 
 function knownEdgeSemanticType(value: unknown): SemanticEdgeType {
-  return isSemanticEdgeType(value) ? value : SEMANTIC_EDGE_TYPES[0]
+  if (isSemanticEdgeType(value)) return value
+  return normalizeEdgeRelationshipType(value) ?? "unclassified"
 }
 
 function draftNodeTypeText(draftNode: ArchitectureDraftNode) {
@@ -548,7 +551,12 @@ function draftNodeTypeText(draftNode: ArchitectureDraftNode) {
 }
 
 function draftEdgeTypeText(draftEdge: ArchitectureDraftEdge) {
-  return draftEdge.semanticType?.trim() || draftEdge.type?.trim() || "unclassified"
+  return (
+    draftEdge.relationshipType?.trim() ||
+    draftEdge.semanticType?.trim() ||
+    draftEdge.type?.trim() ||
+    "unclassified"
+  )
 }
 
 function nodeShapeAndColor(semanticType: SemanticNodeType): {
@@ -556,20 +564,27 @@ function nodeShapeAndColor(semanticType: SemanticNodeType): {
   colorIndex: number
 } {
   switch (semanticType) {
+    case "actor":
+      return { shape: "circle", colorIndex: 2 }
+    case "client-surface":
     case "frontend":
-      return { shape: "circle", colorIndex: 5 }
+      return { shape: "rectangle", colorIndex: 5 }
     case "service":
     case "api":
       return { shape: "pill", colorIndex: 1 }
     case "database":
+    case "cache-store":
+    case "object-store":
     case "cache":
     case "domain-model":
       return { shape: "cylinder", colorIndex: 7 }
+    case "event-channel":
     case "queue":
     case "worker":
       return { shape: "hexagon", colorIndex: 6 }
     case "external-system":
       return { shape: "hexagon", colorIndex: 3 }
+    case "identity-auth":
     case "auth-module":
     case "policy":
       return { shape: "pill", colorIndex: 2 }
@@ -581,9 +596,10 @@ function nodeShapeAndColor(semanticType: SemanticNodeType): {
 function defaultNodeMetadata(semanticType: SemanticNodeType): Record<string, unknown> {
   const defaults = semanticDefaultsForType(semanticType)
   switch (semanticType) {
+    case "client-surface":
     case "frontend":
       return {
-        semanticType,
+        semanticType: "client-surface",
         clientKind: "web-app",
         framework: "nextjs",
         routes: [],
@@ -599,20 +615,31 @@ function defaultNodeMetadata(semanticType: SemanticNodeType): Record<string, unk
         authRequired: true,
         ...defaults,
       }
+    case "cache-store":
     case "cache":
       return {
-        semanticType,
+        semanticType: "cache-store",
         cacheKind: "redis",
         ttlPolicy: "bounded",
         evictionPolicy: "lru",
         ...defaults,
       }
+    case "event-channel":
     case "queue":
       return {
-        semanticType,
+        semanticType: "event-channel",
         messagingKind: "queue",
         deliverySemantics: "at-least-once",
         deadLetterPolicy: "required",
+        ...defaults,
+      }
+    case "identity-auth":
+    case "auth-module":
+      return {
+        semanticType: "identity-auth",
+        authStrategy: "internal-cookie-session",
+        sessionMode: "httpOnly-cookie",
+        emailVerification: true,
         ...defaults,
       }
     case "external-system":
@@ -716,6 +743,9 @@ function toCanvasEdge(
 ): CanvasEdge {
   const architectureType = draftEdgeTypeText(draftEdge)
   const semanticType = knownEdgeSemanticType(architectureType)
+  const relationshipType = normalizeEdgeRelationshipType(
+    draftEdge.relationshipType ?? architectureType
+  )
   const metadata = sanitizeMetadataRecord(draftEdge.metadata)
   const labels = draftEdge.labels.length > 0 ? draftEdge.labels : draftEdge.label ? [draftEdge.label] : []
   const labelItems = createEdgeLabelItems(labels, [], `${id}-label`)
@@ -739,6 +769,7 @@ function toCanvasEdge(
       ...metadata,
       ...customTypeMetadata,
       semanticType,
+      relationshipType: relationshipType ?? undefined,
       name:
         typeof metadata.name === "string" && metadata.name.trim()
           ? metadata.name.trim()

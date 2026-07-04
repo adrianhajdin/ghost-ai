@@ -2,8 +2,8 @@ import type { CanvasEdge, CanvasEdgeData, CanvasNode } from "@/types/canvas"
 import {
   SEMANTIC_EDGE_DEFINITIONS,
   SEMANTIC_NODE_DEFINITIONS,
-  isSemanticEdgeType,
-  isSemanticNodeType,
+  normalizeEdgeRelationshipType,
+  normalizeSemanticNodeType,
 } from "@/types/canvas"
 import type { CanvasSnapshot } from "@/lib/canvas/canvas-state"
 import {
@@ -40,6 +40,18 @@ function hasMeaningfulField(
   if (typeof value === "string") return value.trim().length > 0
   if (Array.isArray(value)) return value.length > 0
   return value !== null && value !== undefined && value !== false
+}
+
+function hasText(value: unknown): boolean {
+  return typeof value === "string" && value.trim().length > 0
+}
+
+function hasStringList(value: unknown): boolean {
+  return Array.isArray(value) && value.some((item) => hasText(item))
+}
+
+function hasDescriptionOrResponsibilities(node: CanvasNode): boolean {
+  return hasText(node.data.description) || hasStringList(node.data.responsibilities)
 }
 
 function findRawSecretFields(
@@ -101,9 +113,7 @@ function findRawSecretFields(
 }
 
 function validateNode(node: CanvasNode): SemanticValidationResult[] {
-  const semanticType = isSemanticNodeType(node.data.semanticType)
-    ? node.data.semanticType
-    : "unclassified"
+  const semanticType = normalizeSemanticNodeType(node.data.semanticType) ?? "generic-component"
   const definition = SEMANTIC_NODE_DEFINITIONS[semanticType]
   const results: SemanticValidationResult[] = []
 
@@ -131,6 +141,74 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
     }
   }
 
+  if (!hasDescriptionOrResponsibilities(node)) {
+    results.push({
+      id: `node-${node.id}-missing-responsibility`,
+      severity: "warning",
+      targetKind: "node",
+      targetId: node.id,
+      field: "responsibilities",
+      message: `${definition.label} is missing responsibilities or a description.`,
+    })
+  }
+
+  if (semanticType === "database" && !hasText(node.data.owner)) {
+    results.push({
+      id: `node-${node.id}-database-owner`,
+      severity: "warning",
+      targetKind: "node",
+      targetId: node.id,
+      field: "owner",
+      message: "Database should declare an owner for stronger handoff prompts.",
+    })
+  }
+
+  if (
+    semanticType === "external-system" &&
+    !hasText(node.data.securityNotes) &&
+    !hasText(node.data.trustNotes) &&
+    !hasText(node.data.authType)
+  ) {
+    results.push({
+      id: `node-${node.id}-external-trust-notes`,
+      severity: "warning",
+      targetKind: "node",
+      targetId: node.id,
+      field: "securityNotes",
+      message: "External System / Provider should note auth or trust assumptions.",
+    })
+  }
+
+  if (
+    semanticType === "worker" &&
+    !hasText(node.data.retryPolicy) &&
+    node.data.idempotencyRequired !== true &&
+    !hasText(node.data.operationalNotes)
+  ) {
+    results.push({
+      id: `node-${node.id}-worker-retry-idempotency`,
+      severity: "warning",
+      targetKind: "node",
+      targetId: node.id,
+      field: "retryPolicy",
+      message: "Worker / Job should capture retry or idempotency notes.",
+    })
+  }
+
+  if (
+    (semanticType === "generic-component" || semanticType === "unclassified") &&
+    !hasText(node.data.description)
+  ) {
+    results.push({
+      id: `node-${node.id}-generic-description`,
+      severity: "warning",
+      targetKind: "node",
+      targetId: node.id,
+      field: "description",
+      message: `${definition.label} should include a short description.`,
+    })
+  }
+
   if (!node.data.subcanvasRef) {
     results.push({
       id: `node-${node.id}-subcanvas-ref`,
@@ -151,20 +229,22 @@ function validateEdge(
   nodesById: Map<string, CanvasNode>
 ): SemanticValidationResult[] {
   const edgeData: CanvasEdgeData = edge.data ?? {}
-  const semanticType = isSemanticEdgeType(edgeData.semanticType)
-    ? edgeData.semanticType
-    : "unclassified"
-  const definition = SEMANTIC_EDGE_DEFINITIONS[semanticType]
+  const relationshipType = normalizeEdgeRelationshipType(
+    edgeData.relationshipType ?? edgeData.semanticType
+  )
+  const definition = relationshipType
+    ? SEMANTIC_EDGE_DEFINITIONS[relationshipType]
+    : SEMANTIC_EDGE_DEFINITIONS.unclassified
   const results: SemanticValidationResult[] = []
 
-  if (semanticType === "unclassified") {
+  if (!relationshipType) {
     results.push({
       id: `edge-${edge.id}-unclassified`,
       severity: "warning",
       targetKind: "edge",
       targetId: edge.id,
-      field: "semanticType",
-      message: "Edge is unclassified; choose a semantic type with technical meaning.",
+      field: "relationshipType",
+      message: "Edge is untyped; choose a relationship type with technical meaning.",
     })
   }
 
@@ -182,13 +262,15 @@ function validateEdge(
   }
 
   const target = nodesById.get(edge.target)
-  const targetType = target?.data.semanticType
+  const targetType = normalizeSemanticNodeType(target?.data.semanticType)
 
   if (
-    (semanticType === "db-read" || semanticType === "db-write") &&
+    (relationshipType === "reads" || relationshipType === "writes") &&
     targetType !== "database" &&
     targetType !== "entity" &&
-    targetType !== "domain-model"
+    targetType !== "domain-model" &&
+    targetType !== "cache-store" &&
+    targetType !== "object-store"
   ) {
     results.push({
       id: `edge-${edge.id}-db-target`,
@@ -200,7 +282,7 @@ function validateEdge(
     })
   }
 
-  if (semanticType === "invokes-worker" && targetType !== "worker") {
+  if (relationshipType === "triggers" && targetType !== "worker") {
     results.push({
       id: `edge-${edge.id}-worker-target`,
       severity: "warning",
@@ -227,6 +309,32 @@ export function validateCanvasSemantics(
 
   for (const edge of snapshot.edges) {
     results.push(...validateEdge(edge, nodesById))
+  }
+
+  for (const node of snapshot.nodes) {
+    const semanticType = normalizeSemanticNodeType(node.data.semanticType)
+    if (semanticType !== "event-channel") continue
+
+    const hasProducerOrConsumer = snapshot.edges.some((edge) => {
+      const relationshipType = normalizeEdgeRelationshipType(
+        edge.data?.relationshipType ?? edge.data?.semanticType
+      )
+      return (
+        (relationshipType === "publishes" && edge.target === node.id) ||
+        (relationshipType === "consumes" && edge.source === node.id)
+      )
+    })
+
+    if (!hasProducerOrConsumer) {
+      results.push({
+        id: `node-${node.id}-event-channel-producer-consumer`,
+        severity: "warning",
+        targetKind: "node",
+        targetId: node.id,
+        field: "relationshipType",
+        message: "Event Channel should show producer or consumer relationships.",
+      })
+    }
   }
 
   if (snapshot.nodes.length === 0 && snapshot.edges.length === 0) {

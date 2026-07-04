@@ -87,7 +87,7 @@ export function subcanvasScopeForNode(
   if (semanticType === "service") return "service-internal"
   if (semanticType === "api") return "api-design"
   if (semanticType === "database") return "database-design"
-  if (semanticType === "auth-module") return "auth-design"
+  if (semanticType === "auth-module" || semanticType === "identity-auth") return "auth-design"
   if (semanticType === "worker") return "worker-design"
   return null
 }

@@ -17,7 +17,8 @@ import {
   NODE_COLORS,
   SHAPE_DEFAULTS,
   isSemanticEdgeType,
-  isSemanticNodeType,
+  normalizeEdgeRelationshipType,
+  normalizeSemanticNodeType,
   type CanvasEdge,
   type CanvasNode,
   type SemanticEdgeType,
@@ -97,9 +98,18 @@ function writeOptionsForDoc(doc: CanvasDocV1) {
 
 function nodeShapeAndColor(semanticType: SemanticNodeType) {
   if (semanticType === "database") return { shape: "cylinder" as const, colorIndex: 7 }
+  if (semanticType === "cache-store" || semanticType === "object-store") {
+    return { shape: "cylinder" as const, colorIndex: 7 }
+  }
   if (semanticType === "worker") return { shape: "hexagon" as const, colorIndex: 6 }
-  if (semanticType === "auth-module") return { shape: "pill" as const, colorIndex: 2 }
-  if (semanticType === "frontend") return { shape: "rectangle" as const, colorIndex: 5 }
+  if (semanticType === "identity-auth" || semanticType === "auth-module") {
+    return { shape: "pill" as const, colorIndex: 2 }
+  }
+  if (semanticType === "client-surface" || semanticType === "frontend") {
+    return { shape: "rectangle" as const, colorIndex: 5 }
+  }
+  if (semanticType === "actor") return { shape: "circle" as const, colorIndex: 2 }
+  if (semanticType === "event-channel") return { shape: "diamond" as const, colorIndex: 3 }
   if (semanticType === "api" || semanticType === "endpoint") {
     return { shape: "circle" as const, colorIndex: 1 }
   }
@@ -114,15 +124,16 @@ function nodeTypeMetadata(
   typeText: string | undefined
 ) {
   const architectureType = typeText ?? semanticTypeText
-  if (!semanticTypeText || isSemanticNodeType(semanticTypeText)) {
+  const normalized = normalizeSemanticNodeType(semanticTypeText)
+  if (!semanticTypeText || normalized) {
     return {
-      semanticType: (semanticTypeText ?? "unclassified") as SemanticNodeType,
+      semanticType: (normalized ?? "unclassified") as SemanticNodeType,
       customTypeData: architectureType ? { architectureType } : {},
     }
   }
 
   return {
-    semanticType: "unclassified" as SemanticNodeType,
+    semanticType: "generic-component" as SemanticNodeType,
     customTypeData: {
       llmSemanticType: semanticTypeText,
       architectureType: architectureType ?? semanticTypeText,
@@ -136,15 +147,18 @@ function edgeTypeMetadata(
   typeText: string | undefined
 ) {
   const architectureType = typeText ?? semanticTypeText
+  const relationshipType = normalizeEdgeRelationshipType(semanticTypeText)
   if (!semanticTypeText || isSemanticEdgeType(semanticTypeText)) {
     return {
       semanticType: (semanticTypeText ?? "unclassified") as SemanticEdgeType,
+      relationshipType: relationshipType ?? undefined,
       customTypeData: architectureType ? { architectureType } : {},
     }
   }
 
   return {
-    semanticType: "unclassified" as SemanticEdgeType,
+    semanticType: (relationshipType ?? "unclassified") as SemanticEdgeType,
+    relationshipType: relationshipType ?? undefined,
     customTypeData: {
       llmSemanticType: semanticTypeText,
       architectureType: architectureType ?? semanticTypeText,
@@ -216,11 +230,13 @@ function edgeFromPatch(
 ): CanvasEdge {
   const metadata = sanitizeLlmCanvasPatchRecord(operationEdge.metadata)
   const semanticTypeText =
+    patchText(operationEdge.relationshipType) ??
     patchText(operationEdge.semanticType) ??
     patchText(operationEdge.type) ??
+    patchText(metadata.relationshipType) ??
     patchText(metadata.semanticType)
   const typeText = patchText(operationEdge.type) ?? patchText(metadata.type)
-  const { semanticType, customTypeData } = edgeTypeMetadata(
+  const { semanticType, relationshipType, customTypeData } = edgeTypeMetadata(
     semanticTypeText,
     typeText
   )
@@ -243,6 +259,7 @@ function edgeFromPatch(
       ...metadata,
       ...customTypeData,
       semanticType,
+      relationshipType,
       name: patchText(metadata.name) ?? operationEdge.label ?? "",
       status: "draft",
       tags: Array.isArray(metadata.tags) ? metadata.tags : [],

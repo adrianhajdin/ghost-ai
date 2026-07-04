@@ -3,14 +3,16 @@ import type { CanvasEdge, CanvasNode } from "@/types/canvas"
 import {
   NODE_COLORS,
   NODE_SHAPES,
-  SEMANTIC_EDGE_TYPES,
-  SEMANTIC_NODE_TYPES,
   SHAPE_DEFAULTS,
   isSemanticEdgeType,
-  isSemanticNodeType,
+  normalizeEdgeRelationshipType,
+  normalizeSemanticNodeType,
   type CanvasMetadataStatus,
   type CanvasNodeData,
+  type EdgeRelationshipType,
   type NodeShape,
+  type SemanticEdgeType,
+  type SemanticNodeType,
 } from "@/types/canvas"
 import { mirrorEdgeLabelData, normalizeEdgeLabelItems } from "@/lib/canvas/edge-labels"
 import {
@@ -53,15 +55,32 @@ const positionSchema = z.object({
 const nodeDataSchema = z
   .object({
     label: z.string().max(240).default(""),
-    semanticType: z.string().max(80).optional(),
+    semanticType: z.string().max(120).optional(),
     name: z.string().max(240).optional(),
     description: z.string().max(4000).optional(),
+    responsibilities: z.array(z.string().max(500)).max(32).optional(),
     tags: z.array(z.string().max(80)).max(24).optional(),
     status: metadataStatusSchema,
+    maturity: z.string().max(80).optional(),
     sourceRefs: z.array(z.string().max(240)).max(32).optional(),
     assumptions: z.array(z.string().max(500)).max(32).optional(),
     decisionRefs: z.array(z.string().max(240)).max(32).optional(),
     owner: z.string().max(240).nullable().optional(),
+    boundary: z.string().max(240).optional(),
+    layerRole: z.string().max(240).optional(),
+    interfacesExposed: z.array(z.string().max(240)).max(32).optional(),
+    interfacesConsumed: z.array(z.string().max(240)).max(32).optional(),
+    dataOwned: z.array(z.string().max(240)).max(32).optional(),
+    dataRead: z.array(z.string().max(240)).max(32).optional(),
+    eventsEmitted: z.array(z.string().max(240)).max(32).optional(),
+    eventsConsumed: z.array(z.string().max(240)).max(32).optional(),
+    technology: z.string().max(240).optional(),
+    runtimeKind: z.string().max(240).optional(),
+    securityNotes: z.string().max(2000).optional(),
+    privacyClass: z.string().max(240).optional(),
+    operationalNotes: z.string().max(2000).optional(),
+    openQuestions: z.array(z.string().max(500)).max(32).optional(),
+    promptPackNotes: z.string().max(2000).optional(),
     createdAt: z.string().max(80).optional(),
     updatedAt: z.string().max(80).optional(),
     color: z.string().max(80).optional(),
@@ -103,7 +122,8 @@ const nodeSchema = z
 
 const edgeDataSchema = z
   .object({
-    semanticType: z.string().max(80).optional(),
+    semanticType: z.string().max(120).optional(),
+    relationshipType: z.string().max(120).optional(),
     name: z.string().max(240).optional(),
     label: z.string().max(240).optional(),
     labels: z.array(z.string().max(240)).max(8).optional(),
@@ -125,6 +145,13 @@ const edgeDataSchema = z
     owner: z.string().max(240).nullable().optional(),
     createdAt: z.string().max(80).optional(),
     updatedAt: z.string().max(80).optional(),
+    mechanism: z.string().max(240).optional(),
+    protocol: z.string().max(240).optional(),
+    dataSubject: z.string().max(240).optional(),
+    eventSubject: z.string().max(240).optional(),
+    syncMode: z.enum(["sync", "async", "unknown"]).optional(),
+    securityNotes: z.string().max(2000).optional(),
+    trustNotes: z.string().max(2000).optional(),
   })
   .passthrough()
 
@@ -214,12 +241,66 @@ function sanitizeTopLevelRest(
   return sanitized
 }
 
-function normalizeNodeSemanticType(value: unknown) {
-  return isSemanticNodeType(value) ? value : SEMANTIC_NODE_TYPES[0]
+function normalizeNodeSemanticData(value: unknown): {
+  semanticType: SemanticNodeType
+  customTypeData: Record<string, unknown>
+} {
+  const normalized = normalizeSemanticNodeType(value)
+  if (normalized) return { semanticType: normalized, customTypeData: {} }
+
+  if (typeof value === "string" && value.trim()) {
+    const originalSemanticType = value.trim()
+    return {
+      semanticType: "generic-component",
+      customTypeData: {
+        originalSemanticType,
+        architectureType: originalSemanticType,
+        llmSemanticType: originalSemanticType,
+      },
+    }
+  }
+
+  return { semanticType: "unclassified", customTypeData: {} }
 }
 
-function normalizeEdgeSemanticType(value: unknown) {
-  return isSemanticEdgeType(value) ? value : SEMANTIC_EDGE_TYPES[0]
+function normalizeEdgeSemanticData(
+  semanticTypeValue: unknown,
+  relationshipTypeValue: unknown
+): {
+  semanticType: SemanticEdgeType
+  relationshipType?: EdgeRelationshipType
+  customTypeData: Record<string, unknown>
+} {
+  const relationshipType = normalizeEdgeRelationshipType(
+    relationshipTypeValue ?? semanticTypeValue
+  )
+
+  if (isSemanticEdgeType(semanticTypeValue)) {
+    return {
+      semanticType: semanticTypeValue,
+      relationshipType: relationshipType ?? undefined,
+      customTypeData: {},
+    }
+  }
+
+  if (typeof semanticTypeValue === "string" && semanticTypeValue.trim()) {
+    const originalSemanticType = semanticTypeValue.trim()
+    return {
+      semanticType: relationshipType ?? "unclassified",
+      relationshipType: relationshipType ?? undefined,
+      customTypeData: {
+        originalSemanticType,
+        architectureType: originalSemanticType,
+        llmSemanticType: originalSemanticType,
+      },
+    }
+  }
+
+  return {
+    semanticType: relationshipType ?? "unclassified",
+    relationshipType: relationshipType ?? undefined,
+    customTypeData: {},
+  }
 }
 
 function normalizeNodeData(data: z.infer<typeof nodeDataSchema>): CanvasNodeData {
@@ -227,17 +308,31 @@ function normalizeNodeData(data: z.infer<typeof nodeDataSchema>): CanvasNodeData
   const label = typeof sanitized.label === "string" ? sanitized.label.trim() : ""
   const name = typeof sanitized.name === "string" ? sanitized.name.trim() : label
   const shape = normalizeShape(sanitized.shape)
+  const semanticData = normalizeNodeSemanticData(sanitized.semanticType)
 
   return {
     ...sanitized,
+    ...semanticData.customTypeData,
     label,
     name,
-    semanticType: normalizeNodeSemanticType(sanitized.semanticType),
+    semanticType: semanticData.semanticType,
     status: normalizeStatus(sanitized.status),
+    maturity:
+      typeof sanitized.maturity === "string" && sanitized.maturity.trim()
+        ? sanitized.maturity.trim()
+        : normalizeStatus(sanitized.status),
+    responsibilities: normalizeStringArray(sanitized.responsibilities),
     tags: normalizeStringArray(sanitized.tags),
     sourceRefs: normalizeStringArray(sanitized.sourceRefs),
     assumptions: normalizeStringArray(sanitized.assumptions),
     decisionRefs: normalizeStringArray(sanitized.decisionRefs),
+    interfacesExposed: normalizeStringArray(sanitized.interfacesExposed),
+    interfacesConsumed: normalizeStringArray(sanitized.interfacesConsumed),
+    dataOwned: normalizeStringArray(sanitized.dataOwned),
+    dataRead: normalizeStringArray(sanitized.dataRead),
+    eventsEmitted: normalizeStringArray(sanitized.eventsEmitted),
+    eventsConsumed: normalizeStringArray(sanitized.eventsConsumed),
+    openQuestions: normalizeStringArray(sanitized.openQuestions),
     owner: typeof sanitized.owner === "string" ? sanitized.owner.trim() || null : null,
     color: typeof sanitized.color === "string" ? sanitized.color : NODE_COLORS[0].fill,
     textColor:
@@ -281,6 +376,10 @@ export function sanitizeCanvasSnapshot(value: unknown): CanvasSnapshot {
       const sanitizedData = sanitizeDataRecord(edge.data)
       const labelItems = normalizeEdgeLabelItems(sanitizedData)
       const mirroredLabels = mirrorEdgeLabelData(labelItems)
+      const semanticData = normalizeEdgeSemanticData(
+        sanitizedData.semanticType,
+        sanitizedData.relationshipType
+      )
       const rest = sanitizeTopLevelRest(edge, [
         "selected",
         "data",
@@ -302,7 +401,9 @@ export function sanitizeCanvasSnapshot(value: unknown): CanvasSnapshot {
         type: "canvasEdge",
         data: {
           ...sanitizedData,
-          semanticType: normalizeEdgeSemanticType(sanitizedData.semanticType),
+          ...semanticData.customTypeData,
+          semanticType: semanticData.semanticType,
+          relationshipType: semanticData.relationshipType,
           name:
             typeof sanitizedData.name === "string"
               ? sanitizedData.name.trim()
