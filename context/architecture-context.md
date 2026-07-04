@@ -33,6 +33,20 @@
 - `prisma` — Database schema and generated client output.
 - `data` — Legacy local directory. Not used for new artifacts.
 
+## Canvas v2 Guardrails
+
+- React Flow remains the canvas renderer and CanvasDoc JSON remains the durable source of truth for root and child graphs.
+- The graph model is a layered architecture pyramid: `graph_root` is the system/root architecture view, child graphs are internals of any selected node, and deeper graphs are progressively more detailed decomposition.
+- Any node may have `subcanvasRef`. Deterministic code must not restrict child-layer creation/opening by semantic type, shape, label, or perceived architectural importance.
+- Node type may choose starter suggestions and metadata defaults only. It is never a permission model for drill-down.
+- Architect is the architecture reasoning layer. It receives the sanitized CanvasDoc pyramid, current graph id, selected node ids, provider metadata, project-wide messages, and graph provenance, and it may propose safe cross-layer patches for user approval.
+- Deterministic code may validate JSON shape, graph/node/edge id safety, raw-secret and transient-state rules, unsupported destructive operations, auth/access, storage, preview/apply mechanics, and export/download.
+- Deterministic code must not generate architecture, judge architecture quality, author Prompt Pack content, block child layers by node type, or block Prompt Pack generation because metadata is incomplete.
+- Semantic Scan is advisory for architecture completeness. It may only block/fail for safety, transport, schema, malformed patch, raw secret, transient UI state, invalid ids, unsupported destructive operations, or auth/access violations.
+- Prompt Packs are LLM-authored from sanitized CanvasDoc pyramid JSON. Deterministic code may mechanically render/export that output but must not provide a deterministic prompt-authoring fallback.
+- Arc Forge must not become a full UML/BPMN/ArchiMate clone, cloud vendor mega-palette, code execution environment, app builder, external repo writer, target-app PR creator, or deployment system.
+- Nimbus, image/multimodal input, auto-apply patches, and multiple AI editing personas are not active Canvas v2 behavior.
+
 ## Storage Model
 
 - **Database**: metadata, ownership, relationships, AI task runs/events/attempts, realtime room events, Architect conversation messages, and project spec records.
@@ -135,5 +149,7 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 13. Raw secret values must not be stored in canvas metadata or exported Design IR; use secretRef-style references only.
 14. Prompt Pack generation must use the LLM as the prompt-writing brain from sanitized canvas pyramid JSON. Deterministic code must not author Prompt Pack content or judge prompt/architecture quality; it only handles save/load, JSON transport, no raw secrets, auth/access, preview/apply, undo/redo compatibility, and export/download.
 15. Architecture Draft generation must remain proposal-first: AI can propose architecture drafts and layers on the canvas, the user approves before applying, and apply is append-only for v1.
-16. Any node may have an inner architecture layer. Deterministic code must not decide whether a node deserves a layer.
+16. Any node may have an inner architecture layer. Deterministic code must not decide whether a node deserves a layer, and must not use semantic type allowlists or denylist logic for child-layer permissions.
 17. Architect conversation must remain separate from collaborator Chat and must only mutate canvas state through user-approved LLM canvas patch apply.
+18. Semantic Scan warnings are advisory for architecture completeness and must not block child-layer creation, LLM proposals, Prompt Pack generation, Actor/Generic/custom node drill-down, or user-approved non-destructive patches.
+19. New node types, modes, or palettes must pass the anti-bloat rule: add them only when they materially improve clarity, LLM reasoning, Prompt Pack quality, commonness, non-redundancy, and non-expert UX.

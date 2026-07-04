@@ -9,6 +9,9 @@ Build this project incrementally using a spec-driven workflow. Context files def
 - Work on one feature unit or subsystem at a time.
 - Prefer small, verifiable increments over large speculative changes.
 - Do not combine unrelated system boundaries in a single implementation step.
+- Preserve the Canvas v2 product contract: Architect and Prompt Pack content are LLM-authored from CanvasDoc pyramid JSON; deterministic code handles safety, schema, transport, storage, auth/access, preview/apply, and export only.
+- Do not add deterministic architecture judges, deterministic Prompt Pack authoring, child-layer semantic-type permission gates, app execution, repo write-back, auto-apply patches, image/multimodal input, or extra AI editing personas unless a future product contract explicitly changes that scope.
+- Treat Semantic Scan as advisory for architecture completeness. It may fail only for safety, schema, transport, malformed patch, raw secret, transient UI state, invalid id, unsupported destructive operation, or auth/access issues.
 
 ## When To Split Work
 
@@ -26,6 +29,7 @@ If a change cannot be verified end to end quickly, the scope is too broad — sp
 - Do not invent product behavior that is not defined in the context files.
 - If a requirement is ambiguous, resolve it in the relevant context file before implementing.
 - If a requirement is missing, add it as an open question in `progress-tracker.md` before continuing.
+- If external research suggests type-specific child-layer restrictions, apply the Arc Forge product override instead: every node can have a child layer; type-specific behavior is limited to suggestions, examples, and metadata hints.
 
 ## Protected Foundation Components
 

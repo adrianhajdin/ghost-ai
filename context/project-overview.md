@@ -8,6 +8,22 @@ The canvas is a layered architecture pyramid: root context at the top, deeper la
 
 The LLM is responsible for Prompt Pack content. Prompt Packs are generated directly from sanitized CanvasDoc pyramid JSON, not from deterministic Design IR summaries. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs, build the app, or write to external repositories. Nimbus is not included yet and is not a Prompt Pack target in this version.
 
+## Canvas v2 Product Contract
+
+Arc Forge v2 direction is C4-inspired rather than UML/BPMN/ArchiMate-complete. It is an AI-assisted, layered architecture canvas and prompt composer. React Flow remains the renderer, and CanvasDoc JSON remains the source of truth. Screenshots or future image attachments may be supplemental evidence only; they must never replace CanvasDoc as the durable architecture state.
+
+Every node can have a child architecture layer. Services, databases, actors, generic/custom nodes, unknown nodes, and decorative-looking nodes may all be drilled into when the user or LLM decides that a deeper layer is meaningful. Node type may influence starter templates, example prompts, metadata suggestions, and Semantic Scan hints, but it must never become a permission gate. There must be no allowlist, denylist, disabled UI, or "not eligible" logic for child layers by semantic type.
+
+Architect is the architecture reasoning layer. It reads the sanitized CanvasDoc pyramid JSON, current graph id, selected node ids, project-wide conversation, graph provenance, and provider metadata. It may propose nodes, edges, metadata, child layers, cross-layer changes, and Prompt Pack readiness guidance. Users manually preview and apply non-destructive patch proposals.
+
+Deterministic code is limited to safety, transport, storage, schema compatibility, auth/access, sanitization, preview/apply mechanics, export/download, and conversation persistence. It must not author architecture, judge architecture quality, decide whether a node deserves internals, generate Prompt Pack content, or block Prompt Pack generation because architecture metadata is incomplete.
+
+Semantic Scan is advisory for architecture completeness. It may warn about missing edge types, responsibilities, owners, trust notes, retry/idempotency notes, empty child layers, vague labels, observability/deployment gaps, and AI safety/tool-access notes. It may only block or fail for safety, schema, transport, malformed patch, raw secret, transient UI state, invalid id, unknown target, unsupported destructive operation, or auth/access issues.
+
+Prompt Packs are LLM-authored from CanvasDoc pyramid JSON. Mechanical rendering, copying, downloading, and schema validation of the LLM-authored output are allowed, but deterministic Prompt Pack authoring, fallback generation, and architecture-quality judging are not.
+
+New node types or modes should be added only when they materially improve architecture clarity, LLM reasoning, Prompt Pack quality, and common modern software architecture modeling without making the default palette harder for non-experts. Prefer generic/custom nodes, metadata, and tags when a concept is niche, domain-specific, classificatory, or already representable by an existing type plus metadata.
+
 ## Goals
 
 1. Let authenticated users create and manage architecture projects.
