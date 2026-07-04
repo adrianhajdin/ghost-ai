@@ -28,6 +28,7 @@
     "test:prompt-pack": "tsx scripts/prompt-pack-smoke.ts",
     "test:architecture-draft": "tsx scripts/architecture-draft-smoke.ts",
     "test:architect-conversation": "tsx scripts/architect-conversation-smoke.ts",
+    "test:canvas-v2-guardrails": "tsx scripts/canvas-v2-guardrails-smoke.ts",
     "test:auth-cookie-name": "tsx scripts/auth-cookie-name-smoke.ts",
     "db:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",

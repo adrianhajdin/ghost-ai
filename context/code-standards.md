@@ -43,6 +43,7 @@
 - Do not store large generated content directly in the database.
 - Task run records are first-class relational data — treat ownership and run IDs as verified before any token issuance.
 - Realtime room event records are foundation data for the internal collaboration engine; keep them compact and scoped by project/room/user.
+- Deterministic code may validate, sanitize, persist, preview/apply, and export CanvasDoc/LLM transport data, but must not author architecture decisions, Prompt Pack content, or node-type permission gates for child layers.
 
 ## Runtime Configuration
 

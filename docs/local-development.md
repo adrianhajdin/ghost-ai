@@ -4,10 +4,10 @@ This setup runs the full local development stack in Docker Compose:
 
 - PostgreSQL on host port `5433`
 - Next.js dev server on `http://localhost:3000`
-- Internal AI worker for queued design/spec tasks
+- Internal AI worker for queued architecture, spec, Prompt Pack, and Architect tasks
 - Internal realtime WebSocket service on `http://localhost:3001` with browser WebSocket URL `ws://localhost:3001/ws`
 - Local filesystem artifact storage under `.local-storage`
-- Deterministic mock AI provider for local design/spec tasks with no external AI key
+- Deterministic mock AI provider for local architecture/spec/Prompt Pack/Architect tasks with no external AI key
 - Dev console email delivery for verification and password reset links with no SMTP key
 
 Pressing Play for `docker-compose.local.yml` in Docker Desktop starts all services.
@@ -53,7 +53,7 @@ You can also press Play in Docker Desktop for `docker-compose.local.yml`.
 
 The app container installs dependencies if needed, generates Prisma Client, applies committed migrations with `prisma migrate deploy`, then starts Next.js on `0.0.0.0:3000`.
 
-The worker container waits for the app healthcheck, then starts the internal PostgreSQL-backed AI task runner. Docker local mode defaults `AI_PROVIDER` to `mock`, so design and spec tasks complete deterministically without Google, OpenAI-compatible, or other external AI credentials. The app and worker also load `.env.local` as an optional Compose env file, so if `.env.local` sets `AI_PROVIDER=google` or `AI_PROVIDER=openai_compatible`, both services preserve that value for real LLM testing.
+The worker container waits for the app healthcheck, then starts the internal PostgreSQL-backed AI task runner. Docker local mode defaults `AI_PROVIDER` to `mock`, so architecture draft, spec, Prompt Pack, and Architect tasks complete deterministically without Google, OpenAI-compatible, or other external AI credentials. The app and worker also load `.env.local` as an optional Compose env file, so if `.env.local` sets `AI_PROVIDER=google` or `AI_PROVIDER=openai_compatible`, both services preserve that value for real LLM testing.
 
 The realtime container waits for PostgreSQL and the app healthcheck, then starts the internal WebSocket service. It provides authenticated room tokens, room joins, presence updates, chat/status events, canvas synchronization, and bounded payload handling. React Flow remains the canvas renderer.
 
@@ -145,7 +145,17 @@ With only the Docker PostgreSQL database and internal auth defaults, you can use
 - internal realtime token issuance, realtime health checks, presence, chat/status events, and canvas synchronization
 - canvas autosave and reload through local filesystem artifact storage
 - secure spec preview/download routes for specs stored through the local provider
-- deterministic mock AI design and spec generation through the internal task worker
+- deterministic mock AI architecture draft, spec, Prompt Pack, and Architect flows through the internal task worker
+
+## Guardrail Smoke Tests
+
+Canvas v2 product guardrails can be checked without external LLM keys:
+
+```bash
+npm run test:canvas-v2-guardrails
+```
+
+The guardrail smoke verifies that legacy deterministic design/Prompt Pack generation stays removed, every node can still receive a child layer through safe CanvasDoc patch apply, Semantic Scan remains advisory for architecture completeness, Architect remains the LLM architecture reasoning surface, React Flow remains the renderer, CanvasDoc remains the source of truth, and no app-builder, repo write-back, Nimbus, or image/multimodal behavior has been introduced.
 
 ## Keys Needed For Full Behavior
 
@@ -162,7 +172,7 @@ Full local artifact persistence does not require an external object storage key.
 - `EMAIL_PROVIDER=dev_console` for local verification/reset emails without external SMTP credentials.
 - `EMAIL_PROVIDER=smtp`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_SECURE` for production email delivery.
 
-Without external AI keys or SMTP credentials, local auth, account verification/recovery, database-backed project flows, realtime room connectivity, canvas persistence, mock AI design/spec tasks, and provider-backed spec preview/download can be tested. If an external provider is selected without required env, individual queued tasks fail safely without stopping the worker. The internal realtime service can be health-checked at:
+Without external AI keys or SMTP credentials, local auth, account verification/recovery, database-backed project flows, realtime room connectivity, canvas persistence, mock AI architecture/spec/Prompt Pack/Architect tasks, and provider-backed spec preview/download can be tested. If an external provider is selected without required env, individual queued tasks fail safely without stopping the worker. The internal realtime service can be health-checked at:
 
 ```text
 http://localhost:3001/health

@@ -105,7 +105,16 @@ React Flow `<Background>` component. Canvas sits on the base background color.
 - Edge semantic type is edited from the inspector and may show a compact badge only during active edge interaction.
 - Semantic warnings are advisory and do not block saving.
 - Any node can create and open an inner architecture layer through `subcanvasRef`; the editor URL carries the active `graphId`, breadcrumbs return to the parent layer or system root, and empty child layers show a compact generic internal-detail guide.
+- The UI must not disable, hide, or label drill-down as unavailable based on semantic type. Actor-like, generic, custom, unknown, or decorative-looking nodes can still open child layers when meaningful.
 - Child architecture layers expose compact semantic templates for endpoints, entities, workers, event contracts, business rules, validation rules, and policies while preserving the same React Flow interaction model.
+- Node type can influence starter templates, quick prompts, and metadata suggestions only; it must not become a child-layer permission system.
+
+### Canvas v2 Anti-Bloat
+
+- Default toolbar/palette choices should stay understandable for non-experts.
+- Add a new node type or mode only when it materially improves architecture clarity, LLM reasoning, Prompt Pack quality, and common modern software architecture modeling.
+- Prefer generic/custom nodes plus metadata/tags when the distinction is niche, domain-specific, classificatory, or cleanly represented by an existing type.
+- Do not turn the canvas into a full UML, BPMN, ArchiMate, or cloud vendor mega-palette implementation.
 
 ## Component Library
 

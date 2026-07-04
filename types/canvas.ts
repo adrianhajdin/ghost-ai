@@ -94,16 +94,7 @@ export interface SemanticDefinition<TType extends string> {
   purpose: string
   requiredFields: readonly string[]
   recommendedFields: readonly string[]
-  canHaveSubcanvas?: boolean
 }
-
-export const SUBCANVAS_CAPABLE_NODE_TYPES = [
-  "service",
-  "api",
-  "database",
-  "auth-module",
-  "worker",
-] as const satisfies readonly SemanticNodeType[]
 
 export const SEMANTIC_NODE_DEFINITIONS = {
   unclassified: {
@@ -119,7 +110,6 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "Microservice or bounded application context.",
     requiredFields: ["id", "name", "serviceKind", "runtime"],
     recommendedFields: ["owner", "language", "framework", "ports", "sla", "tenancy", "authMode"],
-    canHaveSubcanvas: true,
   },
   api: {
     type: "api",
@@ -127,7 +117,6 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "API surface of a service.",
     requiredFields: ["id", "name", "apiStyle"],
     recommendedFields: ["basePath", "version", "openapiRef", "graphqlRef", "authRequired"],
-    canHaveSubcanvas: true,
   },
   frontend: {
     type: "frontend",
@@ -142,7 +131,6 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "Relational, document, or key-value data store.",
     requiredFields: ["id", "name", "dbKind"],
     recommendedFields: ["engine", "schemaMode", "orm", "backupClass", "retention"],
-    canHaveSubcanvas: true,
   },
   cache: {
     type: "cache",
@@ -164,7 +152,6 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "Background processor or job runner.",
     requiredFields: ["id", "name", "triggerType"],
     recommendedFields: ["concurrency", "retryPolicy", "idempotencyRequired"],
-    canHaveSubcanvas: true,
   },
   "external-system": {
     type: "external-system",
@@ -179,7 +166,6 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "Authentication, session, and token flow boundary.",
     requiredFields: ["id", "name", "authStrategy"],
     recommendedFields: ["sessionMode", "passwordPolicy", "emailVerification", "oauthProviders"],
-    canHaveSubcanvas: true,
   },
   "domain-model": {
     type: "domain-model",

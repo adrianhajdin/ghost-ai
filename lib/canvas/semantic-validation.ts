@@ -114,7 +114,7 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
       targetKind: "node",
       targetId: node.id,
       field: "semanticType",
-      message: "Node is unclassified; choose a semantic type before generating instructions.",
+      message: "Node is unclassified; add semantic meaning when you want stronger instructions.",
     })
   }
 
