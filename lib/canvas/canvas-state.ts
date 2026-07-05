@@ -8,6 +8,7 @@ import {
   normalizeEdgeRelationshipType,
   normalizeSemanticNodeType,
   type CanvasMetadataStatus,
+  type CanvasDecompositionStatus,
   type CanvasNodeData,
   type EdgeRelationshipType,
   type NodeShape,
@@ -47,6 +48,10 @@ const metadataStatusSchema = z
   .enum(["draft", "approved", "deprecated"])
   .optional()
 
+const decompositionStatusSchema = z
+  .enum(["none", "planned", "partial", "complete", "stale"])
+  .optional()
+
 const positionSchema = z.object({
   x: z.number().finite(),
   y: z.number().finite(),
@@ -77,10 +82,26 @@ const nodeDataSchema = z
     technology: z.string().max(240).optional(),
     runtimeKind: z.string().max(240).optional(),
     securityNotes: z.string().max(2000).optional(),
+    trustNotes: z.string().max(2000).optional(),
+    interfaceNotes: z.string().max(2000).optional(),
+    eventNotes: z.string().max(2000).optional(),
     privacyClass: z.string().max(240).optional(),
+    retentionNotes: z.string().max(2000).optional(),
+    backupNotes: z.string().max(2000).optional(),
     operationalNotes: z.string().max(2000).optional(),
+    scalingNotes: z.string().max(2000).optional(),
+    observabilityNotes: z.string().max(2000).optional(),
+    failureModes: z.array(z.string().max(500)).max(32).optional(),
     openQuestions: z.array(z.string().max(500)).max(32).optional(),
     promptPackNotes: z.string().max(2000).optional(),
+    secretRef: z.string().max(240).optional(),
+    secretCapabilityRef: z.string().max(240).optional(),
+    hasChildLayer: z.boolean().optional(),
+    childLayerPurpose: z.string().max(2000).optional(),
+    childLayerSummary: z.string().max(2000).optional(),
+    decompositionStatus: decompositionStatusSchema,
+    lastLayerSummary: z.string().max(2000).optional(),
+    childLayerUpdatedAt: z.string().max(80).optional(),
     createdAt: z.string().max(80).optional(),
     updatedAt: z.string().max(80).optional(),
     color: z.string().max(80).optional(),
@@ -190,6 +211,19 @@ function normalizeStringArray(value: unknown): string[] {
 
 function normalizeStatus(value: unknown): CanvasMetadataStatus {
   return value === "approved" || value === "deprecated" ? value : "draft"
+}
+
+function normalizeDecompositionStatus(value: unknown): CanvasDecompositionStatus {
+  return value === "planned" ||
+    value === "partial" ||
+    value === "complete" ||
+    value === "stale"
+    ? value
+    : "none"
+}
+
+function trimOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() || undefined : undefined
 }
 
 function normalizeShape(value: unknown): NodeShape {
@@ -332,8 +366,33 @@ function normalizeNodeData(data: z.infer<typeof nodeDataSchema>): CanvasNodeData
     dataRead: normalizeStringArray(sanitized.dataRead),
     eventsEmitted: normalizeStringArray(sanitized.eventsEmitted),
     eventsConsumed: normalizeStringArray(sanitized.eventsConsumed),
+    failureModes: normalizeStringArray(sanitized.failureModes),
     openQuestions: normalizeStringArray(sanitized.openQuestions),
     owner: typeof sanitized.owner === "string" ? sanitized.owner.trim() || null : null,
+    description: trimOptionalString(sanitized.description),
+    boundary: trimOptionalString(sanitized.boundary),
+    layerRole: trimOptionalString(sanitized.layerRole),
+    technology: trimOptionalString(sanitized.technology),
+    runtimeKind: trimOptionalString(sanitized.runtimeKind),
+    securityNotes: trimOptionalString(sanitized.securityNotes),
+    trustNotes: trimOptionalString(sanitized.trustNotes),
+    interfaceNotes: trimOptionalString(sanitized.interfaceNotes),
+    eventNotes: trimOptionalString(sanitized.eventNotes),
+    privacyClass: trimOptionalString(sanitized.privacyClass),
+    retentionNotes: trimOptionalString(sanitized.retentionNotes),
+    backupNotes: trimOptionalString(sanitized.backupNotes),
+    operationalNotes: trimOptionalString(sanitized.operationalNotes),
+    scalingNotes: trimOptionalString(sanitized.scalingNotes),
+    observabilityNotes: trimOptionalString(sanitized.observabilityNotes),
+    promptPackNotes: trimOptionalString(sanitized.promptPackNotes),
+    secretRef: trimOptionalString(sanitized.secretRef),
+    secretCapabilityRef: trimOptionalString(sanitized.secretCapabilityRef),
+    hasChildLayer: Boolean(sanitized.hasChildLayer || sanitized.subcanvasRef?.graphId),
+    childLayerPurpose: trimOptionalString(sanitized.childLayerPurpose),
+    childLayerSummary: trimOptionalString(sanitized.childLayerSummary),
+    decompositionStatus: normalizeDecompositionStatus(sanitized.decompositionStatus),
+    lastLayerSummary: trimOptionalString(sanitized.lastLayerSummary),
+    childLayerUpdatedAt: trimOptionalString(sanitized.childLayerUpdatedAt),
     color: typeof sanitized.color === "string" ? sanitized.color : NODE_COLORS[0].fill,
     textColor:
       typeof sanitized.textColor === "string" ? sanitized.textColor : NODE_COLORS[0].text,
@@ -417,6 +476,18 @@ export function sanitizeCanvasSnapshot(value: unknown): CanvasSnapshot {
             typeof sanitizedData.owner === "string"
               ? sanitizedData.owner.trim() || null
               : null,
+          description: trimOptionalString(sanitizedData.description),
+          mechanism: trimOptionalString(sanitizedData.mechanism),
+          protocol: trimOptionalString(sanitizedData.protocol),
+          dataSubject: trimOptionalString(sanitizedData.dataSubject),
+          eventSubject: trimOptionalString(sanitizedData.eventSubject),
+          securityNotes: trimOptionalString(sanitizedData.securityNotes),
+          trustNotes: trimOptionalString(sanitizedData.trustNotes),
+          method: trimOptionalString(sanitizedData.method),
+          path: trimOptionalString(sanitizedData.path),
+          operationHint: trimOptionalString(sanitizedData.operationHint),
+          eventName: trimOptionalString(sanitizedData.eventName),
+          topic: trimOptionalString(sanitizedData.topic),
           ...mirroredLabels,
         },
         markerEnd: {

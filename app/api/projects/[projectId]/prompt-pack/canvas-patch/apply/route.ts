@@ -50,26 +50,27 @@ export async function POST(
     proposal: parsed.data.proposal,
   })
   const currentDoc = result.docs.find((doc) => doc.graphId === graphId)
-  let realtimeBroadcasted = false
+  const broadcastedGraphIds: string[] = []
+  const realtimeBroadcastFailures: string[] = []
 
-  if (currentDoc) {
+  for (const doc of result.docs) {
     await publishRealtimeRoomEvent({
       projectId: project.id,
-      roomId: createRealtimeRoomId(project.id, graphId),
+      roomId: createRealtimeRoomId(project.id, doc.graphId),
       userId: AI_USER_ID,
       event: {
         type: "canvas.snapshot",
         payload: toRealtimePayload({
-          nodes: currentDoc.nodes,
-          edges: currentDoc.edges,
+          nodes: doc.nodes,
+          edges: doc.edges,
         }),
       },
     })
       .then(() => {
-        realtimeBroadcasted = true
+        broadcastedGraphIds.push(doc.graphId)
       })
       .catch(() => {
-        realtimeBroadcasted = false
+        realtimeBroadcastFailures.push(doc.graphId)
       })
   }
 
@@ -79,6 +80,8 @@ export async function POST(
     dirtyGraphIds: result.dirtyGraphIds,
     doc: currentDoc ?? null,
     canvas: currentDoc ? { nodes: currentDoc.nodes, edges: currentDoc.edges } : null,
-    realtimeBroadcasted,
+    realtimeBroadcasted: broadcastedGraphIds.length > 0,
+    broadcastedGraphIds,
+    realtimeBroadcastFailures,
   })
 }

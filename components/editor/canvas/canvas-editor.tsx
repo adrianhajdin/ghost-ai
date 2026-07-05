@@ -39,7 +39,11 @@ import { useRealtimeRoom } from "@/hooks/use-realtime-room"
 import { getUserColor } from "@/lib/user-color"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import type { CanvasSnapshot } from "@/lib/canvas/canvas-state"
-import { validateCanvasSemantics } from "@/lib/canvas/semantic-validation"
+import {
+  normalizeSemanticScanState,
+  validateCanvasSemantics,
+  type SemanticScanState,
+} from "@/lib/canvas/semantic-validation"
 import { baseNodeData } from "@/lib/canvas/semantic-defaults"
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 
@@ -222,6 +226,8 @@ export function CanvasEditor({
     graphLayer,
     graphLayerKind,
     graphSummary,
+    graphPanels,
+    setGraphPanels,
   } = useRealtimeRoom()
   const router = useRouter()
   const { user } = useCurrentUser()
@@ -323,6 +329,16 @@ export function CanvasEditor({
     () => validateCanvasSemantics({ nodes, edges }),
     [edges, nodes]
   )
+  const semanticScanState = useMemo(
+    () => normalizeSemanticScanState(graphPanels.semanticScan),
+    [graphPanels.semanticScan]
+  )
+  const updateSemanticScanState = useCallback(
+    (nextState: SemanticScanState) => {
+      setGraphPanels({ ...graphPanels, semanticScan: nextState })
+    },
+    [graphPanels, setGraphPanels]
+  )
 
   const publishCanvas = useCallback(
     (nextNodes: CanvasNode[], nextEdges: CanvasEdge[]) => {
@@ -388,6 +404,7 @@ export function CanvasEditor({
     layer: graphLayer,
     layerKind: graphLayerKind,
     summary: graphSummary,
+    panels: graphPanels,
   })
 
   useEffect(() => {
@@ -1040,6 +1057,8 @@ export function CanvasEditor({
           selectedNode={selectedNode}
           selectedEdge={selectedEdge}
           warnings={semanticWarnings}
+          semanticScanState={semanticScanState}
+          onSemanticScanStateChange={updateSemanticScanState}
         />
         <PresenceCursors />
         <CollaboratorAvatars />

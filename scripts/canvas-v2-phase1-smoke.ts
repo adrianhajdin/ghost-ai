@@ -313,7 +313,8 @@ for (const text of [
   "Data owned",
   "Events emitted",
   "Relationship type",
-  "Advanced relationship metadata",
+  "Mechanism",
+  "Security / Trust",
 ]) {
   assert(inspectorSource.includes(text), `Metadata drawer missed ${text}`)
 }

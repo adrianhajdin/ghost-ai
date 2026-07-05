@@ -276,6 +276,9 @@ function pushSecretWarning(
   context.warnings.push({
     id: `${context.sourceGraphId}-${context.targetKind}-${context.targetId}-secret-${warningPath(field)}`,
     severity: "warning",
+    category: "safety",
+    advisory: true,
+    blocking: false,
     targetKind: context.targetKind,
     targetId: context.targetId,
     sourceGraphId: context.sourceGraphId,
@@ -547,6 +550,9 @@ function graphValidationWarnings(
       warnings.push({
         id: `${doc.graphId}-invalid-graph-id`,
         severity: "warning",
+        category: "topology-quality",
+        advisory: true,
+        blocking: false,
         targetKind: "canvas",
         sourceGraphId: doc.graphId,
         field: "graphId",
@@ -558,6 +564,9 @@ function graphValidationWarnings(
       warnings.push({
         id: `${doc.graphId}-missing-parent-node-id`,
         severity: "warning",
+        category: "topology-quality",
+        advisory: true,
+        blocking: false,
         targetKind: "canvas",
         sourceGraphId: doc.graphId,
         field: "parentNodeId",
@@ -574,6 +583,9 @@ function graphValidationWarnings(
       warnings.push({
         id: `${rootDoc.graphId}-node-${node.id}-subcanvas-ref-missing-graph`,
         severity: "warning",
+        category: "topology-quality",
+        advisory: true,
+        blocking: false,
         targetKind: "node",
         targetId: node.id,
         sourceGraphId: rootDoc.graphId,
@@ -587,6 +599,9 @@ function graphValidationWarnings(
       warnings.push({
         id: `${rootDoc.graphId}-node-${node.id}-invalid-subcanvas-graph-id`,
         severity: "warning",
+        category: "topology-quality",
+        advisory: true,
+        blocking: false,
         targetKind: "node",
         targetId: node.id,
         sourceGraphId: rootDoc.graphId,
@@ -600,6 +615,9 @@ function graphValidationWarnings(
       warnings.push({
         id: `${rootDoc.graphId}-node-${node.id}-missing-child-graph`,
         severity: "warning",
+        category: "topology-quality",
+        advisory: true,
+        blocking: false,
         targetKind: "node",
         targetId: node.id,
         sourceGraphId: rootDoc.graphId,

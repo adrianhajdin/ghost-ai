@@ -27,6 +27,7 @@ export interface CanvasDocWriteOptions {
   layer?: number | null
   layerKind?: string | null
   summary?: string | null
+  panels?: Record<string, unknown>
 }
 
 function canvasFromDoc(doc: CanvasDocV1): CanvasSnapshot {
@@ -118,6 +119,7 @@ export async function writeCanvasDoc(
         layer: options.layer ?? null,
         layerKind: options.layerKind ?? null,
         summary: options.summary ?? null,
+        panels: options.panels,
       })
 
   const nextDoc: CanvasDocV1 = {
@@ -131,6 +133,7 @@ export async function writeCanvasDoc(
     layer: options.layer ?? doc.layer,
     layerKind: options.layerKind ?? doc.layerKind,
     summary: options.summary ?? doc.summary,
+    panels: options.panels ?? doc.panels,
   }
   const reference = await getStorageProvider().writeJsonObject(
     graphObjectPath(projectId, graphId),

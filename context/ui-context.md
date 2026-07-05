@@ -104,11 +104,14 @@ React Flow `<Background>` component. Canvas sits on the base background color.
 - Connect Relationship exposes quick relationship types first, then advanced relationships, and newly drawn edges persist both `relationshipType` and compatible label data.
 - Nodes show a compact semantic type badge; unclassified nodes use warning styling.
 - Selected nodes and edges expose a local property inspector for semantic type, relationship type, responsibilities, ownership, boundary/layer role, interfaces, data/events, operational/security/privacy notes, source/assumption/decision refs, and type-specific fields.
+- The inspector uses progressive disclosure instead of one long form. Node metadata is grouped into Overview, Interfaces, Data, Events, Security, Operations, Prompt Pack Notes, Open Questions, and Child Layer. Edge metadata is grouped into Overview, Mechanism, Data / Events, Security / Trust, and Notes.
+- Inspector summary cards should surface the current semantic type, key responsibility, owner/boundary, interface/data/event hints, and child-layer decomposition status before deeper fields.
 - Edge relationship type is edited from the inspector and may show a compact badge only during active edge interaction.
-- Semantic warnings are advisory and do not block saving.
+- Semantic Scan appears as a compact expandable cockpit chip when nothing is selected, not as a large warning card. Findings are grouped by category, advisory findings can be snoozed or marked intentional per graph, and blocking safety findings remain visible. Semantic warnings are advisory and do not block saving.
 - Any node can create and open an inner architecture layer through `subcanvasRef`; the editor URL carries the active `graphId`, breadcrumbs return to the parent layer or system root, and empty child layers show a compact generic internal-detail guide.
 - The UI must not disable, hide, or label drill-down as unavailable based on semantic type. Actor-like, generic, custom, unknown, or decorative-looking nodes can still open child layers when meaningful.
 - Child architecture layers expose compact semantic templates for endpoints, entities, workers, event contracts, business rules, validation rules, and policies while preserving the same React Flow interaction model.
+- Parent nodes with child layers should show summary/status metadata in the inspector so users can tell whether the layer is planned, partial, complete, stale, or still empty.
 - Node type can influence starter templates, quick prompts, and metadata suggestions only; it must not become a child-layer permission system.
 
 ### Canvas v2 Anti-Bloat

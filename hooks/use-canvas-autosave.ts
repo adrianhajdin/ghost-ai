@@ -18,6 +18,7 @@ export function useCanvasAutosave(
     layer?: number | null
     layerKind?: string | null
     summary?: string | null
+    panels?: Record<string, unknown>
   } = {}
 ): { status: SaveStatus; save: () => void } {
   const [status, setStatus] = useState<SaveStatus>("idle")
@@ -65,6 +66,7 @@ export function useCanvasAutosave(
           layer: optionsRef.current.layer,
           layerKind: optionsRef.current.layerKind,
           summary: optionsRef.current.summary,
+          panels: optionsRef.current.panels,
         }),
       })
       setStatus(res.ok ? "saved" : "error")
@@ -87,7 +89,7 @@ export function useCanvasAutosave(
       if (timerRef.current) clearTimeout(timerRef.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges])
+  }, [nodes, edges, options.panels])
 
   const save = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current)

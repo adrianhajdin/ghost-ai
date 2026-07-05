@@ -12,6 +12,10 @@ import {
   isValidGraphId,
 } from "@/lib/canvas/graph-ids"
 import { baseNodeData, semanticDefaultsForType } from "@/lib/canvas/semantic-defaults"
+import {
+  applyChildLayerSummaryToParentDoc,
+  childLayerMetadataPatch,
+} from "@/lib/canvas/child-layer-summary"
 import { createEdgeLabelItems, mirrorEdgeLabelData } from "@/lib/canvas/edge-labels"
 import {
   NODE_COLORS,
@@ -457,7 +461,7 @@ async function createLayer(
   operation.graph.nodes.forEach((node, index) => {
     nextChildDoc = addNodeToDoc(
       nextChildDoc,
-      { op: "add-node", graphId, tempId: node.id, node },
+      { op: "add-node", graphId, tempId: patchText(node.tempId) ?? node.id, node },
       index,
       tempIdMap
     )
@@ -472,36 +476,97 @@ async function createLayer(
     else issue(issues, operationIndex, `Child layer edge ${index + 1} references a missing node.`)
   })
 
-  if (!existingGraphId) {
-    const subcanvasRef = {
-      graphId,
-      scopeKind: "architecture-layer" as const,
-      title: operation.graph.title,
-      parentGraphId: parentDoc.graphId,
-      parentNodeId: parentNode.id,
-      layer,
-      layerKind: operation.graph.layerKind ?? "architecture-layer",
-      summary: operation.graph.summary,
-      createdAt: now,
-      updatedAt: now,
-      llmLayerPurpose: operation.graph.summary,
-    }
-    const nextParentDoc = sanitizeDoc({
-      ...parentDoc,
-      nodes: parentDoc.nodes.map((node) =>
-        node.id === parentNode.id
-          ? { ...node, data: { ...node.data, subcanvasRef } }
-          : node
-      ),
-    })
+  const subcanvasRef = existingGraphId
+    ? {
+        ...parentNode.data.subcanvasRef,
+        graphId,
+        scopeKind: parentNode.data.subcanvasRef?.scopeKind ?? ("architecture-layer" as const),
+        title: parentNode.data.subcanvasRef?.title ?? operation.graph.title,
+        parentGraphId: parentNode.data.subcanvasRef?.parentGraphId ?? parentDoc.graphId,
+        parentNodeId: parentNode.data.subcanvasRef?.parentNodeId ?? parentNode.id,
+        layer: parentNode.data.subcanvasRef?.layer ?? layer,
+        layerKind:
+          parentNode.data.subcanvasRef?.layerKind ??
+          operation.graph.layerKind ??
+          "architecture-layer",
+        summary: parentNode.data.subcanvasRef?.summary ?? operation.graph.summary,
+        updatedAt: now,
+        llmLayerPurpose:
+          parentNode.data.subcanvasRef?.llmLayerPurpose ?? operation.graph.summary,
+      }
+    : {
+        graphId,
+        scopeKind: "architecture-layer" as const,
+        title: operation.graph.title,
+        parentGraphId: parentDoc.graphId,
+        parentNodeId: parentNode.id,
+        layer,
+        layerKind: operation.graph.layerKind ?? "architecture-layer",
+        summary: operation.graph.summary,
+        createdAt: now,
+        updatedAt: now,
+        llmLayerPurpose: operation.graph.summary,
+      }
+  const layerMetadata = childLayerMetadataPatch({
+    childDoc: nextChildDoc,
+    existingParentNode: parentNode,
+    authoredSummary: operation.graph.summary ?? null,
+    now,
+  })
+  const nextParentDoc = sanitizeDoc({
+    ...parentDoc,
+    nodes: parentDoc.nodes.map((node) =>
+      node.id === parentNode.id
+        ? { ...node, data: { ...node.data, subcanvasRef, ...layerMetadata } }
+        : node
+    ),
+  })
 
-    docsByGraphId.set(parentDoc.graphId, nextParentDoc)
-    dirtyGraphIds.add(parentDoc.graphId)
-  }
+  docsByGraphId.set(parentDoc.graphId, nextParentDoc)
+  dirtyGraphIds.add(parentDoc.graphId)
 
   docsByGraphId.set(graphId, nextChildDoc)
   dirtyGraphIds.add(graphId)
   return true
+}
+
+async function refreshDirtyChildLayerSummaries(input: {
+  projectId: string
+  docsByGraphId: Map<string, CanvasDocV1>
+  dirtyGraphIds: Set<string>
+}) {
+  const queue = [...input.dirtyGraphIds]
+  const visited = new Set<string>()
+
+  while (queue.length > 0) {
+    const graphId = queue.shift()
+    if (!graphId || visited.has(graphId)) continue
+    visited.add(graphId)
+
+    const childDoc = input.docsByGraphId.get(graphId)
+    if (!childDoc?.parentGraphId || !childDoc.parentNodeId) continue
+
+    const parentDoc = await getDoc(
+      input.projectId,
+      childDoc.parentGraphId,
+      input.docsByGraphId
+    )
+    if (!parentDoc) continue
+
+    const nextParentDoc = sanitizeDoc(
+      applyChildLayerSummaryToParentDoc({
+        parentDoc,
+        childDoc,
+      })
+    )
+    if (JSON.stringify(parentDoc.nodes) === JSON.stringify(nextParentDoc.nodes)) {
+      continue
+    }
+
+    input.docsByGraphId.set(parentDoc.graphId, nextParentDoc)
+    if (!input.dirtyGraphIds.has(parentDoc.graphId)) queue.push(parentDoc.graphId)
+    input.dirtyGraphIds.add(parentDoc.graphId)
+  }
 }
 
 export async function applyLlmCanvasImprovementProposal(input: {
@@ -670,6 +735,12 @@ export async function applyLlmCanvasImprovementProposal(input: {
       applied.updateGraphs += 1
     }
   }
+
+  await refreshDirtyChildLayerSummaries({
+    projectId: input.projectId,
+    docsByGraphId,
+    dirtyGraphIds,
+  })
 
   const writtenDocs: CanvasDocV1[] = []
   for (const graphId of dirtyGraphIds) {

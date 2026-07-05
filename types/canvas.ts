@@ -148,6 +148,12 @@ export type SemanticEdgeType = (typeof SEMANTIC_EDGE_TYPES)[number]
 
 export type CanvasMetadataStatus = "draft" | "approved" | "deprecated"
 export type CanvasSyncMode = "sync" | "async" | "unknown"
+export type CanvasDecompositionStatus =
+  | "none"
+  | "planned"
+  | "partial"
+  | "complete"
+  | "stale"
 
 export interface CanvasEdgeLabelItem {
   id: string
@@ -607,8 +613,24 @@ export interface CanvasNodeData extends Record<string, unknown> {
   securityNotes?: string
   privacyClass?: string
   operationalNotes?: string
+  scalingNotes?: string
+  observabilityNotes?: string
+  failureModes?: string[]
   openQuestions?: string[]
   promptPackNotes?: string
+  trustNotes?: string
+  interfaceNotes?: string
+  eventNotes?: string
+  retentionNotes?: string
+  backupNotes?: string
+  secretRef?: string
+  secretCapabilityRef?: string
+  hasChildLayer?: boolean
+  childLayerPurpose?: string
+  childLayerSummary?: string
+  decompositionStatus?: CanvasDecompositionStatus
+  lastLayerSummary?: string
+  childLayerUpdatedAt?: string
   createdAt?: string
   updatedAt?: string
   subcanvasRef?: CanvasSubcanvasRef | null

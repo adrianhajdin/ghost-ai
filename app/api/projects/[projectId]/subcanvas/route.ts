@@ -14,6 +14,7 @@ import {
 } from "@/lib/canvas/graph-ids"
 import { createCanvasDocV1, type CanvasDocV1 } from "@/lib/canvas/canvas-doc"
 import { emptyCanvasSnapshot } from "@/lib/canvas/canvas-state"
+import { childLayerMetadataPatch } from "@/lib/canvas/child-layer-summary"
 import type { CanvasNode } from "@/types/canvas"
 import type { NextRequest } from "next/server"
 
@@ -130,20 +131,6 @@ export async function POST(
     updatedAt: now,
     llmLayerPurpose: summary ?? undefined,
   }
-  const nextParentDoc = {
-    ...parentDoc,
-    nodes: parentDoc.nodes.map((node) =>
-      node.id === parentNode.id
-        ? {
-            ...node,
-            data: {
-              ...node.data,
-              subcanvasRef,
-            },
-          }
-        : node
-    ),
-  }
   const childGraph = createCanvasDocV1(emptyCanvasSnapshot(), {
     projectId,
     graphId,
@@ -155,6 +142,27 @@ export async function POST(
     layerKind,
     summary,
   })
+  const layerMetadata = childLayerMetadataPatch({
+    childDoc: childGraph,
+    existingParentNode: parentNode,
+    authoredSummary: summary,
+    now,
+  })
+  const nextParentDoc = {
+    ...parentDoc,
+    nodes: parentDoc.nodes.map((node) =>
+      node.id === parentNode.id
+        ? {
+            ...node,
+            data: {
+              ...node.data,
+              subcanvasRef,
+              ...layerMetadata,
+            },
+          }
+        : node
+    ),
+  }
 
   await writeCanvasDoc(projectId, childGraph, {
     graphId,
