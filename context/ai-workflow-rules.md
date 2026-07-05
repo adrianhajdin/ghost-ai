@@ -12,7 +12,9 @@ Build this project incrementally using a spec-driven workflow. Context files def
 - Preserve the Canvas v2 product contract: Architect and Prompt Pack content are LLM-authored from CanvasDoc pyramid JSON; deterministic code handles safety, schema, transport, storage, auth/access, preview/apply, and export only.
 - Do not add deterministic architecture judges, deterministic Prompt Pack authoring, child-layer semantic-type permission gates, app execution, repo write-back, auto-apply patches, image/multimodal input, or extra AI editing personas unless a future product contract explicitly changes that scope.
 - Treat Semantic Scan as advisory for architecture completeness. It may fail only for safety, schema, transport, malformed patch, raw secret, transient UI state, invalid id, unsupported destructive operation, or auth/access issues.
-- Keep Canvas v2 semantic taxonomy and relationshipType additions compact. Prefer metadata, labels, tags, and Prompt Pack notes over adding niche node or edge enum values.
+- Keep Canvas v2 semantic taxonomy and relationshipType additions compact. Prefer metadata, labels, tags, proxy references, and Prompt Pack notes over adding niche node or edge enum values.
+- Phase 3 advanced node types are contextual, not default toolbar bloat: reference-proxy, runtime-deployment, observability-control, and ai-component should be used only when they materially improve architecture clarity or LLM handoff quality.
+- Trust boundary crossing is metadata/advisory context, never a relationshipType. Provider/payment integrations remain general `calls` edges to External System / Provider nodes plus mechanism/security/trust metadata.
 - Use Semantic Scan v2 categories, metadataSummary, and child-layer summaries as LLM context and UX guidance, not as deterministic architecture authorship. Snoozed or intentional advisory findings are per-graph panel state and must not suppress blocking safety findings.
 
 ## When To Split Work

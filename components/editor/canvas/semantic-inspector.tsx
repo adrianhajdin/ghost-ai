@@ -86,6 +86,32 @@ const DECOMPOSITION_STATUS_OPTIONS = [
   "stale",
 ] as const satisfies readonly CanvasDecompositionStatus[]
 
+const EXPOSURE_OPTIONS = [
+  "private",
+  "internal",
+  "partner",
+  "public",
+  "unknown",
+] as const
+
+const DATA_SENSITIVITY_OPTIONS = [
+  "public",
+  "internal",
+  "confidential",
+  "restricted",
+  "regulated",
+  "unknown",
+] as const
+
+const REFERENCE_KIND_OPTIONS = ["node", "edge", "graph"] as const
+const PROXY_DIRECTION_OPTIONS = ["inbound", "outbound", "bidirectional", "context"] as const
+const RELATIONSHIP_CRITICALITY_OPTIONS = ["low", "medium", "high", "critical"] as const
+const RELATIONSHIP_DIRECTIONALITY_OPTIONS = [
+  "directed",
+  "bidirectional",
+  "inferred",
+] as const
+
 function toList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
@@ -343,6 +369,9 @@ function NodeSummaryCard({ node }: { node: CanvasNode }) {
       <div className="mt-2 flex flex-wrap gap-1.5">
         <SummaryPill label="Owner" value={node.data.owner} />
         <SummaryPill label="Boundary" value={node.data.boundary} />
+        <SummaryPill label="Exposure" value={node.data.exposure} />
+        <SummaryPill label="Sensitivity" value={node.data.dataSensitivity} />
+        <SummaryPill label="Ref" value={node.data.referencedLabel} />
         <SummaryPill label="Interfaces" value={keyInterfaces.join(", ")} />
         <SummaryPill label="Data/events" value={keyDataEvents.join(", ")} />
         <SummaryPill label="Status" value={node.data.status} />
@@ -378,6 +407,8 @@ function EdgeSummaryCard({ edge }: { edge: CanvasEdge }) {
         <SummaryPill label="Mechanism" value={String(data.mechanism ?? "")} />
         <SummaryPill label="Protocol" value={String(data.protocol ?? "")} />
         <SummaryPill label="Sync" value={String(data.syncMode ?? "")} />
+        <SummaryPill label="Criticality" value={String(data.criticality ?? "")} />
+        <SummaryPill label="Reliability" value={String(data.reliability ?? "")} />
         <SummaryPill label="Data" value={String(data.dataSubject ?? "")} />
         <SummaryPill label="Event" value={String(data.eventSubject ?? "")} />
         <SummaryPill label="Status" value={String(data.status ?? "")} />
@@ -854,6 +885,40 @@ function NodeSpecificFields({
     )
   }
 
+  if (type === "runtime-deployment") {
+    return (
+      <>
+        <DraftField label="Runtime kind" value={node.data.runtimeKind ?? ""} onCommit={(runtimeKind) => patch({ runtimeKind })} />
+        <DraftField label="Environment" value={node.data.environment ?? ""} onCommit={(environment) => patch({ environment })} />
+        <DraftField label="Region" value={node.data.region ?? ""} onCommit={(region) => patch({ region })} />
+        <DraftField label="Scaling notes" value={node.data.scalingNotes ?? ""} onCommit={(scalingNotes) => patch({ scalingNotes })} multiline />
+      </>
+    )
+  }
+
+  if (type === "observability-control") {
+    return (
+      <>
+        <ListField label="Signal types" values={toList(node.data.signalTypes)} onCommit={(signalTypes) => patch({ signalTypes })} />
+        <DraftField label="Retention notes" value={node.data.retentionNotes ?? ""} onCommit={(retentionNotes) => patch({ retentionNotes })} multiline />
+        <DraftField label="Incident notes" value={node.data.incidentNotes ?? ""} onCommit={(incidentNotes) => patch({ incidentNotes })} multiline />
+      </>
+    )
+  }
+
+  if (type === "ai-component") {
+    return (
+      <>
+        <DraftField label="AI role" value={node.data.aiRole ?? ""} onCommit={(aiRole) => patch({ aiRole })} />
+        <DraftField label="Model provider" value={node.data.modelProvider ?? ""} onCommit={(modelProvider) => patch({ modelProvider })} />
+        <DraftField label="Model class" value={node.data.modelClass ?? ""} onCommit={(modelClass) => patch({ modelClass })} />
+        <ListField label="Tool access" values={toList(node.data.toolAccess)} onCommit={(toolAccess) => patch({ toolAccess })} />
+        <DraftField label="Retrieval notes" value={node.data.retrievalNotes ?? ""} onCommit={(retrievalNotes) => patch({ retrievalNotes })} multiline />
+        <DraftField label="Cost notes" value={node.data.costNotes ?? ""} onCommit={(costNotes) => patch({ costNotes })} multiline />
+      </>
+    )
+  }
+
   return null
 }
 
@@ -867,6 +932,7 @@ export function SemanticInspector({
   onSemanticScanStateChange,
 }: SemanticInspectorProps) {
   const { updateNodeData, updateEdgeData } = useCanvasMutations()
+  const router = useRouter()
   const [isCompactViewport, setIsCompactViewport] = useState(false)
   const selectionWarnings = useMemo(() => {
     const targetId = selectedNode?.id ?? selectedEdge?.id
@@ -909,6 +975,13 @@ export function SemanticInspector({
 
   if (selectedNode) {
     const semanticType = selectedNode.data.semanticType ?? "unclassified"
+    const hasProxyMetadata =
+      semanticType === "reference-proxy" ||
+      Boolean(
+        selectedNode.data.referencedGraphId ||
+          selectedNode.data.referencedNodeId ||
+          selectedNode.data.referencedEdgeId
+      )
     const patch = (nextPatch: Partial<CanvasNodeData>) =>
       updateNodeData(selectedNode.id, nextPatch)
 
@@ -947,6 +1020,7 @@ export function SemanticInspector({
             <ListField label="Responsibilities" values={toList(selectedNode.data.responsibilities)} onCommit={(responsibilities) => patch({ responsibilities })} />
             <DraftField label="Owner" value={selectedNode.data.owner ?? ""} onCommit={(owner) => patch({ owner: owner || null })} />
             <DraftField label="Boundary" value={selectedNode.data.boundary ?? ""} onCommit={(boundary) => patch({ boundary })} />
+            <DraftField label="Trust zone" value={selectedNode.data.trustZone ?? ""} onCommit={(trustZone) => patch({ trustZone })} />
             <DraftField label="Layer role" value={selectedNode.data.layerRole ?? ""} onCommit={(layerRole) => patch({ layerRole })} />
             <SelectField
               label="Status"
@@ -969,6 +1043,13 @@ export function SemanticInspector({
           <InspectorSection title="Data">
             <ListField label="Data owned" values={toList(selectedNode.data.dataOwned)} onCommit={(dataOwned) => patch({ dataOwned })} />
             <ListField label="Data read" values={toList(selectedNode.data.dataRead)} onCommit={(dataRead) => patch({ dataRead })} />
+            <SelectField
+              label="Data sensitivity"
+              value={(selectedNode.data.dataSensitivity ?? "unknown") as (typeof DATA_SENSITIVITY_OPTIONS)[number]}
+              options={DATA_SENSITIVITY_OPTIONS}
+              optionLabel={(value) => value}
+              onChange={(dataSensitivity) => patch({ dataSensitivity })}
+            />
             <DraftField label="Privacy class" value={selectedNode.data.privacyClass ?? ""} onCommit={(privacyClass) => patch({ privacyClass })} />
             <DraftField label="Retention notes" value={selectedNode.data.retentionNotes ?? ""} onCommit={(retentionNotes) => patch({ retentionNotes })} multiline />
             <DraftField label="Backup notes" value={selectedNode.data.backupNotes ?? ""} onCommit={(backupNotes) => patch({ backupNotes })} multiline />
@@ -981,8 +1062,17 @@ export function SemanticInspector({
           </InspectorSection>
 
           <InspectorSection title="Security">
+            <SelectField
+              label="Exposure"
+              value={(selectedNode.data.exposure ?? "unknown") as (typeof EXPOSURE_OPTIONS)[number]}
+              options={EXPOSURE_OPTIONS}
+              optionLabel={(value) => value}
+              onChange={(exposure) => patch({ exposure })}
+            />
+            <DraftField label="Auth expectation" value={selectedNode.data.authExpectation ?? ""} onCommit={(authExpectation) => patch({ authExpectation })} multiline />
             <DraftField label="Security notes" value={selectedNode.data.securityNotes ?? ""} onCommit={(securityNotes) => patch({ securityNotes })} multiline />
             <DraftField label="Trust notes" value={selectedNode.data.trustNotes ?? ""} onCommit={(trustNotes) => patch({ trustNotes })} multiline />
+            <DraftField label="Safety notes" value={selectedNode.data.safetyNotes ?? ""} onCommit={(safetyNotes) => patch({ safetyNotes })} multiline />
             <DraftField label="Secret ref" value={selectedNode.data.secretRef ?? ""} onCommit={(secretRef) => patch({ secretRef })} />
             <DraftField label="Secret capability ref" value={selectedNode.data.secretCapabilityRef ?? ""} onCommit={(secretCapabilityRef) => patch({ secretCapabilityRef })} />
           </InspectorSection>
@@ -990,11 +1080,52 @@ export function SemanticInspector({
           <InspectorSection title="Operations">
             <DraftField label="Technology" value={selectedNode.data.technology ?? ""} onCommit={(technology) => patch({ technology })} />
             <DraftField label="Runtime kind" value={selectedNode.data.runtimeKind ?? ""} onCommit={(runtimeKind) => patch({ runtimeKind })} />
+            <DraftField label="Environment" value={selectedNode.data.environment ?? ""} onCommit={(environment) => patch({ environment })} />
+            <DraftField label="Region" value={selectedNode.data.region ?? ""} onCommit={(region) => patch({ region })} />
             <DraftField label="Operational notes" value={selectedNode.data.operationalNotes ?? ""} onCommit={(operationalNotes) => patch({ operationalNotes })} multiline />
             <DraftField label="Scaling notes" value={selectedNode.data.scalingNotes ?? ""} onCommit={(scalingNotes) => patch({ scalingNotes })} multiline />
             <DraftField label="Observability notes" value={selectedNode.data.observabilityNotes ?? ""} onCommit={(observabilityNotes) => patch({ observabilityNotes })} multiline />
+            <ListField label="Signal types" values={toList(selectedNode.data.signalTypes)} onCommit={(signalTypes) => patch({ signalTypes })} />
+            <DraftField label="Incident notes" value={selectedNode.data.incidentNotes ?? ""} onCommit={(incidentNotes) => patch({ incidentNotes })} multiline />
             <ListField label="Failure modes" values={toList(selectedNode.data.failureModes)} onCommit={(failureModes) => patch({ failureModes })} />
           </InspectorSection>
+
+          {hasProxyMetadata ? (
+            <InspectorSection title="Reference Proxy" defaultOpen={semanticType === "reference-proxy"}>
+              <SelectField
+                label="Reference kind"
+                value={(selectedNode.data.referenceKind ?? "node") as (typeof REFERENCE_KIND_OPTIONS)[number]}
+                options={REFERENCE_KIND_OPTIONS}
+                optionLabel={(value) => value}
+                onChange={(referenceKind) => patch({ referenceKind })}
+              />
+              <DraftField label="Referenced graph" value={selectedNode.data.referencedGraphId ?? ""} onCommit={(referencedGraphId) => patch({ referencedGraphId })} />
+              <DraftField label="Referenced node" value={selectedNode.data.referencedNodeId ?? ""} onCommit={(referencedNodeId) => patch({ referencedNodeId })} />
+              <DraftField label="Referenced edge" value={selectedNode.data.referencedEdgeId ?? ""} onCommit={(referencedEdgeId) => patch({ referencedEdgeId })} />
+              <DraftField label="Referenced label" value={selectedNode.data.referencedLabel ?? ""} onCommit={(referencedLabel) => patch({ referencedLabel })} />
+              <DraftField label="Reference role" value={selectedNode.data.referenceRole ?? ""} onCommit={(referenceRole) => patch({ referenceRole })} />
+              <SelectField
+                label="Proxy direction"
+                value={(selectedNode.data.proxyDirection ?? "context") as (typeof PROXY_DIRECTION_OPTIONS)[number]}
+                options={PROXY_DIRECTION_OPTIONS}
+                optionLabel={(value) => value}
+                onChange={(proxyDirection) => patch({ proxyDirection })}
+              />
+              <DraftField label="Reference notes" value={selectedNode.data.referenceNotes ?? ""} onCommit={(referenceNotes) => patch({ referenceNotes })} multiline />
+              {selectedNode.data.referencedGraphId ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(`/editor/${projectId}?graphId=${encodeURIComponent(selectedNode.data.referencedGraphId ?? "")}`)
+                  }
+                  className="flex h-8 items-center justify-center gap-2 rounded-xl border border-accent-primary/30 bg-accent-primary/10 text-xs text-text-primary transition-colors hover:border-accent-primary/60 hover:bg-accent-primary/15"
+                >
+                  <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+                  Open referenced layer
+                </button>
+              ) : null}
+            </InspectorSection>
+          ) : null}
 
           <InspectorSection title="Prompt Pack Notes">
             <DraftField label="Prompt Pack notes" value={selectedNode.data.promptPackNotes ?? ""} onCommit={(promptPackNotes) => patch({ promptPackNotes })} multiline />
@@ -1103,6 +1234,31 @@ export function SemanticInspector({
             <DraftField label="Operation hint" value={String(edgeData.operationHint ?? "")} onCommit={(operationHint) => patch({ operationHint })} />
           </InspectorSection>
 
+          <InspectorSection title="Reliability">
+            <SelectField
+              label="Criticality"
+              value={(edgeData.criticality ?? "medium") as (typeof RELATIONSHIP_CRITICALITY_OPTIONS)[number]}
+              options={RELATIONSHIP_CRITICALITY_OPTIONS}
+              optionLabel={(value) => value}
+              onChange={(criticality) => patch({ criticality })}
+            />
+            <SelectField
+              label="Directionality"
+              value={(edgeData.directionality ?? "directed") as (typeof RELATIONSHIP_DIRECTIONALITY_OPTIONS)[number]}
+              options={RELATIONSHIP_DIRECTIONALITY_OPTIONS}
+              optionLabel={(value) => value}
+              onChange={(directionality) => patch({ directionality })}
+            />
+            <DraftField label="Reliability" value={String(edgeData.reliability ?? "")} onCommit={(reliability) => patch({ reliability })} multiline />
+            <DraftField label="Retry policy" value={String(edgeData.retryPolicy ?? "")} onCommit={(retryPolicy) => patch({ retryPolicy })} multiline />
+            <DraftField label="Idempotency notes" value={String(edgeData.idempotencyNotes ?? "")} onCommit={(idempotencyNotes) => patch({ idempotencyNotes })} multiline />
+            <DraftField label="Consistency" value={String(edgeData.consistency ?? "")} onCommit={(consistency) => patch({ consistency })} multiline />
+            <DraftField label="Rate limit notes" value={String(edgeData.rateLimitNotes ?? "")} onCommit={(rateLimitNotes) => patch({ rateLimitNotes })} multiline />
+            <DraftField label="Timeout notes" value={String(edgeData.timeoutNotes ?? "")} onCommit={(timeoutNotes) => patch({ timeoutNotes })} multiline />
+            <DraftField label="Fallback notes" value={String(edgeData.fallbackNotes ?? "")} onCommit={(fallbackNotes) => patch({ fallbackNotes })} multiline />
+            <DraftField label="Ownership notes" value={String(edgeData.ownershipNotes ?? "")} onCommit={(ownershipNotes) => patch({ ownershipNotes })} multiline />
+          </InspectorSection>
+
           <InspectorSection title="Data / Events">
             <DraftField label="Data subject" value={String(edgeData.dataSubject ?? "")} onCommit={(dataSubject) => patch({ dataSubject })} />
             <DraftField label="Event subject" value={String(edgeData.eventSubject ?? "")} onCommit={(eventSubject) => patch({ eventSubject })} />
@@ -1111,6 +1267,7 @@ export function SemanticInspector({
           </InspectorSection>
 
           <InspectorSection title="Security / Trust">
+            <DraftField label="Auth" value={String(edgeData.auth ?? "")} onCommit={(auth) => patch({ auth })} />
             <DraftField label="Security notes" value={String(edgeData.securityNotes ?? "")} onCommit={(securityNotes) => patch({ securityNotes })} multiline />
             <DraftField label="Trust notes" value={String(edgeData.trustNotes ?? "")} onCommit={(trustNotes) => patch({ trustNotes })} multiline />
           </InspectorSection>

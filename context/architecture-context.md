@@ -51,11 +51,11 @@
 
 - The semantic taxonomy version is `2.0.0`.
 - Default root node types: actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, and generic-component.
-- Advanced root node types: cache-store and object-store.
+- Advanced root/contextual node types: cache-store, object-store, reference-proxy, runtime-deployment, observability-control, and ai-component. The Phase 3 additions remain behind advanced/contextual UI and LLM suggestions rather than the default visible palette.
 - Internal child-layer node types: api, domain-model, entity, endpoint-group, endpoint, event-contract, business-rule, validation-rule, policy, and spec-note.
 - Legacy aliases normalize as compatibility metadata: frontend maps to client-surface, queue maps to event-channel, cache maps to cache-store, and auth-module maps to identity-auth. Unknown/custom semantic types load as generic-component while preserving originalSemanticType, architectureType, and LLM semantic metadata where present.
 - Default relationship types are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, and runs_on. Advanced relationship types are triggers, monitors, depends_on, and syncs_with. Legacy edge semantic aliases normalize into relationshipType while label and labelItems remain preserved.
-- Durable node metadata may include responsibilities, maturity, boundary, layerRole, interfaces exposed/consumed, data owned/read, events emitted/consumed, technology, runtime kind, security/privacy notes, operational notes, open questions, and Prompt Pack notes. Durable edge metadata may include mechanism, protocol, data/event subject, sync mode, security notes, and trust notes.
+- Durable node metadata may include responsibilities, maturity, boundary, trustZone, exposure, dataSensitivity, authExpectation, layerRole, interfaces exposed/consumed, data owned/read, events emitted/consumed, technology, runtime/deployment fields, observability fields, AI safety/tool/provider fields, reference proxy fields, security/privacy/trust notes, operational notes, open questions, and Prompt Pack notes. Durable edge metadata may include mechanism, protocol, data/event subject, sync mode, criticality, directionality, reliability, retry/idempotency, consistency, rate-limit, timeout, fallback, ownership, security notes, and trust notes.
 
 ### Canvas v2 Phase 2 Inspector, Scan, And Layer Summaries
 
@@ -64,6 +64,15 @@
 - Per-graph scan panel state is stored in CanvasDoc `panels.semanticScan` so snoozed or intentional advisory findings survive reloads without becoming global project state.
 - Child CanvasDocs update parent node metadata with `hasChildLayer`, `childLayerPurpose`, `childLayerSummary`, `decompositionStatus`, `lastLayerSummary`, and `childLayerUpdatedAt`. This metadata is refreshed when child graphs are created, populated by LLM patch apply, or saved through the canvas route.
 - The sanitized CanvasDoc pyramid includes compact `metadataSummary` records for every node and edge plus each graph's `semanticScan` summary. These summaries are LLM context, not deterministic prompt authoring.
+
+### Canvas v2 Phase 3 Relationships, Trust Boundaries, And Proxies
+
+- Relationship types stay compact and general-purpose. Phase 3 adds relationship profile metadata rather than niche edge enums: criticality, directionality, reliability, retryPolicy, idempotencyNotes, consistency, rateLimitNotes, timeoutNotes, fallbackNotes, and ownershipNotes. `payment_call` and `trust_boundary_crossing` are not valid edge types.
+- Trust boundaries are metadata-first. Nodes may carry boundary, trustZone, exposure, dataSensitivity, authExpectation, securityNotes, trustNotes, and safetyNotes. Boundary-crossing relationships are advisory context for the LLM and Prompt Pack, not deterministic blockers and not a relationship type.
+- Cross-layer references use `reference-proxy` nodes with referenceKind, referencedGraphId, referencedNodeId, referencedEdgeId, referencedLabel, referenceRole, proxyDirection, and referenceNotes. Proxy nodes are local context in the current graph, do not mutate referenced targets automatically, do not become duplicate owned implementation targets, and may still have child layers like every other node.
+- Runtime / Deployment Unit, Observability / Control Plane, and AI Component are advanced contextual node types for systems where runtime, operational visibility, or model/tool safety materially affects implementation prompts. They are not a full cloud vendor palette, threat model, or compliance engine.
+- Semantic Scan adds advisory categories and findings for trust boundaries, cross-layer references, runtime/operations, and AI governance. Snooze/intentional state can hide advisory findings but cannot hide blocking safety findings such as raw secrets.
+- Architect, Architecture Draft, and Prompt Pack provider prompts receive the Phase 3 metadata through sanitized CanvasDoc pyramid summaries. The LLM may reason about advanced relationships, trust boundaries, proxies, runtime, observability, and AI components, while deterministic code remains limited to schema, storage, sanitization, safety, preview/apply, and export.
 
 ## Storage Model
 
@@ -173,3 +182,4 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 18. Semantic Scan warnings are advisory for architecture completeness and must not block child-layer creation, LLM proposals, Prompt Pack generation, Actor/Generic/custom node drill-down, or user-approved non-destructive patches.
 19. New node types, modes, or palettes must pass the anti-bloat rule: add them only when they materially improve clarity, LLM reasoning, Prompt Pack quality, commonness, non-redundancy, and non-expert UX.
 20. Typed edge relationships must stay compact and general-purpose. Domain-specific edge semantics belong in labels, metadata, notes, or LLM-authored Prompt Packs, not in new relationshipType values unless the product contract is updated.
+21. Trust boundary crossing must remain a metadata/advisory concept, not a relationship type. Payment/provider interactions must be modeled with general `calls` relationships to External System / Provider nodes plus metadata.

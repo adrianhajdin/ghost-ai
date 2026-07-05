@@ -578,6 +578,14 @@ function nodeShapeAndColor(semanticType: SemanticNodeType): {
     case "cache":
     case "domain-model":
       return { shape: "cylinder", colorIndex: 7 }
+    case "reference-proxy":
+      return { shape: "rectangle", colorIndex: 0 }
+    case "runtime-deployment":
+      return { shape: "hexagon", colorIndex: 1 }
+    case "observability-control":
+      return { shape: "hexagon", colorIndex: 7 }
+    case "ai-component":
+      return { shape: "pill", colorIndex: 2 }
     case "event-channel":
     case "queue":
     case "worker":
@@ -648,6 +656,32 @@ function defaultNodeMetadata(semanticType: SemanticNodeType): Record<string, unk
         vendorType: "external-service",
         authType: "secretRef",
         rateLimit: "provider-defined",
+        ...defaults,
+      }
+    case "reference-proxy":
+      return {
+        semanticType,
+        referenceKind: "node",
+        proxyDirection: "context",
+        ...defaults,
+      }
+    case "runtime-deployment":
+      return {
+        semanticType,
+        runtimeKind: "runtime",
+        ...defaults,
+      }
+    case "observability-control":
+      return {
+        semanticType,
+        signalTypes: [],
+        ...defaults,
+      }
+    case "ai-component":
+      return {
+        semanticType,
+        toolAccess: [],
+        safetyNotes: "",
         ...defaults,
       }
     case "domain-model":

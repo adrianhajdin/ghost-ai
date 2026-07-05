@@ -81,6 +81,10 @@ const SEMANTIC_TEMPLATE_ICONS: Record<SemanticNodeTemplate["semanticType"], Luci
   "generic-component": Component,
   "cache-store": Archive,
   "object-store": HardDrive,
+  "reference-proxy": Link2,
+  "runtime-deployment": Server,
+  "observability-control": InspectionPanel,
+  "ai-component": Workflow,
   endpoint: Route,
   entity: Boxes,
   "event-contract": GitBranch,
@@ -394,35 +398,40 @@ export function ShapePanel({
           ) : null}
 
           {mode === "relationship" ? (
-            <div className="flex max-w-full items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="connect-relationship-picker">
-              {QUICK_EDGE_RELATIONSHIP_TYPES.map((type) => (
-                <RelationButton
-                  key={type}
-                  type={type}
-                  active={selectedRelationshipType === type}
-                  onClick={() => onRelationshipTypeChange(type)}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={() => setShowAdvancedRelations((current) => !current)}
-                aria-expanded={showAdvancedRelations}
-                className="flex h-8 items-center gap-1 rounded-xl border border-border-default bg-bg-elevated px-2 text-[11px] font-medium text-text-secondary transition-colors hover:border-accent-ai/45 hover:text-text-primary"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-                Advanced
-                <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedRelations ? "rotate-180" : ""}`} />
-              </button>
-              {showAdvancedRelations
-                ? ADVANCED_EDGE_RELATIONSHIP_TYPES.map((type) => (
-                    <RelationButton
-                      key={type}
-                      type={type}
-                      active={selectedRelationshipType === type}
-                      onClick={() => onRelationshipTypeChange(type)}
-                    />
-                  ))
-                : null}
+            <div className="grid max-w-full gap-1">
+              <p className="max-w-full truncate px-1 text-center text-[10px] text-text-muted">
+                Use calls for request/response, reads/writes for state, publishes/consumes for async events.
+              </p>
+              <div className="flex max-w-full items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="connect-relationship-picker">
+                {QUICK_EDGE_RELATIONSHIP_TYPES.map((type) => (
+                  <RelationButton
+                    key={type}
+                    type={type}
+                    active={selectedRelationshipType === type}
+                    onClick={() => onRelationshipTypeChange(type)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedRelations((current) => !current)}
+                  aria-expanded={showAdvancedRelations}
+                  className="flex h-8 items-center gap-1 rounded-xl border border-border-default bg-bg-elevated px-2 text-[11px] font-medium text-text-secondary transition-colors hover:border-accent-ai/45 hover:text-text-primary"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  Advanced
+                  <ChevronDown className={`h-3 w-3 transition-transform ${showAdvancedRelations ? "rotate-180" : ""}`} />
+                </button>
+                {showAdvancedRelations
+                  ? ADVANCED_EDGE_RELATIONSHIP_TYPES.map((type) => (
+                      <RelationButton
+                        key={type}
+                        type={type}
+                        active={selectedRelationshipType === type}
+                        onClick={() => onRelationshipTypeChange(type)}
+                      />
+                    ))
+                  : null}
+              </div>
             </div>
           ) : null}
 

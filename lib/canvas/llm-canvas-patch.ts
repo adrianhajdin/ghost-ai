@@ -105,6 +105,12 @@ function nodeShapeAndColor(semanticType: SemanticNodeType) {
   if (semanticType === "cache-store" || semanticType === "object-store") {
     return { shape: "cylinder" as const, colorIndex: 7 }
   }
+  if (semanticType === "reference-proxy") return { shape: "rectangle" as const, colorIndex: 0 }
+  if (semanticType === "runtime-deployment") return { shape: "hexagon" as const, colorIndex: 1 }
+  if (semanticType === "observability-control") {
+    return { shape: "hexagon" as const, colorIndex: 7 }
+  }
+  if (semanticType === "ai-component") return { shape: "pill" as const, colorIndex: 2 }
   if (semanticType === "worker") return { shape: "hexagon" as const, colorIndex: 6 }
   if (semanticType === "identity-auth" || semanticType === "auth-module") {
     return { shape: "pill" as const, colorIndex: 2 }

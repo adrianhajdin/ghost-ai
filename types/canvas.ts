@@ -30,6 +30,10 @@ export const ADVANCED_SEMANTIC_NODE_TYPES = [
   "actor",
   "cache-store",
   "object-store",
+  "reference-proxy",
+  "runtime-deployment",
+  "observability-control",
+  "ai-component",
 ] as const
 
 export const INTERNAL_SEMANTIC_NODE_TYPES = [
@@ -148,6 +152,18 @@ export type SemanticEdgeType = (typeof SEMANTIC_EDGE_TYPES)[number]
 
 export type CanvasMetadataStatus = "draft" | "approved" | "deprecated"
 export type CanvasSyncMode = "sync" | "async" | "unknown"
+export type CanvasExposure = "private" | "internal" | "partner" | "public" | "unknown"
+export type CanvasDataSensitivity =
+  | "public"
+  | "internal"
+  | "confidential"
+  | "restricted"
+  | "regulated"
+  | "unknown"
+export type CanvasRelationshipCriticality = "low" | "medium" | "high" | "critical"
+export type CanvasRelationshipDirectionality = "directed" | "bidirectional" | "inferred"
+export type CanvasReferenceKind = "node" | "edge" | "graph"
+export type CanvasProxyDirection = "inbound" | "outbound" | "bidirectional" | "context"
 export type CanvasDecompositionStatus =
   | "none"
   | "planned"
@@ -253,6 +269,48 @@ export const SEMANTIC_NODE_DEFINITIONS = {
     purpose: "Blob, object, document, or file storage boundary.",
     requiredFields: ["id", "name"],
     recommendedFields: ["description", "owner", "dataOwned", "retention", "privacyClass"],
+  },
+  "reference-proxy": {
+    type: "reference-proxy",
+    label: "Reference Proxy",
+    purpose: "Cross-layer reference to a node, edge, or graph owned elsewhere in the canvas pyramid.",
+    requiredFields: ["id", "name"],
+    recommendedFields: [
+      "referencedGraphId",
+      "referenceKind",
+      "referencedLabel",
+      "referenceRole",
+      "proxyDirection",
+    ],
+  },
+  "runtime-deployment": {
+    type: "runtime-deployment",
+    label: "Runtime / Deployment Unit",
+    purpose: "Runtime, workload, platform, or deployment unit where software executes.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["runtimeKind", "environment", "region", "owner", "operationalNotes"],
+  },
+  "observability-control": {
+    type: "observability-control",
+    label: "Observability / Control Plane",
+    purpose: "Monitoring, logging, tracing, audit, alerting, or operational control plane.",
+    requiredFields: ["id", "name"],
+    recommendedFields: ["signalTypes", "retentionNotes", "incidentNotes", "operationalNotes"],
+  },
+  "ai-component": {
+    type: "ai-component",
+    label: "AI Component",
+    purpose: "LLM, agent runtime, retrieval component, moderation service, or AI tool gateway.",
+    requiredFields: ["id", "name"],
+    recommendedFields: [
+      "aiRole",
+      "modelProvider",
+      "modelClass",
+      "toolAccess",
+      "safetyNotes",
+      "privacyClass",
+      "securityNotes",
+    ],
   },
   cache: {
     type: "cache",
@@ -601,6 +659,10 @@ export interface CanvasNodeData extends Record<string, unknown> {
   decisionRefs?: string[]
   owner?: string | null
   boundary?: string
+  trustZone?: string
+  exposure?: CanvasExposure | string
+  dataSensitivity?: CanvasDataSensitivity | string
+  authExpectation?: string
   layerRole?: string
   interfacesExposed?: string[]
   interfacesConsumed?: string[]
@@ -616,15 +678,34 @@ export interface CanvasNodeData extends Record<string, unknown> {
   scalingNotes?: string
   observabilityNotes?: string
   failureModes?: string[]
+  signalTypes?: string[]
   openQuestions?: string[]
   promptPackNotes?: string
   trustNotes?: string
   interfaceNotes?: string
   eventNotes?: string
   retentionNotes?: string
+  incidentNotes?: string
   backupNotes?: string
   secretRef?: string
   secretCapabilityRef?: string
+  environment?: string
+  region?: string
+  aiRole?: string
+  modelProvider?: string
+  modelClass?: string
+  toolAccess?: string[]
+  safetyNotes?: string
+  retrievalNotes?: string
+  costNotes?: string
+  referenceKind?: CanvasReferenceKind | string
+  referencedGraphId?: string
+  referencedNodeId?: string
+  referencedEdgeId?: string
+  referencedLabel?: string
+  referenceRole?: string
+  proxyDirection?: CanvasProxyDirection | string
+  referenceNotes?: string
   hasChildLayer?: boolean
   childLayerPurpose?: string
   childLayerSummary?: string
@@ -692,6 +773,9 @@ export interface CanvasEdgeData extends Record<string, unknown> {
   dataSubject?: string
   eventSubject?: string
   syncMode?: CanvasSyncMode
+  criticality?: CanvasRelationshipCriticality | string
+  directionality?: CanvasRelationshipDirectionality | string
+  reliability?: string
   securityNotes?: string
   trustNotes?: string
   method?: string
@@ -699,6 +783,12 @@ export interface CanvasEdgeData extends Record<string, unknown> {
   auth?: string
   timeoutMs?: string | number
   retryPolicy?: string
+  idempotencyNotes?: string
+  consistency?: string
+  rateLimitNotes?: string
+  timeoutNotes?: string
+  fallbackNotes?: string
+  ownershipNotes?: string
   eventName?: string
   topic?: string
 }

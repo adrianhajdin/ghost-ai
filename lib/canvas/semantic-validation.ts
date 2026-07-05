@@ -22,6 +22,9 @@ export type SemanticValidationCategory =
   | "state-ownership"
   | "async-integrity"
   | "security-integration"
+  | "trust-boundaries"
+  | "cross-layer-references"
+  | "runtime-operations"
   | "operability"
   | "ai-governance"
   | "safety"
@@ -51,6 +54,9 @@ export const SEMANTIC_VALIDATION_CATEGORY_LABELS = {
   "state-ownership": "State ownership",
   "async-integrity": "Async integrity",
   "security-integration": "Security / integration",
+  "trust-boundaries": "Trust boundaries",
+  "cross-layer-references": "Cross-layer references",
+  "runtime-operations": "Runtime / operations",
   operability: "Operability",
   "ai-governance": "AI governance",
   safety: "Safety",
@@ -85,6 +91,25 @@ function hasText(value: unknown): boolean {
 
 function hasStringList(value: unknown): boolean {
   return Array.isArray(value) && value.some((item) => hasText(item))
+}
+
+function textLower(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : ""
+}
+
+function hasAnyText(...values: unknown[]) {
+  return values.some((value) => hasText(value))
+}
+
+function hasSensitiveDataMarker(node: CanvasNode) {
+  const markers = [
+    node.data.dataSensitivity,
+    node.data.privacyClass,
+    node.data.boundary,
+  ]
+    .map(textLower)
+    .join(" ")
+  return /\b(restricted|regulated|confidential|pii|personal|tenant)\b/.test(markers)
 }
 
 function hasDescriptionOrResponsibilities(node: CanvasNode): boolean {
@@ -308,11 +333,12 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
     semanticType === "external-system" &&
     !hasText(node.data.securityNotes) &&
     !hasText(node.data.trustNotes) &&
-    !hasText(node.data.authType)
+    !hasText(node.data.authType) &&
+    !hasText(node.data.authExpectation)
   ) {
     results.push(finding({
       id: `node-${node.id}-external-trust-notes`,
-      category: "security-integration",
+      category: "trust-boundaries",
       targetKind: "node",
       targetId: node.id,
       field: "securityNotes",
@@ -322,9 +348,29 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
 
   if (
     semanticType === "client-surface" &&
+    (textLower(node.data.exposure) === "public" ||
+      textLower(node.data.boundary) === "public") &&
     !hasText(node.data.securityNotes) &&
+    !hasText(node.data.authExpectation) &&
     !hasText(node.data.authMode) &&
     !hasText(node.data.authStrategy)
+  ) {
+    results.push(finding({
+      id: `node-${node.id}-client-surface-public-auth`,
+      category: "trust-boundaries",
+      targetKind: "node",
+      targetId: node.id,
+      field: "authExpectation",
+      message: "Public Client Surface should note auth expectations or security assumptions.",
+    }))
+  }
+
+  if (
+    semanticType === "client-surface" &&
+    !hasText(node.data.securityNotes) &&
+    !hasText(node.data.authMode) &&
+    !hasText(node.data.authStrategy) &&
+    !hasText(node.data.authExpectation)
   ) {
     results.push(finding({
       id: `node-${node.id}-client-surface-security`,
@@ -333,6 +379,20 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
       targetId: node.id,
       field: "securityNotes",
       message: "Client Surface should note auth path or security assumptions.",
+    }))
+  }
+
+  if (
+    hasSensitiveDataMarker(node) &&
+    !hasAnyText(node.data.privacyClass, node.data.securityNotes, node.data.trustNotes)
+  ) {
+    results.push(finding({
+      id: `node-${node.id}-sensitive-data-notes`,
+      category: "trust-boundaries",
+      targetKind: "node",
+      targetId: node.id,
+      field: "privacyClass",
+      message: "Restricted or regulated data should carry privacy or security notes.",
     }))
   }
 
@@ -407,6 +467,73 @@ function validateNode(node: CanvasNode): SemanticValidationResult[] {
       field: "securityNotes",
       message: "AI-like component should note safety or tool-access assumptions.",
     }))
+  }
+
+  if (
+    semanticType === "runtime-deployment" &&
+    (!hasText(node.data.runtimeKind) || !hasText(node.data.owner))
+  ) {
+    results.push(finding({
+      id: `node-${node.id}-runtime-kind-owner`,
+      category: "runtime-operations",
+      targetKind: "node",
+      targetId: node.id,
+      field: "runtimeKind",
+      message: "Runtime / Deployment Unit should note runtime kind and owner.",
+    }))
+  }
+
+  if (
+    semanticType === "observability-control" &&
+    !hasStringList(node.data.signalTypes) &&
+    !hasAnyText(node.data.observabilityNotes, node.data.operationalNotes, node.data.incidentNotes)
+  ) {
+    results.push(finding({
+      id: `node-${node.id}-observability-signals`,
+      category: "runtime-operations",
+      targetKind: "node",
+      targetId: node.id,
+      field: "signalTypes",
+      message: "Observability / Control Plane should note signal types or operational intent.",
+    }))
+  }
+
+  if (
+    semanticType === "ai-component" &&
+    !hasAnyText(
+      node.data.safetyNotes,
+      node.data.securityNotes,
+      node.data.trustNotes,
+      node.data.privacyClass,
+      node.data.promptPackNotes
+    ) &&
+    !hasStringList(node.data.toolAccess)
+  ) {
+    results.push(finding({
+      id: `node-${node.id}-ai-component-governance`,
+      category: "ai-governance",
+      targetKind: "node",
+      targetId: node.id,
+      field: "safetyNotes",
+      message: "AI Component should note safety, tool access, privacy, or security assumptions.",
+    }))
+  }
+
+  if (semanticType === "reference-proxy") {
+    const hasTarget =
+      hasText(node.data.referencedNodeId) ||
+      hasText(node.data.referencedEdgeId) ||
+      textLower(node.data.referenceKind) === "graph"
+    if (!hasText(node.data.referencedGraphId) || !hasTarget) {
+      results.push(finding({
+        id: `node-${node.id}-proxy-reference-target`,
+        category: "cross-layer-references",
+        targetKind: "node",
+        targetId: node.id,
+        field: "referencedGraphId",
+        message: "Reference Proxy should point to a referenced graph plus node, edge, or graph target.",
+      }))
+    }
   }
 
   if (!node.data.subcanvasRef) {
@@ -485,6 +612,22 @@ function validateEdge(
 
   const target = nodesById.get(edge.target)
   const targetType = normalizeSemanticNodeType(target?.data.semanticType)
+  const source = nodesById.get(edge.source)
+  const sourceType = normalizeSemanticNodeType(source?.data.semanticType)
+
+  if (
+    relationshipType === "calls" &&
+    !hasAnyText(edgeData.mechanism, edgeData.protocol)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-call-mechanism-protocol`,
+      category: "relationship-clarity",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "mechanism",
+      message: "Calls edge should note mechanism or protocol when known.",
+    }))
+  }
 
   if (
     (relationshipType === "reads" || relationshipType === "writes") &&
@@ -501,6 +644,20 @@ function validateEdge(
       targetId: edge.id,
       field: "target",
       message: `${definition.label} should target a database, entity, or domain model.`,
+    }))
+  }
+
+  if (
+    (relationshipType === "reads" || relationshipType === "writes") &&
+    !hasText(edgeData.dataSubject)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-data-subject`,
+      category: "state-ownership",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "dataSubject",
+      message: `${definition.label} edge should identify the data subject.`,
     }))
   }
 
@@ -531,7 +688,25 @@ function validateEdge(
     }))
   }
 
-  if (relationshipType === "authenticates_via" && !hasText(edgeData.securityNotes)) {
+  if (
+    relationshipType === "consumes" &&
+    targetType === "worker" &&
+    !hasAnyText(edgeData.retryPolicy, edgeData.idempotencyNotes)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-consume-worker-retry-idempotency`,
+      category: "async-integrity",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "retryPolicy",
+      message: "Consumes edge into a worker should note retry or idempotency assumptions.",
+    }))
+  }
+
+  if (
+    relationshipType === "authenticates_via" &&
+    !hasAnyText(edgeData.securityNotes, edgeData.auth)
+  ) {
     results.push(finding({
       id: `edge-${edge.id}-auth-security-notes`,
       category: "security-integration",
@@ -542,22 +717,65 @@ function validateEdge(
     }))
   }
 
-  const source = nodesById.get(edge.source)
+  if (
+    relationshipType === "runs_on" &&
+    targetType === "runtime-deployment" &&
+    !hasAnyText(target?.data.runtimeKind, target?.data.operationalNotes, edgeData.reliability)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-runs-on-runtime-notes`,
+      category: "runtime-operations",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "runtimeKind",
+      message: "Runs On edge should point to runtime notes or deployment assumptions.",
+    }))
+  }
+
+  if (
+    relationshipType === "monitors" &&
+    !hasAnyText(edgeData.mechanism, edgeData.reliability, target?.data.observabilityNotes) &&
+    !hasStringList(target?.data.signalTypes)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-monitoring-signal-notes`,
+      category: "runtime-operations",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "reliability",
+      message: "Monitors edge should note observed signals or operational mechanism.",
+    }))
+  }
+
   if (
     source?.data.boundary &&
     target?.data.boundary &&
     source.data.boundary !== target.data.boundary &&
-    (hasText(edgeData.dataSubject) || hasText(edgeData.eventSubject)) &&
     !hasText(edgeData.securityNotes) &&
     !hasText(edgeData.trustNotes)
   ) {
     results.push(finding({
       id: `edge-${edge.id}-boundary-trust-notes`,
-      category: "security-integration",
+      category: "trust-boundaries",
       targetKind: "edge",
       targetId: edge.id,
       field: "trustNotes",
       message: "Boundary-crossing data/event flow should note trust or security assumptions.",
+    }))
+  }
+
+  if (
+    (sourceType === "ai-component" || targetType === "ai-component") &&
+    (sourceType === "external-system" || targetType === "external-system") &&
+    !hasAnyText(edgeData.securityNotes, edgeData.trustNotes, source?.data.trustNotes, target?.data.trustNotes)
+  ) {
+    results.push(finding({
+      id: `edge-${edge.id}-ai-external-trust-notes`,
+      category: "ai-governance",
+      targetKind: "edge",
+      targetId: edge.id,
+      field: "trustNotes",
+      message: "AI Component connected to an external provider should note trust or security assumptions.",
     }))
   }
 
@@ -573,6 +791,19 @@ export function validateCanvasSemantics(
 
   for (const node of snapshot.nodes) {
     results.push(...validateNode(node))
+  }
+
+  const proxyNodes = snapshot.nodes.filter(
+    (node) => normalizeSemanticNodeType(node.data.semanticType) === "reference-proxy"
+  )
+  if (proxyNodes.length > 8) {
+    results.push(finding({
+      id: "canvas-many-reference-proxies",
+      category: "cross-layer-references",
+      targetKind: "canvas",
+      field: "reference-proxy",
+      message: "This layer has many Reference Proxy nodes; keep proxies contextual so ownership stays clear.",
+    }))
   }
 
   for (const edge of snapshot.edges) {
