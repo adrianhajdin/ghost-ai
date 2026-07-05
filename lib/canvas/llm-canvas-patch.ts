@@ -11,6 +11,10 @@ import {
   graphIdFromSearchParam,
   isValidGraphId,
 } from "@/lib/canvas/graph-ids"
+import {
+  createCanvasActivityEvent,
+  withCanvasActivity,
+} from "@/lib/canvas/canvas-activity"
 import { baseNodeData, semanticDefaultsForType } from "@/lib/canvas/semantic-defaults"
 import {
   applyChildLayerSummaryToParentDoc,
@@ -1209,10 +1213,24 @@ export async function applyLlmCanvasImprovementProposal(input: {
   for (const graphId of dirtyGraphIds) {
     const doc = docsByGraphId.get(graphId)
     if (!doc) continue
+    const beforeDoc = await readCanvasDoc(input.projectId, graphId)
+    const docWithActivity = withCanvasActivity(
+      doc,
+      createCanvasActivityEvent({
+        kind: "architect-apply",
+        actor: "architect",
+        beforeDoc,
+        afterDoc: doc,
+        applied,
+      })
+    )
     const { doc: writtenDoc } = await writeCanvasDoc(
       input.projectId,
-      doc,
-      writeOptionsForDoc(doc)
+      docWithActivity,
+      {
+        ...writeOptionsForDoc(docWithActivity),
+        panels: docWithActivity.panels,
+      }
     )
     docsByGraphId.set(graphId, writtenDoc)
     writtenDocs.push(writtenDoc)

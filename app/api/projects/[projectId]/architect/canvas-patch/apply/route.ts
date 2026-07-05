@@ -1,5 +1,10 @@
 import { z } from "zod"
 import type { NextRequest } from "next/server"
+import { createArchitectConversationMessage } from "@/lib/ai/architect/architect-conversation-store"
+import {
+  ARCHITECT_APPLY_FEEDBACK_KIND,
+  buildArchitectApplyFeedbackMessage,
+} from "@/lib/ai/architect/architect-apply-feedback"
 import { applyLlmCanvasImprovementProposal } from "@/lib/canvas/llm-canvas-patch"
 import { GraphIdError, createRealtimeRoomId, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 import { publishRealtimeRoomEvent } from "@/lib/realtime/server-publish"
@@ -74,13 +79,33 @@ export async function POST(
       })
   }
 
+  const applyFeedback = buildArchitectApplyFeedbackMessage({
+    currentGraphId: graphId,
+    result,
+    broadcastedGraphIds,
+    realtimeBroadcastFailures,
+  })
+  const feedbackMessage = await createArchitectConversationMessage({
+    projectId: project.id,
+    graphId,
+    userId: identity.userId,
+    role: "assistant",
+    content: applyFeedback.content,
+    metadata: {
+      kind: ARCHITECT_APPLY_FEEDBACK_KIND,
+      applyFeedback: applyFeedback.summary,
+    },
+  })
+
   return Response.json({
     applied: result.applied,
     issues: result.issues,
     preview: result.preview,
     dirtyGraphIds: result.dirtyGraphIds,
+    semanticScanAfterApply: applyFeedback.summary.semanticScanAfterApply,
     doc: currentDoc ?? null,
     canvas: currentDoc ? { nodes: currentDoc.nodes, edges: currentDoc.edges } : null,
+    feedbackMessage,
     realtimeBroadcasted: broadcastedGraphIds.length > 0,
     broadcastedGraphIds,
     realtimeBroadcastFailures,

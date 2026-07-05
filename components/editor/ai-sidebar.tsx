@@ -94,6 +94,20 @@ interface ArchitectRunOutput {
   }
 }
 
+const ARCHITECT_APPLY_FEEDBACK_KIND = "canvas_patch_apply_result"
+
+function architectMessageMetadata(message: ArchitectMessage) {
+  const metadata = message.metadata
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null
+  }
+  return metadata as Record<string, unknown>
+}
+
+function isArchitectApplyFeedbackMessage(message: ArchitectMessage) {
+  return architectMessageMetadata(message)?.kind === ARCHITECT_APPLY_FEEDBACK_KIND
+}
+
 function getFilename(filePath: string): string {
   const clean = filePath.split("?")[0]
   return clean.split("/").at(-1) ?? "spec.md"
@@ -302,8 +316,8 @@ export function AiSidebar({
   )
 
   const readReplyFromMessage = useCallback((message: ArchitectMessage) => {
-    const metadata = message.metadata
-    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null
+    const metadata = architectMessageMetadata(message)
+    if (!metadata) return null
     const reply = (metadata as { reply?: unknown }).reply
     if (!reply || typeof reply !== "object" || Array.isArray(reply)) return null
     return reply as ArchitectReply
@@ -325,12 +339,25 @@ export function AiSidebar({
         setArchitectProvider(data.provider)
       }
 
-      const latestReply = [...nextMessages]
+      const latestReplyMessage = [...nextMessages]
         .reverse()
-        .map(readReplyFromMessage)
-        .find((reply): reply is ArchitectReply => Boolean(reply))
+        .find((message) => Boolean(readReplyFromMessage(message)))
+      const latestReply = latestReplyMessage
+        ? readReplyFromMessage(latestReplyMessage)
+        : null
+      const latestApplyFeedbackMessage = [...nextMessages]
+        .reverse()
+        .find(isArchitectApplyFeedbackMessage)
+      const applyFeedbackIsNewerThanReply =
+        Boolean(latestApplyFeedbackMessage && latestReplyMessage) &&
+        new Date(latestApplyFeedbackMessage?.createdAt ?? 0).getTime() >=
+          new Date(latestReplyMessage?.createdAt ?? 0).getTime()
       setArchitectReply(latestReply ?? null)
-      setArchitectPatchProposal(latestReply?.canvasPatchProposal ?? null)
+      setArchitectPatchProposal(
+        applyFeedbackIsNewerThanReply
+          ? null
+          : latestReply?.canvasPatchProposal ?? null
+      )
     } catch {
       setArchitectMessages([])
       setArchitectReply(null)
@@ -625,6 +652,12 @@ export function AiSidebar({
         canvas?: { nodes: typeof nodes; edges: typeof edges }
         applied?: { operations?: number; skippedOperations?: number }
         issues?: Array<{ message: string; severity: "warning" | "error" }>
+        feedbackMessage?: ArchitectMessage
+        semanticScanAfterApply?: Array<{
+          graphId: string
+          activeFindings: number
+          blockingFindings: number
+        }>
       }
 
       if (!response.ok) {
@@ -640,10 +673,25 @@ export function AiSidebar({
       const firstIssue = data.issues?.[0]?.message
       const skippedSummary = skippedOps ? `, skipped ${skippedOps}` : ""
       const issueSummary = skippedOps && firstIssue ? `: ${firstIssue}` : ""
-      setArchitectApplyMessage(
-        `Applied ${appliedOps} canvas operation${appliedOps === 1 ? "" : "s"}${skippedSummary}${issueSummary}.`
+      const currentScan = data.semanticScanAfterApply?.find(
+        (summary) => summary.graphId === graphId
       )
+      const scanSummary = currentScan
+        ? ` Semantic Scan now has ${currentScan.activeFindings} active signal${currentScan.activeFindings === 1 ? "" : "s"} on this layer.`
+        : " Architect thread was updated with the apply result."
+      setArchitectApplyMessage(
+        `Applied ${appliedOps} canvas operation${appliedOps === 1 ? "" : "s"}${skippedSummary}${issueSummary}.${scanSummary}`
+      )
+      if (data.feedbackMessage) {
+        setArchitectMessages((prev) => {
+          if (prev.some((message) => message.id === data.feedbackMessage?.id)) {
+            return prev
+          }
+          return [...prev, data.feedbackMessage as ArchitectMessage]
+        })
+      }
       setArchitectPatchProposal(null)
+      await fetchArchitectHistory()
       broadcastRoomEvent({
         type: "ai.status",
         payload: {
@@ -661,6 +709,7 @@ export function AiSidebar({
   }, [
     architectPatchProposal,
     broadcastRoomEvent,
+    fetchArchitectHistory,
     graphId,
     isApplyingArchitectPatch,
     projectId,
@@ -1021,15 +1070,16 @@ export function AiSidebar({
                   <div className="flex flex-col gap-3">
                     {architectMessages.map((message) => {
                       const isUser = message.role === "user"
+                      const isAppEvent = isArchitectApplyFeedbackMessage(message)
                       const shouldAnimate =
-                        !isUser && animatedArchitectMessageIds.has(message.id)
+                        !isUser && !isAppEvent && animatedArchitectMessageIds.has(message.id)
                       const replyDetails = isUser ? null : readReplyFromMessage(message)
                       return (
                         <div
                           key={message.id}
                           className={cn(
                             "flex flex-col gap-1",
-                            isUser ? "items-end" : "items-start"
+                            isUser ? "items-end" : isAppEvent ? "items-stretch" : "items-start"
                           )}
                         >
                           <div
@@ -1039,7 +1089,11 @@ export function AiSidebar({
                             )}
                           >
                             <span className="font-medium text-text-muted">
-                              {isUser ? "You" : AI_ASSISTANT_NAME}
+                              {isUser
+                                ? "You"
+                                : isAppEvent
+                                  ? "Arc Forge app event"
+                                  : AI_ASSISTANT_NAME}
                             </span>
                             <span>{formatIsoTime(message.createdAt)}</span>
                           </div>
@@ -1048,11 +1102,13 @@ export function AiSidebar({
                               "max-w-[88%] rounded-2xl px-3 py-2 text-xs leading-5 text-text-primary",
                               isUser
                                 ? "whitespace-pre-wrap rounded-br-sm bg-accent-ai font-medium text-white"
-                                : "rounded-bl-sm border border-border-subtle bg-bg-elevated"
+                                : isAppEvent
+                                  ? "max-w-full rounded-xl border border-state-success/25 bg-state-success/10 text-state-success"
+                                  : "rounded-bl-sm border border-border-subtle bg-bg-elevated"
                             )}
                             aria-live={shouldAnimate ? "polite" : undefined}
                           >
-                            {isUser ? (
+                            {isUser || isAppEvent ? (
                               message.content
                             ) : (
                               <StreamingArchitectMessageContent

@@ -11,6 +11,7 @@ interface LlmContextRecentMessageInput {
   content: string
   graphId?: string
   createdAt?: string
+  metadata?: unknown
 }
 
 export interface LlmContextPyramidInput {
@@ -59,6 +60,7 @@ export interface LlmContextPyramid {
   connectedEdges: LlmContextEdgeCard[]
   relatedGraphSummaries: LlmContextRelatedGraphSummary[]
   semanticWarnings: LlmContextSemanticFinding[]
+  appFeedback: LlmContextAppFeedback
   recentConversation: Array<{
     role: "user" | "assistant"
     graphId?: string
@@ -72,6 +74,7 @@ export interface LlmContextPyramid {
     omittedEdgeCount: number
     omittedFindingCount: number
     omittedConversationCount: number
+    omittedAppFeedbackCount: number
   }
 }
 
@@ -133,6 +136,39 @@ export interface LlmContextSemanticFinding {
   message: string
 }
 
+export interface LlmContextCanvasActivityEvent {
+  graphId: string
+  kind: string
+  actor: string
+  at: string
+  summary: string
+  nodeCount: number
+  edgeCount: number
+  activeSemanticFindings: number
+  blockingSemanticFindings: number
+  changes?: unknown
+  applied?: unknown
+}
+
+export interface LlmContextAppFeedback {
+  source: "arc-forge-application-state"
+  rule: string
+  currentGraphFacts: {
+    graphId: string
+    nodeCount: number
+    edgeCount: number
+    semanticScanActiveCount: number
+    semanticScanBlockingCount: number
+    lastCanvasEvent: LlmContextCanvasActivityEvent | null
+  } | null
+  recentCanvasEvents: LlmContextCanvasActivityEvent[]
+  recentApplyResults: Array<{
+    graphId?: string
+    createdAt?: string
+    summary: unknown
+  }>
+}
+
 const MAX_GRAPH_INDEX = 30
 const MAX_CURRENT_GRAPH_NODES = 32
 const MAX_CURRENT_GRAPH_EDGES = 48
@@ -141,6 +177,7 @@ const MAX_CONNECTED_EDGES = 36
 const MAX_RELATED_GRAPHS = 24
 const MAX_FINDINGS = 32
 const MAX_RECENT_MESSAGES = 20
+const MAX_APP_FEEDBACK_EVENTS = 12
 const MAX_MESSAGE_CHARS = 1200
 
 function text(value: unknown) {
@@ -344,6 +381,81 @@ function recentConversation(messages: LlmContextRecentMessageInput[] | undefined
   }))
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function appFeedbackEventFromGraph(
+  graph: CanvasPyramidGraph
+): LlmContextCanvasActivityEvent | null {
+  const event = graph.appActivity.lastEvent
+  if (!event) return null
+  return {
+    graphId: event.graphId,
+    kind: event.kind,
+    actor: event.actor,
+    at: event.at,
+    summary: event.summary,
+    nodeCount: event.nodeCount,
+    edgeCount: event.edgeCount,
+    activeSemanticFindings: event.activeSemanticFindings,
+    blockingSemanticFindings: event.blockingSemanticFindings,
+    changes: event.changes,
+    applied: event.applied,
+  }
+}
+
+function recentApplyResults(messages: LlmContextRecentMessageInput[] | undefined) {
+  return (messages ?? [])
+    .filter((message) => isRecord(message.metadata))
+    .map((message) => {
+      const metadata = message.metadata as Record<string, unknown>
+      return metadata.kind === "canvas_patch_apply_result"
+        ? {
+            graphId: message.graphId,
+            createdAt: message.createdAt,
+            summary: metadata.applyFeedback ?? null,
+          }
+        : null
+    })
+    .filter((event): event is NonNullable<typeof event> => Boolean(event))
+    .slice(-MAX_APP_FEEDBACK_EVENTS)
+}
+
+function appFeedback(input: {
+  pyramid: CanvasPyramid
+  currentGraph: CanvasPyramidGraph | undefined
+  recentMessages?: LlmContextRecentMessageInput[]
+}): LlmContextAppFeedback {
+  const currentEvent = input.currentGraph
+    ? appFeedbackEventFromGraph(input.currentGraph)
+    : null
+  const currentGraphFacts = input.currentGraph
+    ? {
+        graphId: input.currentGraph.graphId,
+        nodeCount: input.currentGraph.nodes.length,
+        edgeCount: input.currentGraph.edges.length,
+        semanticScanActiveCount: input.currentGraph.semanticScan.activeCount,
+        semanticScanBlockingCount: input.currentGraph.semanticScan.blockingCount,
+        lastCanvasEvent: currentEvent,
+      }
+    : null
+  const recentCanvasEvents = input.pyramid.graphs
+    .map(appFeedbackEventFromGraph)
+    .filter((event): event is LlmContextCanvasActivityEvent => Boolean(event))
+    .sort((left, right) => right.at.localeCompare(left.at))
+    .slice(0, MAX_APP_FEEDBACK_EVENTS)
+
+  return {
+    source: "arc-forge-application-state",
+    rule:
+      "These are factual application-state signals from persisted CanvasDoc/apply results. Trust them over conversation wording when they disagree.",
+    currentGraphFacts,
+    recentCanvasEvents,
+    recentApplyResults: recentApplyResults(input.recentMessages),
+  }
+}
+
 function withBudget(context: Omit<LlmContextPyramid, "budget">, input: LlmContextPyramidInput): LlmContextPyramid {
   const omittedGraphCount = Math.max(0, input.canvasPyramid.graphIndex.length - MAX_GRAPH_INDEX)
   const currentGraph = input.canvasPyramid.graphs.find((graph) => graph.graphId === input.currentGraphId)
@@ -355,6 +467,10 @@ function withBudget(context: Omit<LlmContextPyramid, "budget">, input: LlmContex
   )
   const omittedFindingCount = Math.max(0, allFindingCount - MAX_FINDINGS)
   const omittedConversationCount = Math.max(0, (input.recentMessages?.length ?? 0) - MAX_RECENT_MESSAGES)
+  const omittedAppFeedbackCount = Math.max(
+    0,
+    input.canvasPyramid.graphs.length - MAX_APP_FEEDBACK_EVENTS
+  )
 
   return {
     ...context,
@@ -365,6 +481,7 @@ function withBudget(context: Omit<LlmContextPyramid, "budget">, input: LlmContex
       omittedEdgeCount,
       omittedFindingCount,
       omittedConversationCount,
+      omittedAppFeedbackCount,
     },
   }
 }
@@ -406,6 +523,11 @@ export function buildLlmContextPyramid(input: LlmContextPyramidInput): LlmContex
       pyramid: input.canvasPyramid,
       currentGraphId: input.currentGraphId,
       selectedNodeIds: input.selectedNodeIds,
+    }),
+    appFeedback: appFeedback({
+      pyramid: input.canvasPyramid,
+      currentGraph,
+      recentMessages: input.recentMessages,
     }),
     recentConversation: recentConversation(input.recentMessages),
   }

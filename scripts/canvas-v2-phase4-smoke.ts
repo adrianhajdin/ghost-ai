@@ -14,6 +14,11 @@ import {
   graphSummaryCacheFromDoc,
 } from "@/lib/canvas/graph-summary-cache"
 import {
+  CANVAS_ACTIVITY_PANEL_KEY,
+  createCanvasActivityEvent,
+  withCanvasActivity,
+} from "@/lib/canvas/canvas-activity"
+import {
   applyLlmCanvasImprovementProposal,
   previewLlmCanvasImprovementProposal,
 } from "@/lib/canvas/llm-canvas-patch"
@@ -23,6 +28,7 @@ import {
   buildArchitectSystemPrompt,
   buildArchitectUserPrompt,
 } from "@/lib/ai/architect/architect-provider-contract"
+import { buildArchitectApplyFeedbackMessage } from "@/lib/ai/architect/architect-apply-feedback"
 import {
   buildPromptPackSystemPrompt,
   buildPromptPackUserPrompt,
@@ -203,6 +209,20 @@ async function main() {
 
   const directCache = createGraphSummaryCache(emptyChildDoc)
   assert(directCache.summary === "Empty child layer", "Empty graph summary cache should be factual")
+  const manualActivityDoc = withCanvasActivity(
+    rootDoc,
+    createCanvasActivityEvent({
+      kind: "manual-save",
+      actor: "user",
+      beforeDoc: null,
+      afterDoc: rootDoc,
+      at: "2026-01-01T00:00:00.000Z",
+    })
+  )
+  assert(
+    manualActivityDoc.panels[CANVAS_ACTIVITY_PANEL_KEY],
+    "Canvas activity panel did not record manual save feedback"
+  )
 
   const pyramid = await loadProjectCanvasPyramid(projectId)
   assert(pyramid.graphs.length === 2, "Canvas pyramid missed child graph")
@@ -254,6 +274,15 @@ async function main() {
   assert(context.budget.estimatedCharacters > 0, "LLM context missed budget estimate")
   assert(context.budget.omittedGraphCount >= 0, "LLM context missed omitted counts")
   assert(context.recentConversation.some((item) => item.graphId === childGraphId), "LLM context missed graph provenance")
+  assert(
+    context.appFeedback.source === "arc-forge-application-state",
+    "LLM context missed application-state feedback channel"
+  )
+  assert(
+    context.appFeedback.currentGraphFacts?.semanticScanActiveCount ===
+      context.currentGraph?.semanticScan.activeCount,
+    "LLM app feedback missed current graph semantic scan facts"
+  )
   assert(!contextJson.includes('"position"'), "LLM context should not include node coordinates")
   assert(!contextJson.includes('"selected"'), "LLM context leaked selected UI state")
   assert(!contextJson.includes('"dragging"'), "LLM context leaked dragging UI state")
@@ -351,10 +380,36 @@ async function main() {
     proposal: updateEdgePatch,
   })
   assert(updateEdgeApply.applied.updateEdges === 1, "update-edge patch did not apply")
+  const updateEdgeFeedback = buildArchitectApplyFeedbackMessage({
+    currentGraphId: ROOT_GRAPH_ID,
+    result: updateEdgeApply,
+    broadcastedGraphIds: [ROOT_GRAPH_ID],
+    realtimeBroadcastFailures: [],
+  })
+  assert(
+    updateEdgeFeedback.content.includes("Apply to canvas completed"),
+    "Architect apply feedback missed user-facing apply copy"
+  )
+  assert(
+    !updateEdgeFeedback.content.includes("canvasPatchProposal"),
+    "Architect apply feedback leaked internal patch field name"
+  )
+  assert(
+    updateEdgeFeedback.summary.semanticScanAfterApply.some(
+      (summary) => summary.graphId === ROOT_GRAPH_ID
+    ),
+    "Architect apply feedback missed semantic scan summary"
+  )
   const rootAfterEdgeApply = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
   const updatedEdge = rootAfterEdgeApply?.edges.find((item) => item.id === "edge-catalog-db")
   assert(updatedEdge?.data?.relationshipType === "reads", "update-edge did not persist relationshipType")
   assert(updatedEdge?.data?.label === "reads product data", "update-edge did not persist label")
+  const applyActivity = rootAfterEdgeApply?.panels[CANVAS_ACTIVITY_PANEL_KEY]
+  assert(
+    JSON.stringify(applyActivity).includes("architect-apply") &&
+      JSON.stringify(applyActivity).includes("activeSemanticFindings"),
+    "Apply did not persist factual canvas activity for LLM context"
+  )
 
   const unknownTempPatch = {
     summary: "Invalid edge should block apply.",
@@ -511,6 +566,16 @@ async function main() {
   assert(architectPrompt.includes("unknown tempId references block apply"), "Architect prompt missed tempId guardrail")
   assert(architectPrompt.includes("Temp IDs are transport references only"), "Architect prompt missed tempId persistence rule")
   assert(buildArchitectSystemPrompt().includes("update-edge"), "Architect prompt missed update-edge support")
+  assert(
+    buildArchitectSystemPrompt().includes("Apply to canvas") &&
+      buildArchitectSystemPrompt().includes("authoritative app feedback"),
+    "Architect prompt missed Apply to canvas feedback instructions"
+  )
+  assert(
+    architectPrompt.includes("appFeedback") &&
+      architectPrompt.includes("application-state feedback"),
+    "Architect user prompt missed structured app feedback"
+  )
 
   const promptPackPrompt = buildPromptPackUserPrompt({
     projectId,
@@ -558,6 +623,14 @@ async function main() {
   )
   assert(semanticInspectorSource.includes("Ask Architect"), "Semantic Scan UI missed Ask Architect action")
   assert(semanticInspectorSource.includes("Fix"), "Semantic Scan UI missed Fix action")
+  assert(
+    semanticInspectorSource.includes("Apply to canvas"),
+    "Semantic Scan Fix prompt missed Apply to canvas wording"
+  )
+  assert(
+    !semanticInspectorSource.includes("user-approved canvasPatchProposal"),
+    "Semantic Scan Fix prompt leaked internal patch field name"
+  )
   assert(
     semanticInspectorSource.includes("onSendSemanticFindingToArchitect"),
     "Semantic Scan UI missed Architect command bridge"

@@ -195,7 +195,7 @@ function semanticFindingArchitectPrompt(input: {
   }
 
   return [
-    "Please fix this Semantic Scan finding in Arc Forge by proposing a user-approved canvasPatchProposal.",
+    "Please fix this Semantic Scan finding in Arc Forge by proposing a small, user-approved patch for the Apply to canvas flow.",
     `Graph: ${graphId}`,
     `Category: ${category}`,
     `Severity: ${warning.severity}`,
@@ -205,7 +205,7 @@ function semanticFindingArchitectPrompt(input: {
     `Message: ${warning.message}`,
     groupedCopy,
     "Use the same kind of semantic edits a human can make in the canvas/inspector: update-node for node metadata, update-edge for edge relationshipType/labels/metadata, add-node/add-edge/create-layer only when genuinely needed.",
-    "Do not claim anything was applied. Keep the proposal reviewable and mention any remaining findings after the proposed patch.",
+    "Do not claim anything was applied until Arc Forge sends application-state feedback after the user presses Apply to canvas. Keep the proposal reviewable and mention any remaining findings after the proposed patch.",
   ].join("\n")
 }
 
@@ -545,8 +545,8 @@ function WarningList({
   const hiddenCount = Math.max(0, condensedWarnings.length - 5)
 
   return (
-    <div className="grid gap-1.5">
-      {condensedWarnings.slice(0, 5).map((warning) => {
+    <div className="grid min-w-0 gap-1.5">
+      {condensedWarnings.slice(0, 5).map((warning, index) => {
         const Icon = warning.severity === "info" ? Info : AlertTriangle
         const color =
           warning.severity === "info" ? "text-text-muted" : "text-state-warning"
@@ -554,16 +554,21 @@ function WarningList({
         return (
           <div
             key={warning.id}
-            className="flex items-start gap-2 rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary"
+            className="group grid min-w-0 gap-2 overflow-hidden rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary shadow-[0_0_0_rgba(0,0,0,0)] transition-all duration-200 ease-out motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 hover:-translate-y-0.5 hover:border-accent-primary/30 hover:bg-bg-subtle/80 hover:shadow-[0_12px_32px_rgba(0,200,212,0.08)]"
+            style={{ animationDelay: `${index * 35}ms` }}
           >
-            <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
-            <span className="min-w-0 flex-1">{warning.message}</span>
-            {warning.count > 1 ? (
-              <span className="shrink-0 rounded-full border border-border-subtle bg-bg-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
-                x{warning.count}
+            <div className="grid min-w-0 grid-cols-[auto_1fr] items-start gap-x-2">
+              <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
+              <span className="min-w-0 max-w-full whitespace-normal break-words leading-5 text-pretty">
+                {warning.message}
               </span>
-            ) : null}
-            <span className="ml-1 flex shrink-0 flex-wrap justify-end gap-1">
+            </div>
+            <div className="ml-5 flex min-w-0 flex-wrap items-center gap-1.5">
+              {warning.count > 1 ? (
+                <span className="shrink-0 rounded-full border border-state-warning/25 bg-state-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-state-warning transition-colors group-hover:border-state-warning/45 group-hover:bg-state-warning/15">
+                  x{warning.count}
+                </span>
+              ) : null}
               {onSendSemanticFindingToArchitect ? (
                 <>
                   <button
@@ -579,7 +584,7 @@ function WarningList({
                         })
                       )
                     }
-                    className="inline-flex items-center gap-1 rounded-full border border-accent-ai/25 px-1.5 py-0.5 text-[10px] text-accent-ai-text transition-colors hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
+                    className="inline-flex items-center gap-1 rounded-full border border-accent-ai/25 px-1.5 py-0.5 text-[10px] text-accent-ai-text transition-all hover:-translate-y-0.5 hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
                   >
                     <MessageSquare className="h-3 w-3" />
                     Ask
@@ -597,7 +602,7 @@ function WarningList({
                         })
                       )
                     }
-                    className="inline-flex items-center gap-1 rounded-full border border-accent-primary/30 bg-accent-dim px-1.5 py-0.5 text-[10px] text-accent-primary transition-colors hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
+                    className="inline-flex items-center gap-1 rounded-full border border-accent-primary/30 bg-accent-dim px-1.5 py-0.5 text-[10px] text-accent-primary transition-all hover:-translate-y-0.5 hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
                   >
                     <Wrench className="h-3 w-3" />
                     Fix
@@ -613,7 +618,7 @@ function WarningList({
                         nextScanState(semanticScanState, warning.ids, "intentional")
                       )
                     }
-                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
+                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-all hover:-translate-y-0.5 hover:border-accent-primary/50 hover:text-text-primary"
                   >
                     Mark intentional
                   </button>
@@ -624,7 +629,7 @@ function WarningList({
                         nextScanState(semanticScanState, warning.ids, "dismiss")
                       )
                     }
-                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
+                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-all hover:-translate-y-0.5 hover:border-accent-primary/50 hover:text-text-primary"
                   >
                     Snooze
                   </button>
@@ -640,14 +645,14 @@ function WarningList({
                           nextScanState(semanticScanState, warning.ids, "show")
                         )
                       }
-                      className="rounded-full border border-accent-primary/25 px-1.5 py-0.5 text-[10px] text-accent-primary transition-colors hover:border-accent-primary/60"
+                      className="rounded-full border border-accent-primary/25 px-1.5 py-0.5 text-[10px] text-accent-primary transition-all hover:-translate-y-0.5 hover:border-accent-primary/60"
                     >
                       Show
                     </button>
                   ) : null}
                 </>
               ) : null}
-            </span>
+            </div>
           </div>
         )
       })}
@@ -759,7 +764,7 @@ function SemanticWarningBeacon({
 
       {isOpen ? (
         <div
-          className="mt-2 max-h-[min(22rem,calc(100vh-9rem))] w-full max-w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-2xl backdrop-blur-xl"
+          className="mt-2 max-h-[min(24rem,calc(100vh-9rem))] w-full max-w-96 overflow-y-auto overflow-x-hidden rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-2xl backdrop-blur-xl"
           data-testid="semantic-warning-drawer"
         >
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -772,15 +777,17 @@ function SemanticWarningBeacon({
               {showHidden ? "Hide intentional" : `${hiddenWarnings.length} hidden`}
             </button>
           </div>
-          <div className="grid gap-2">
+          <div className="grid min-w-0 gap-2">
             {[...groupedWarnings.entries()].map(([category, groupWarnings]) => (
               <details
                 key={category}
                 open={category === "safety" || groupWarnings.some((item) => item.severity === "error")}
-                className="rounded-2xl border border-border-default bg-bg-elevated/70 p-2"
+                className="min-w-0 rounded-2xl border border-border-default bg-bg-elevated/70 p-2"
               >
-                <summary className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-text-primary">
-                  <span>{SEMANTIC_VALIDATION_CATEGORY_LABELS[category]}</span>
+                <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-text-primary">
+                  <span className="min-w-0 truncate">
+                    {SEMANTIC_VALIDATION_CATEGORY_LABELS[category]}
+                  </span>
                   <span className="rounded-full border border-border-subtle bg-bg-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
                     {groupWarnings.length}
                   </span>

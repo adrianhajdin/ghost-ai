@@ -1,7 +1,16 @@
 import { getCurrentProjectIdentity, userHasProjectAccess } from "@/lib/project-access"
-import { readCanvasDoc, writeCanvasDoc } from "@/lib/canvas/canvas-persistence"
+import { createCanvasDocV1 } from "@/lib/canvas/canvas-doc"
+import {
+  readCanvasDoc,
+  writeCanvasDoc,
+  type CanvasDocWriteOptions,
+} from "@/lib/canvas/canvas-persistence"
 import { applyChildLayerSummaryToParentDoc } from "@/lib/canvas/child-layer-summary"
-import { GraphIdError, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
+import {
+  createCanvasActivityEvent,
+  withCanvasActivity,
+} from "@/lib/canvas/canvas-activity"
+import { GraphIdError, ROOT_GRAPH_ID, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 import { sanitizeCanvasSnapshot } from "@/lib/canvas/canvas-state"
 import type { NextRequest } from "next/server"
 
@@ -44,45 +53,70 @@ export async function PUT(
     const graphId = graphIdFromSearchParam(request.nextUrl.searchParams.get("graphId"))
     const body: unknown = await request.json().catch(() => ({}))
     const record = typeof body === "object" && body !== null ? body : {}
-    const { url, doc } = await writeCanvasDoc(
+    const writeOptions: CanvasDocWriteOptions = {
+      graphId,
+      parentNodeId:
+        "parentNodeId" in record && typeof record.parentNodeId === "string"
+          ? record.parentNodeId
+          : undefined,
+      parentGraphId:
+        "parentGraphId" in record && typeof record.parentGraphId === "string"
+          ? record.parentGraphId
+          : undefined,
+      scopeKind:
+        "scopeKind" in record && typeof record.scopeKind === "string"
+          ? docScopeFromRequest(record.scopeKind, graphId)
+          : undefined,
+      title:
+        "title" in record && typeof record.title === "string"
+          ? record.title
+          : undefined,
+      layer:
+        "layer" in record && typeof record.layer === "number" && Number.isInteger(record.layer)
+          ? record.layer
+          : undefined,
+      layerKind:
+        "layerKind" in record && typeof record.layerKind === "string"
+          ? record.layerKind
+          : undefined,
+      summary:
+        "summary" in record && typeof record.summary === "string"
+          ? record.summary
+          : undefined,
+      panels:
+        "panels" in record && typeof record.panels === "object" && record.panels !== null
+          ? (record.panels as Record<string, unknown>)
+          : undefined,
+    }
+    const beforeDoc = await readCanvasDoc(projectId, graphId)
+    const requestDoc = createCanvasDocV1(sanitizeCanvasSnapshot(body), {
       projectId,
-      sanitizeCanvasSnapshot(body),
-      {
-        graphId,
-        parentNodeId:
-          "parentNodeId" in record && typeof record.parentNodeId === "string"
-            ? record.parentNodeId
-            : undefined,
-        parentGraphId:
-          "parentGraphId" in record && typeof record.parentGraphId === "string"
-            ? record.parentGraphId
-            : undefined,
-        scopeKind:
-          "scopeKind" in record && typeof record.scopeKind === "string"
-            ? docScopeFromRequest(record.scopeKind, graphId)
-            : undefined,
-        title:
-          "title" in record && typeof record.title === "string"
-            ? record.title
-            : undefined,
-        layer:
-          "layer" in record && typeof record.layer === "number" && Number.isInteger(record.layer)
-            ? record.layer
-            : undefined,
-        layerKind:
-          "layerKind" in record && typeof record.layerKind === "string"
-            ? record.layerKind
-            : undefined,
-        summary:
-          "summary" in record && typeof record.summary === "string"
-            ? record.summary
-            : undefined,
-        panels:
-          "panels" in record && typeof record.panels === "object" && record.panels !== null
-            ? (record.panels as Record<string, unknown>)
-            : undefined,
-      }
+      graphId,
+      parentNodeId: writeOptions.parentNodeId,
+      parentGraphId: writeOptions.parentGraphId,
+      scopeKind:
+        writeOptions.scopeKind ??
+        (graphId === ROOT_GRAPH_ID ? "system-root" : "architecture-layer"),
+      title:
+        writeOptions.title ?? (graphId === ROOT_GRAPH_ID ? "System" : "Design layer"),
+      layer: writeOptions.layer,
+      layerKind: writeOptions.layerKind,
+      summary: writeOptions.summary,
+      panels: writeOptions.panels,
+    })
+    const docWithActivity = withCanvasActivity(
+      requestDoc,
+      createCanvasActivityEvent({
+        kind: "manual-save",
+        actor: "user",
+        beforeDoc,
+        afterDoc: requestDoc,
+      })
     )
+    const { url, doc } = await writeCanvasDoc(projectId, docWithActivity, {
+      ...writeOptions,
+      panels: docWithActivity.panels,
+    })
     let parentGraph = null
 
     if (doc.parentGraphId && doc.parentNodeId) {

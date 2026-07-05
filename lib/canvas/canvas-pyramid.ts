@@ -16,6 +16,10 @@ import {
   type GraphSummaryCache,
 } from "@/lib/canvas/graph-summary-cache"
 import {
+  canvasActivityFromDoc,
+  type CanvasActivityPanel,
+} from "@/lib/canvas/canvas-activity"
+import {
   looksLikeRawSecretValue,
   shouldStripSecretField,
 } from "@/lib/canvas/secret-guards"
@@ -97,6 +101,7 @@ export interface CanvasPyramidGraph {
   edges: CanvasPyramidEdge[]
   semanticScan: CanvasPyramidSemanticScanSummary
   graphSummaryCache: GraphSummaryCache
+  appActivity: CanvasActivityPanel
 }
 
 export interface CanvasPyramidGraphIndexEntry {
@@ -233,6 +238,7 @@ function graphFromDoc(doc: CanvasDocV1): CanvasPyramidGraph {
     edges: doc.edges.map(sanitizeEdge),
     semanticScan: semanticScanSummary(doc),
     graphSummaryCache: graphSummaryCacheFromDoc(doc),
+    appActivity: canvasActivityFromDoc(doc),
   }
 }
 
