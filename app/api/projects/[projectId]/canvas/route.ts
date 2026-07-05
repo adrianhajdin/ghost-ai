@@ -1,5 +1,6 @@
 import { getCurrentProjectIdentity, userHasProjectAccess } from "@/lib/project-access"
 import { readCanvasDoc, writeCanvasDoc } from "@/lib/canvas/canvas-persistence"
+import { applyChildLayerSummaryToParentDoc } from "@/lib/canvas/child-layer-summary"
 import { GraphIdError, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 import { sanitizeCanvasSnapshot } from "@/lib/canvas/canvas-state"
 import type { NextRequest } from "next/server"
@@ -76,10 +77,39 @@ export async function PUT(
           "summary" in record && typeof record.summary === "string"
             ? record.summary
             : undefined,
+        panels:
+          "panels" in record && typeof record.panels === "object" && record.panels !== null
+            ? (record.panels as Record<string, unknown>)
+            : undefined,
       }
     )
+    let parentGraph = null
 
-    return Response.json({ url, doc })
+    if (doc.parentGraphId && doc.parentNodeId) {
+      const existingParent = await readCanvasDoc(projectId, doc.parentGraphId)
+      if (existingParent) {
+        const nextParent = applyChildLayerSummaryToParentDoc({
+          parentDoc: existingParent,
+          childDoc: doc,
+        })
+        if (JSON.stringify(existingParent.nodes) !== JSON.stringify(nextParent.nodes)) {
+          const writtenParent = await writeCanvasDoc(projectId, nextParent, {
+            graphId: nextParent.graphId,
+            parentGraphId: nextParent.parentGraphId,
+            parentNodeId: nextParent.parentNodeId,
+            scopeKind: nextParent.scopeKind,
+            title: nextParent.title,
+            layer: nextParent.layer,
+            layerKind: nextParent.layerKind,
+            summary: nextParent.summary,
+            panels: nextParent.panels,
+          })
+          parentGraph = writtenParent.doc
+        }
+      }
+    }
+
+    return Response.json({ url, doc, parentGraph })
   } catch (error) {
     if (error instanceof GraphIdError) {
       return Response.json({ error: error.message }, { status: 400 })

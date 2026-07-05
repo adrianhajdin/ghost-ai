@@ -13,6 +13,7 @@ Build this project incrementally using a spec-driven workflow. Context files def
 - Do not add deterministic architecture judges, deterministic Prompt Pack authoring, child-layer semantic-type permission gates, app execution, repo write-back, auto-apply patches, image/multimodal input, or extra AI editing personas unless a future product contract explicitly changes that scope.
 - Treat Semantic Scan as advisory for architecture completeness. It may fail only for safety, schema, transport, malformed patch, raw secret, transient UI state, invalid id, unsupported destructive operation, or auth/access issues.
 - Keep Canvas v2 semantic taxonomy and relationshipType additions compact. Prefer metadata, labels, tags, and Prompt Pack notes over adding niche node or edge enum values.
+- Use Semantic Scan v2 categories, metadataSummary, and child-layer summaries as LLM context and UX guidance, not as deterministic architecture authorship. Snoozed or intentional advisory findings are per-graph panel state and must not suppress blocking safety findings.
 
 ## When To Split Work
 

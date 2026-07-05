@@ -3,6 +3,15 @@ import { emptyCanvasSnapshot } from "@/lib/canvas/canvas-state"
 import { readCanvasDoc } from "@/lib/canvas/canvas-persistence"
 import { ROOT_GRAPH_ID, isValidGraphId } from "@/lib/canvas/graph-ids"
 import {
+  SEMANTIC_VALIDATION_CATEGORY_LABELS,
+  groupSemanticFindings,
+  validateCanvasSemantics,
+} from "@/lib/canvas/semantic-validation"
+import {
+  summarizeEdgeMetadataForLlm,
+  summarizeNodeMetadataForLlm,
+} from "@/lib/canvas/metadata-summaries"
+import {
   looksLikeRawSecretValue,
   shouldStripSecretField,
 } from "@/lib/canvas/secret-guards"
@@ -35,6 +44,7 @@ export interface CanvasPyramidNode {
   width?: number
   height?: number
   data: Record<string, unknown>
+  metadataSummary: Record<string, unknown>
 }
 
 export interface CanvasPyramidEdge {
@@ -45,6 +55,29 @@ export interface CanvasPyramidEdge {
   targetHandle?: string | null
   type?: string
   data: Record<string, unknown>
+  metadataSummary: Record<string, unknown>
+}
+
+export interface CanvasPyramidSemanticScanSummary {
+  activeCount: number
+  blockingCount: number
+  groupedCounts: Array<{
+    category: string
+    label: string
+    count: number
+    highCount: number
+    blockingCount: number
+  }>
+  findings: Array<{
+    id: string
+    category: string
+    severity: string
+    advisory: boolean
+    blocking: boolean
+    targetKind: string
+    targetId?: string
+    message: string
+  }>
 }
 
 export interface CanvasPyramidGraph {
@@ -58,6 +91,7 @@ export interface CanvasPyramidGraph {
   summary: string | null
   nodes: CanvasPyramidNode[]
   edges: CanvasPyramidEdge[]
+  semanticScan: CanvasPyramidSemanticScanSummary
 }
 
 export interface CanvasPyramidGraphIndexEntry {
@@ -134,6 +168,7 @@ function sanitizeNode(node: CanvasDocV1["nodes"][number]): CanvasPyramidNode {
     width: typeof node.width === "number" ? node.width : undefined,
     height: typeof node.height === "number" ? node.height : undefined,
     data: sanitizeLlmTransportRecord(node.data),
+    metadataSummary: sanitizeLlmTransportRecord(summarizeNodeMetadataForLlm(node)),
   }
 }
 
@@ -146,6 +181,35 @@ function sanitizeEdge(edge: CanvasDocV1["edges"][number]): CanvasPyramidEdge {
     targetHandle: edge.targetHandle ?? null,
     type: edge.type,
     data: sanitizeLlmTransportRecord(edge.data ?? {}),
+    metadataSummary: sanitizeLlmTransportRecord(summarizeEdgeMetadataForLlm(edge)),
+  }
+}
+
+function semanticScanSummary(doc: CanvasDocV1): CanvasPyramidSemanticScanSummary {
+  const findings = validateCanvasSemantics({ nodes: doc.nodes, edges: doc.edges })
+  const grouped = groupSemanticFindings(findings)
+
+  return {
+    activeCount: findings.length,
+    blockingCount: findings.filter((finding) => finding.blocking).length,
+    groupedCounts: [...grouped.entries()].map(([category, groupFindings]) => ({
+      category,
+      label: SEMANTIC_VALIDATION_CATEGORY_LABELS[category],
+      count: groupFindings.length,
+      highCount: groupFindings.filter((finding) => finding.qualitySeverity === "high")
+        .length,
+      blockingCount: groupFindings.filter((finding) => finding.blocking).length,
+    })),
+    findings: findings.slice(0, 30).map((finding) => ({
+      id: finding.id,
+      category: finding.category,
+      severity: finding.qualitySeverity ?? finding.severity,
+      advisory: finding.advisory,
+      blocking: finding.blocking,
+      targetKind: finding.targetKind,
+      targetId: finding.targetId,
+      message: finding.message,
+    })),
   }
 }
 
@@ -161,6 +225,7 @@ function graphFromDoc(doc: CanvasDocV1): CanvasPyramidGraph {
     summary: doc.summary,
     nodes: doc.nodes.map(sanitizeNode),
     edges: doc.edges.map(sanitizeEdge),
+    semanticScan: semanticScanSummary(doc),
   }
 }
 

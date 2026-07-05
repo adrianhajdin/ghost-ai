@@ -328,9 +328,10 @@ function assertSemanticScanIsAdvisory(files: SourceFile[]) {
   )
   assert(semanticValidation, "semantic validation source missing")
   assert(
-    semanticValidation.content.includes('severity: "warning"') &&
-      semanticValidation.content.includes('severity: "info"'),
-    "Semantic validation no longer reports advisory warning/info severities"
+    semanticValidation.content.includes("advisory:") &&
+      semanticValidation.content.includes("blocking:") &&
+      semanticValidation.content.includes("SemanticValidationCategory"),
+    "Semantic validation no longer exposes advisory/blocking categorized findings"
   )
 }
 

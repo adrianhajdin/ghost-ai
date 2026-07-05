@@ -144,9 +144,12 @@ serviceNode.data.subcanvasRef = {
 const templateWarnings = validateCanvasSemantics({
   nodes: [serviceNode, databaseNode],
   edges: [],
-}).filter((warning) => warning.severity !== "info")
+})
 
-assert(templateWarnings.length === 0, "service/database templates should validate")
+assert(
+  templateWarnings.every((warning) => warning.severity !== "error" && !warning.blocking),
+  "service/database templates should not produce blocking validation"
+)
 
 const labelItems = createEdgeLabelItems(
   ["writes", "transaction"],

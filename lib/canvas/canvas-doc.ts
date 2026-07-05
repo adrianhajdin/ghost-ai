@@ -5,6 +5,10 @@ import {
 } from "@/types/canvas"
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 import {
+  looksLikeRawSecretValue,
+  shouldStripSecretField,
+} from "@/lib/canvas/secret-guards"
+import {
   type CanvasSnapshot,
   sanitizeCanvasSnapshot,
 } from "@/lib/canvas/canvas-state"
@@ -40,6 +44,38 @@ export interface CanvasDocV1 {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function sanitizePanelValue(key: string, value: unknown): unknown {
+  if (shouldStripSecretField(key, value)) return undefined
+
+  if (typeof value === "string") {
+    return looksLikeRawSecretValue(value) ? "[redacted-secret]" : value.trim()
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizePanelValue(key, item))
+      .filter((item) => item !== undefined)
+  }
+
+  if (isRecord(value)) {
+    return sanitizePanels(value)
+  }
+
+  return value
+}
+
+function sanitizePanels(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {}
+  const sanitized: Record<string, unknown> = {}
+
+  for (const [key, childValue] of Object.entries(value)) {
+    const nextValue = sanitizePanelValue(key, childValue)
+    if (nextValue !== undefined) sanitized[key] = nextValue
+  }
+
+  return sanitized
 }
 
 function normalizeString(value: unknown, fallback: string): string {
@@ -120,7 +156,7 @@ export function createCanvasDocV1(
     viewport: options.viewport ?? { x: 0, y: 0, zoom: 1 },
     nodes: canvas.nodes,
     edges: canvas.edges,
-    panels: options.panels ?? {},
+    panels: sanitizePanels(options.panels),
   }
 }
 
@@ -148,6 +184,6 @@ export function normalizeCanvasDocV1(
     layerKind: normalizeOptionalString(record.layerKind),
     summary: normalizeOptionalString(record.summary),
     viewport: normalizeViewport(record.viewport),
-    panels: isRecord(record.panels) ? record.panels : {},
+    panels: sanitizePanels(record.panels),
   })
 }

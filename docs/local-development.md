@@ -165,6 +165,14 @@ npm run test:canvas-v2-phase1
 
 The Phase 1 smoke verifies the compact node taxonomy, legacy type normalization, typed relationship model, metadata persistence, child-layer availability for every node type, advisory semantic validation, Prompt Pack/Architect prompt context, and removal of legacy design-generation paths.
 
+Canvas v2 Phase 2 inspector, semantic scan, and child-layer summary checks can also be run locally:
+
+```bash
+npm run test:canvas-v2-phase2
+```
+
+The Phase 2 smoke verifies progressive inspector sections, grouped advisory Semantic Scan v2 findings, snooze/intentional scan state persistence, blocking safety findings, child-layer summary metadata, sanitized LLM metadata summaries, existing child-layer upsert behavior, and removal of legacy design-generation paths.
+
 ## Keys Needed For Full Behavior
 
 Full local artifact persistence does not require an external object storage key. Local AI smoke does not require an external AI key because `AI_PROVIDER=mock` is the default:

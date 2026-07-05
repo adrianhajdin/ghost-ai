@@ -1,4 +1,6 @@
 import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
+import { createCanvasDocV1 } from "@/lib/canvas/canvas-doc"
+import { buildCanvasPyramidFromDocs } from "@/lib/canvas/canvas-pyramid"
 import {
   getAiProvider,
   getAiProviderName,
@@ -176,6 +178,27 @@ async function main() {
   })
   assert(markdown.startsWith("#"), "mock spec should return Markdown")
 
+  const canvasPyramid = buildCanvasPyramidFromDocs("project-ai-provider-smoke", [
+    createCanvasDocV1(
+      { nodes: smokeNodes, edges: smokeEdges },
+      {
+        projectId: "project-ai-provider-smoke",
+        graphId: ROOT_GRAPH_ID,
+        title: "System",
+      }
+    ),
+  ])
+  const emptyCanvasPyramid = buildCanvasPyramidFromDocs("project-ai-provider-smoke", [
+    createCanvasDocV1(
+      { nodes: [], edges: [] },
+      {
+        projectId: "project-ai-provider-smoke",
+        graphId: ROOT_GRAPH_ID,
+        title: "System",
+      }
+    ),
+  ])
+
   const promptPack = await mockProvider.generatePromptPack({
     projectId: "project-ai-provider-smoke",
     projectName: "AI Provider Smoke",
@@ -183,49 +206,7 @@ async function main() {
     scopeMode: "full-project",
     currentGraphId: ROOT_GRAPH_ID,
     selectedNodeIds: [],
-    canvasPyramid: {
-      projectId: "project-ai-provider-smoke",
-      rootGraphId: ROOT_GRAPH_ID,
-      graphs: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          scopeKind: "system-root",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          summary: null,
-          nodes: smokeNodes.map((node) => ({
-            id: node.id,
-            type: node.type,
-            position: node.position,
-            data: node.data,
-          })),
-          edges: smokeEdges.map((edge) => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            sourceHandle: edge.sourceHandle,
-            targetHandle: edge.targetHandle,
-            type: edge.type,
-            data: edge.data ?? {},
-          })),
-        },
-      ],
-      graphIndex: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          nodeCount: smokeNodes.length,
-          edgeCount: smokeEdges.length,
-        },
-      ],
-    },
+    canvasPyramid,
   })
   assert(promptPack.globalPrompt.markdown.length > 0, "mock Prompt Pack should return a global prompt")
   assert(promptPack.layerPrompts.length === 1, "mock Prompt Pack should return a layer prompt")
@@ -247,49 +228,7 @@ async function main() {
         createdAt: new Date().toISOString(),
       },
     ],
-    canvasPyramid: {
-      projectId: "project-ai-provider-smoke",
-      rootGraphId: ROOT_GRAPH_ID,
-      graphs: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          scopeKind: "system-root",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          summary: null,
-          nodes: smokeNodes.map((node) => ({
-            id: node.id,
-            type: node.type,
-            position: node.position,
-            data: node.data,
-          })),
-          edges: smokeEdges.map((edge) => ({
-            id: edge.id,
-            source: edge.source,
-            target: edge.target,
-            sourceHandle: edge.sourceHandle,
-            targetHandle: edge.targetHandle,
-            type: edge.type,
-            data: edge.data ?? {},
-          })),
-        },
-      ],
-      graphIndex: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          nodeCount: smokeNodes.length,
-          edgeCount: smokeEdges.length,
-        },
-      ],
-    },
+    canvasPyramid,
   })
   assert(
     architectReply.assistantMessage.content.length > 0,
@@ -309,36 +248,7 @@ async function main() {
     userMessage: "Are you a real LLM?",
     selectedNodeIds: [],
     recentMessages: [],
-    canvasPyramid: {
-      projectId: "project-ai-provider-smoke",
-      rootGraphId: ROOT_GRAPH_ID,
-      graphs: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          scopeKind: "system-root",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          summary: null,
-          nodes: [],
-          edges: [],
-        },
-      ],
-      graphIndex: [
-        {
-          graphId: ROOT_GRAPH_ID,
-          title: "System",
-          parentGraphId: null,
-          parentNodeId: null,
-          layer: null,
-          layerKind: null,
-          nodeCount: 0,
-          edgeCount: 0,
-        },
-      ],
-    },
+    canvasPyramid: emptyCanvasPyramid,
   })
   assert(
     /mock provider|fixture/i.test(architectIdentityReply.assistantMessage.content),

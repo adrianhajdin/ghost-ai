@@ -48,6 +48,7 @@ interface RealtimeRoomContextValue {
   graphLayer: number | null
   graphLayerKind: string | null
   graphSummary: string | null
+  graphPanels: Record<string, unknown>
   currentUserName: string
   status: RealtimeConnectionStatus
   error: string | null
@@ -58,6 +59,7 @@ interface RealtimeRoomContextValue {
     snapshot: CanvasSnapshot,
     options?: { broadcast?: boolean; recordHistory?: boolean }
   ) => void
+  setGraphPanels: (panels: Record<string, unknown>) => void
   presence: RealtimePresenceRecord[]
   updatePresence: (presence: RealtimePresence | null) => void
   patchPresence: (patch: RealtimePresence) => void
@@ -137,6 +139,7 @@ export function InternalRealtimeProvider({
   const [graphLayer, setGraphLayer] = useState<number | null>(null)
   const [graphLayerKind, setGraphLayerKind] = useState<string | null>(null)
   const [graphSummary, setGraphSummary] = useState<string | null>(null)
+  const [graphPanels, setGraphPanelsState] = useState<Record<string, unknown>>({})
   const [presence, setPresence] = useState<RealtimePresenceRecord[]>([])
   const [chatMessages, setChatMessages] = useState<Array<ChatFeedMessage & { id: string; createdAt: number }>>([])
   const [aiStatuses, setAiStatuses] = useState<Array<AiStatusFeedMessage & { id: string; createdAt: number }>>([])
@@ -174,6 +177,10 @@ export function InternalRealtimeProvider({
     },
     [broadcastRoomEvent]
   )
+
+  const setGraphPanels = useCallback((panels: Record<string, unknown>) => {
+    setGraphPanelsState(panels)
+  }, [])
 
   const updatePresence = useCallback(
     (nextPresence: RealtimePresence | null) => {
@@ -291,6 +298,7 @@ export function InternalRealtimeProvider({
           setGraphLayer(doc.layer)
           setGraphLayerKind(doc.layerKind)
           setGraphSummary(doc.summary)
+          setGraphPanelsState(doc.panels ?? {})
         }
         setCanvasSnapshot(canvas ? sanitizeCanvasSnapshot(canvas) : emptyCanvasSnapshot())
       })
@@ -440,6 +448,7 @@ export function InternalRealtimeProvider({
       graphLayer,
       graphLayerKind,
       graphSummary,
+      graphPanels,
       currentUserName,
       status,
       error,
@@ -447,6 +456,7 @@ export function InternalRealtimeProvider({
       nodes,
       edges,
       setCanvasSnapshot,
+      setGraphPanels,
       presence,
       updatePresence,
       patchPresence,
@@ -466,6 +476,7 @@ export function InternalRealtimeProvider({
       graphLayer,
       graphLayerKind,
       graphSummary,
+      graphPanels,
       currentUserName,
       status,
       error,
@@ -473,6 +484,7 @@ export function InternalRealtimeProvider({
       nodes,
       edges,
       setCanvasSnapshot,
+      setGraphPanels,
       presence,
       updatePresence,
       patchPresence,
