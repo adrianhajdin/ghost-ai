@@ -22,7 +22,8 @@
 - `lib/ai/providers` — Server-side AI provider selection and external model adapters.
 - `lib/ai/spec` / `lib/ai/architecture-draft` / `lib/ai/prompt-pack` / `lib/ai/architect` — Provider contracts for specs, architecture draft proposals, LLM Prompt Pack requests, and Architect conversation replies.
 - `lib/architecture-draft` — Pure Architecture Draft v1 schema, validator, sanitizer, CanvasDoc append-only apply helper, collision resolution, and smoke-testable proposal utilities.
-- `lib/canvas` — Canvas snapshot sanitization, CanvasDoc v1 compatibility helpers, semantic validation, deterministic Design IR v1 compilation/export, sanitized canvas pyramid transport for LLM Prompt Packs and Architect, and generic LLM canvas patch apply mechanics.
+- `lib/canvas` — Canvas snapshot sanitization, CanvasDoc v1 compatibility helpers, semantic validation, deterministic Design IR v1 compilation/export, graph summary cache derivation, sanitized canvas pyramid transport for LLM Prompt Packs and Architect, and generic LLM canvas patch preview/apply mechanics.
+- `lib/ai/context` — Compact LLM context assembly from the sanitized CanvasDoc pyramid, selected graph/node state, related layer summaries, semantic findings, and Architect conversation provenance.
 - `lib/prompt-pack` — LLM Prompt Pack v1 transport schema and mechanical Markdown/JSON export of LLM-authored output.
 - `scripts/ai-worker.ts` — Worker process entrypoint for local and production task execution.
 - `lib/email` — Server-only email provider selection and delivery for account emails.
@@ -39,13 +40,13 @@
 - The graph model is a layered architecture pyramid: `graph_root` is the system/root architecture view, child graphs are internals of any selected node, and deeper graphs are progressively more detailed decomposition.
 - Any node may have `subcanvasRef`. Deterministic code must not restrict child-layer creation/opening by semantic type, shape, label, or perceived architectural importance.
 - Node type may choose starter suggestions and metadata defaults only. It is never a permission model for drill-down.
-- Architect is the architecture reasoning layer. It receives the sanitized CanvasDoc pyramid, current graph id, selected node ids, provider metadata, project-wide messages, and graph provenance, and it may propose safe cross-layer patches for user approval.
+- Architect is the architecture reasoning layer. It receives the sanitized CanvasDoc pyramid, LLM Context Pyramid v2, current graph id, selected node ids, provider metadata, project-wide messages, and graph provenance, and it may propose safe cross-layer patches for user approval.
 - Deterministic code may validate JSON shape, graph/node/edge id safety, raw-secret and transient-state rules, unsupported destructive operations, auth/access, storage, preview/apply mechanics, and export/download.
-- Deterministic code must not generate architecture, judge architecture quality, author Prompt Pack content, block child layers by node type, or block Prompt Pack generation because metadata is incomplete.
+- Deterministic code must not generate architecture, judge architecture quality, author Prompt Pack content, block child layers by node type, or prevent Prompt Pack generation because metadata is incomplete.
 - Semantic Scan is advisory for architecture completeness. It may only block/fail for safety, transport, schema, malformed patch, raw secret, transient UI state, invalid ids, unsupported destructive operations, or auth/access violations.
 - Prompt Packs are LLM-authored from sanitized CanvasDoc pyramid JSON. Deterministic code may mechanically render/export that output but must not provide a deterministic prompt-authoring fallback.
 - Arc Forge must not become a full UML/BPMN/ArchiMate clone, cloud vendor mega-palette, code execution environment, app builder, external repo writer, target-app PR creator, or deployment system.
-- Nimbus, image/multimodal input, auto-apply patches, and multiple AI editing personas are not active Canvas v2 behavior.
+- Nimbus, image/multimodal input, unattended patch application, and multiple AI editing personas are not active Canvas v2 behavior.
 
 ### Canvas v2 Phase 1 Semantic Foundation
 
@@ -68,11 +69,19 @@
 ### Canvas v2 Phase 3 Relationships, Trust Boundaries, And Proxies
 
 - Relationship types stay compact and general-purpose. Phase 3 adds relationship profile metadata rather than niche edge enums: criticality, directionality, reliability, retryPolicy, idempotencyNotes, consistency, rateLimitNotes, timeoutNotes, fallbackNotes, and ownershipNotes. `payment_call` and `trust_boundary_crossing` are not valid edge types.
-- Trust boundaries are metadata-first. Nodes may carry boundary, trustZone, exposure, dataSensitivity, authExpectation, securityNotes, trustNotes, and safetyNotes. Boundary-crossing relationships are advisory context for the LLM and Prompt Pack, not deterministic blockers and not a relationship type.
+- Trust boundaries are metadata-first. Nodes may carry boundary, trustZone, exposure, dataSensitivity, authExpectation, securityNotes, trustNotes, and safetyNotes. Relationships that cross trust zones are advisory context for the LLM and Prompt Pack; they are not deterministic hard stops and not a relationship type.
 - Cross-layer references use `reference-proxy` nodes with referenceKind, referencedGraphId, referencedNodeId, referencedEdgeId, referencedLabel, referenceRole, proxyDirection, and referenceNotes. Proxy nodes are local context in the current graph, do not mutate referenced targets automatically, do not become duplicate owned implementation targets, and may still have child layers like every other node.
 - Runtime / Deployment Unit, Observability / Control Plane, and AI Component are advanced contextual node types for systems where runtime, operational visibility, or model/tool safety materially affects implementation prompts. They are not a full cloud vendor palette, threat model, or compliance engine.
 - Semantic Scan adds advisory categories and findings for trust boundaries, cross-layer references, runtime/operations, and AI governance. Snooze/intentional state can hide advisory findings but cannot hide blocking safety findings such as raw secrets.
 - Architect, Architecture Draft, and Prompt Pack provider prompts receive the Phase 3 metadata through sanitized CanvasDoc pyramid summaries. The LLM may reason about advanced relationships, trust boundaries, proxies, runtime, observability, and AI components, while deterministic code remains limited to schema, storage, sanitization, safety, preview/apply, and export.
+
+### Canvas v2 Phase 4 LLM Context And Patch Quality
+
+- CanvasDoc `panels.graphSummaryCache` stores a derived factual cache for each graph: node/edge counts, child graph count, key node labels, key relationship labels, and a short mechanical summary. It is refreshed on CanvasDoc write and used as LLM context only; CanvasDoc nodes and edges remain the durable source of truth.
+- LLM Context Pyramid v2 is built server-side for Architect and Prompt Pack requests. It focuses the current graph, ancestor path, selected nodes, connected edges, related graph summaries, semantic warnings, graph summary cache values, and recent Architect messages with graphId provenance while omitting coordinates, selection/dragging state, cursors, raw secrets, and other transient UI state.
+- LLM canvas patch proposals use the v2 patch contract. They can update node metadata, update edge relationship/label/metadata, add nodes/edges, create/populate layers, and update graph metadata. New nodes and edges may carry `tempId` transport references; preview resolves them to durable IDs before apply, and temp IDs must not persist in CanvasDoc.
+- Patch preview simulates apply in memory, groups operations by affected graph, reports temp ID mappings, reports affected graph IDs, and marks unknown existing graph/node/edge IDs or unknown temp ID references as blocking issues. Unsupported destructive operations remain unsupported and are skipped rather than applied.
+- Apply remains user-approved and non-destructive. It refuses blocking previews, writes only dirty CanvasDocs through the storage provider, refreshes graph summary caches, and broadcasts realtime snapshots for every modified graph.
 
 ## Storage Model
 
@@ -81,7 +90,7 @@
 - Project records, spec records, AI task run records, and internal realtime room events belong in PostgreSQL.
 - Canvas content and Markdown output are stored in and retrieved from the configured artifact storage provider.
 - Existing canvas storage remains compatible with `{ nodes, edges }` snapshots. New graph-aware canvas writes persist CanvasDoc v1 documents; legacy root reads normalize existing snapshots into `graph_root`, while child layer graphs are separate CanvasDoc v1 objects referenced by `node.data.subcanvasRef`.
-- CanvasDoc `panels` stores non-graph panel state such as per-graph Semantic Scan snooze/intentional finding ids. Panel state is sanitized with the same raw-secret stripping rules as other CanvasDoc metadata.
+- CanvasDoc `panels` stores non-graph panel state such as per-graph Semantic Scan snooze/intentional finding ids and derived `graphSummaryCache`. Panel state is sanitized with the same raw-secret stripping rules as other CanvasDoc metadata. Graph summary cache is a derived aid, not a source of truth.
 - Design IR is machine-readable architecture. It is compiled on demand from the root CanvasDoc and recursively linked child graph CanvasDocs where available, is exposed through a read-only project route, and is not persisted as an additional artifact by default.
 - Prompt Packs are generated by the LLM directly from sanitized CanvasDoc pyramid JSON. Prompt Packs are copy/download instruction artifacts only. Arc Forge does not execute Prompt Packs, build generated apps, or write back to repositories. The Prompt Pack flow uses the AI task runner and provider abstraction; there is no non-LLM Prompt Pack generator, route, or fallback.
 - Architect conversation messages are stored as one project-wide thread in PostgreSQL, with each message retaining graphId provenance for the layer where it was sent. The thread is scoped by project access, sanitized before persistence, and kept separate from collaborator Chat.
@@ -119,12 +128,12 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 
 ### Architect Conversation
 
-- Input: project id, project name, current graph id, selected node ids, user message, recent Architect messages, and the sanitized CanvasDoc pyramid JSON loaded from `graph_root` through linked child layers, including graph semanticScan summaries, node/edge metadataSummary records, and child layer summary metadata.
+- Input: project id, project name, current graph id, selected node ids, user message, recent Architect messages with graphId provenance, LLM Context Pyramid v2, and the sanitized CanvasDoc pyramid JSON loaded from `graph_root` through linked child layers, including graph summary cache, graph semanticScan summaries, node/edge metadataSummary records, and child layer summary metadata.
 - Execution: durable `architect_conversation` background task via the internal PostgreSQL-backed AI task runner.
 - Provider: selected through the same server-side AI provider factory. The provider method is `generateArchitectReply(input)`.
 - Output: Architect Conversation v1 JSON containing assistant message, intent, clarification questions, assumptions, warnings, suggested next steps, optional Prompt Pack handoff guidance, and optional canvas patch proposal.
 - Persistence: user and assistant messages are stored in one project-wide Architect thread with role, content, graphId provenance, createdAt, linked run id, and sanitized metadata. Recent project messages are sent back to the LLM along with the current graph id; collaborator Chat feed is not used for AI messages.
-- Apply: canvas patches are never auto-applied. Supported operations are update-node, add-node, add-edge, create-layer, and update-graph. Unsupported destructive operations are skipped with explicit issues. Apply is authenticated, graph-safe, non-destructive, strips raw secrets/transient UI state, preserves custom/unknown types, writes CanvasDoc through the storage provider, may target any graph in the sanitized canvas pyramid, and publishes graph-scoped realtime snapshots for every modified graph.
+- Apply: canvas patches are never auto-applied. Supported operations are update-node, update-edge, add-node, add-edge, create-layer, and update-graph. Preview resolves temp IDs, reports affected graph IDs, and blocks unknown existing IDs or unknown temp ID references before write. Unsupported destructive operations are skipped with explicit issues. Apply is authenticated, graph-safe, non-destructive, strips raw secrets/transient UI state, preserves custom/unknown types, writes CanvasDoc through the storage provider, may target any graph in the sanitized canvas pyramid, and publishes graph-scoped realtime snapshots for every modified graph.
 - Arc Forge v1 remains an AI-assisted architecture canvas and prompt composer, not an app builder. Architect must not generate app source code, execute code, deploy, write external repositories, or claim that Arc Forge builds the app.
 
 ### Spec Generation
@@ -152,11 +161,11 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 
 ### Prompt Pack Generation
 
-- Input: sanitized CanvasDoc pyramid JSON containing the root graph, linked child graphs, nested layers, nodes, edges, labels, descriptions, metadata summaries, semantic scan summaries, child layer summaries, custom/unknown architecture types, subcanvasRef values, and graph metadata.
+- Input: LLM Context Pyramid v2 plus sanitized CanvasDoc pyramid JSON containing the root graph, linked child graphs, nested layers, nodes, edges, labels, descriptions, graph summary cache values, metadata summaries, semantic scan summaries, child layer summaries, custom/unknown architecture types, subcanvasRef values, and graph metadata.
 - Execution: durable background task via the internal PostgreSQL-backed AI task runner.
 - Provider: selected through the same server-side AI provider factory. The LLM writes Prompt Pack content; deterministic code does not author prompts, choose important architecture context, or judge prompt/architecture quality.
 - Output: LLM-authored JSON and Markdown instruction artifacts for Codex, Claude Code, and Generic AI Builder targets, including global, per-layer, and per-node prompts.
-- Optional canvas improvement proposals are previewed in the UI and applied only after explicit user approval through the same generic LLM canvas patch mechanism used by Architect. Apply is non-destructive in this version: update-node, add-node, add-edge, create-layer, and update-graph are allowed; destructive delete operations are reported as skipped issues.
+- Optional canvas improvement proposals are previewed in the UI and applied only after explicit user approval through the same generic LLM canvas patch mechanism used by Architect. Apply is non-destructive in this version: update-node, update-edge, add-node, add-edge, create-layer, and update-graph are allowed; destructive delete operations are reported as skipped issues, and unknown existing IDs or unknown temp ID references block the patch.
 - Raw secret-looking values are stripped or redacted before provider calls and rejected in provider output; `secretRef` and `secretCapabilityRef` references survive. Transient UI state such as selected, dragging, presence, cursor, and draft fields is stripped before provider calls and rejected in provider output.
 - There is no non-LLM Prompt Pack generator, route, or fallback. Deterministic code does not author Prompt Pack content, generate implementation plans, choose per-node/per-layer prompt content, or judge prompt/architecture quality.
 
@@ -179,7 +188,9 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 15. Architecture Draft generation must remain proposal-first: AI can propose architecture drafts and layers on the canvas, the user approves before applying, and apply is append-only for v1.
 16. Any node may have an inner architecture layer. Deterministic code must not decide whether a node deserves a layer, and must not use semantic type allowlists or denylist logic for child-layer permissions.
 17. Architect conversation must remain separate from collaborator Chat and must only mutate canvas state through user-approved LLM canvas patch apply.
-18. Semantic Scan warnings are advisory for architecture completeness and must not block child-layer creation, LLM proposals, Prompt Pack generation, Actor/Generic/custom node drill-down, or user-approved non-destructive patches.
+18. Semantic Scan warnings are advisory for architecture completeness and must not block child-layer creation, LLM proposals, Prompt Pack generation, Actor/Generic/custom node drill-down, or user-approved safe patches.
 19. New node types, modes, or palettes must pass the anti-bloat rule: add them only when they materially improve clarity, LLM reasoning, Prompt Pack quality, commonness, non-redundancy, and non-expert UX.
 20. Typed edge relationships must stay compact and general-purpose. Domain-specific edge semantics belong in labels, metadata, notes, or LLM-authored Prompt Packs, not in new relationshipType values unless the product contract is updated.
 21. Trust boundary crossing must remain a metadata/advisory concept, not a relationship type. Payment/provider interactions must be modeled with general `calls` relationships to External System / Provider nodes plus metadata.
+22. Graph summary caches and LLM context pyramids are derived aids. They must omit transient UI state and raw secrets, and they must not become an alternate source of truth or automated architecture evaluator.
+23. LLM patch temp IDs are transport-only references. Unknown temp IDs or unknown existing IDs must block apply; resolved temp IDs must not persist in CanvasDoc nodes or edges.

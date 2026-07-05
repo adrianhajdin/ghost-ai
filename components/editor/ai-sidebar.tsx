@@ -35,6 +35,7 @@ import {
   AI_WORKSPACE_TITLE,
 } from "@/lib/branding"
 import type { LlmCanvasImprovementProposal } from "@/lib/canvas/llm-canvas-patch-contract"
+import type { LlmCanvasPatchPreviewResult } from "@/lib/canvas/llm-canvas-patch"
 
 interface SpecItem {
   id: string
@@ -135,6 +136,10 @@ interface AiSidebarProps {
   graphId: string
   selectedNodeIds: string[]
   onOpenPromptPack: () => void
+  architectCommand?: {
+    id: string
+    message: string
+  } | null
 }
 
 const ARCHITECT_STARTER_PROMPTS = [
@@ -215,6 +220,7 @@ export function AiSidebar({
   graphId,
   selectedNodeIds,
   onOpenPromptPack,
+  architectCommand,
 }: AiSidebarProps) {
   const {
     status: realtimeStatus,
@@ -229,6 +235,7 @@ export function AiSidebar({
   } = useRealtimeRoom()
   const [chatInput, setChatInput] = useState("")
   const [chatError, setChatError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("architect")
   const [architectInput, setArchitectInput] = useState("")
   const [architectMessages, setArchitectMessages] = useState<ArchitectMessage[]>([])
   const [architectRunId, setArchitectRunId] = useState<string | null>(null)
@@ -248,6 +255,7 @@ export function AiSidebar({
   const [isApplyingArchitectPatch, setIsApplyingArchitectPatch] = useState(false)
   const architectTextareaRef = useRef<HTMLTextAreaElement>(null)
   const architectScrollRef = useRef<HTMLDivElement>(null)
+  const handledArchitectCommandRef = useRef<string | null>(null)
   const chatTextareaRef = useRef<HTMLTextAreaElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
 
@@ -568,6 +576,20 @@ export function AiSidebar({
     },
     [sendArchitectMessage]
   )
+
+  useEffect(() => {
+    if (!architectCommand) return
+    if (handledArchitectCommandRef.current === architectCommand.id) return
+    if (isArchitectThinking) return
+
+    handledArchitectCommandRef.current = architectCommand.id
+    const commandMessage = architectCommand.message
+    const commandTimer = window.setTimeout(() => {
+      setActiveTab("architect")
+      void sendArchitectMessage(commandMessage)
+    }, 0)
+    return () => window.clearTimeout(commandTimer)
+  }, [architectCommand, isArchitectThinking, sendArchitectMessage])
 
   const handleArchitectKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -891,7 +913,11 @@ export function AiSidebar({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="architect" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+      >
         <TabsList className="mx-3 mt-2 grid h-auto w-auto shrink-0 grid-cols-3 rounded-xl bg-bg-subtle p-1 lg:mx-4 lg:mt-3">
           <TabsTrigger
             value="architect"
@@ -1451,12 +1477,24 @@ function ArchitectPatchPreview({
   onApply: () => void
   onClear: () => void
 }) {
+  const preview = (proposal as LlmCanvasImprovementProposal & {
+    preview?: LlmCanvasPatchPreviewResult
+  }).preview
   const unsupportedCount = proposal.operations.filter((operation) => {
     if (!operation || typeof operation !== "object" || !("op" in operation)) return true
-    return !["update-node", "add-node", "add-edge", "create-layer", "update-graph"].includes(
-      String(operation.op)
-    )
+    return ![
+      "update-node",
+      "update-edge",
+      "add-node",
+      "add-edge",
+      "create-layer",
+      "update-graph",
+    ].includes(String(operation.op))
   }).length
+  const blockingIssueCount = preview?.blockingIssueCount ?? 0
+  const canApply = Boolean(preview ? preview.canApply : proposal.operations.length > 0)
+  const affectedGraphIds = preview?.affectedGraphIds ?? []
+  const previewOperations = preview?.operations ?? []
 
   return (
     <div className="grid gap-3 rounded-2xl border border-accent-ai/25 bg-accent-ai/10 p-3">
@@ -1472,7 +1510,12 @@ function ArchitectPatchPreview({
         </span>
       </div>
 
-      {unsupportedCount > 0 ? (
+      {blockingIssueCount > 0 ? (
+        <div className="flex gap-2 rounded-xl border border-state-error/35 bg-state-error/10 px-2.5 py-2 text-xs text-state-error">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{blockingIssueCount} blocking issue(s). Fix the proposal before apply.</span>
+        </div>
+      ) : unsupportedCount > 0 ? (
         <div className="flex gap-2 rounded-xl border border-state-warning/30 bg-state-warning/10 px-2.5 py-2 text-xs text-state-warning">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>{unsupportedCount} unsupported operation(s) will be skipped.</span>
@@ -1480,29 +1523,88 @@ function ArchitectPatchPreview({
       ) : (
         <div className="flex items-center gap-2 rounded-xl border border-state-success/25 bg-state-success/10 px-2.5 py-2 text-xs text-state-success">
           <Check className="h-3.5 w-3.5" />
-          <span>Ready for user-approved apply.</span>
+          <span>
+            {preview ? "Preview validated for user-approved apply." : "Ready for user-approved apply."}
+          </span>
         </div>
       )}
 
+      {affectedGraphIds.length > 0 ? (
+        <div className="grid gap-1.5">
+          <p className="text-[10px] font-semibold uppercase text-text-faint">
+            Affected graphs
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {affectedGraphIds.map((graphId) => (
+              <span
+                key={graphId}
+                className="max-w-full truncate rounded-full border border-accent-primary/25 bg-accent-primary-dim px-2 py-1 font-mono text-[10px] text-accent-primary"
+              >
+                {graphId}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {preview?.issues.length ? (
+        <div className="grid gap-1.5">
+          {preview.issues.slice(0, 4).map((item) => (
+            <div
+              key={`${item.operationIndex}-${item.message}`}
+              className={cn(
+                "flex gap-2 rounded-xl border px-2.5 py-2 text-xs",
+                item.blocking
+                  ? "border-state-error/35 bg-state-error/10 text-state-error"
+                  : "border-state-warning/30 bg-state-warning/10 text-state-warning"
+              )}
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{item.message}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       <div className="grid gap-2">
-        {proposal.operations.slice(0, 6).map((operation, index) => {
+        {(previewOperations.length > 0 ? previewOperations : proposal.operations).slice(0, 6).map((operation, index) => {
           const opName =
             operation && typeof operation === "object" && "op" in operation
               ? String(operation.op)
               : "unknown"
           const graphId =
-            operation && typeof operation === "object" && "graphId" in operation
-              ? String(operation.graphId)
-              : operation && typeof operation === "object" && "parentGraphId" in operation
-                ? String(operation.parentGraphId)
-                : "canvas"
+            operation && typeof operation === "object" && "targetGraphId" in operation
+              ? String(operation.targetGraphId ?? "pending")
+              : operation && typeof operation === "object" && "graphId" in operation
+                ? String(operation.graphId)
+                : operation && typeof operation === "object" && "parentGraphId" in operation
+                  ? String(operation.parentGraphId)
+                  : "canvas"
+          const status =
+            operation && typeof operation === "object" && "status" in operation
+              ? String(operation.status)
+              : "canvas"
+          const summary =
+            operation && typeof operation === "object" && "summary" in operation
+              ? String(operation.summary)
+              : opName
           return (
             <div
               key={`${opName}-${index}`}
               className="rounded-xl border border-border-default bg-bg-elevated px-3 py-2"
             >
-              <p className="text-xs font-medium text-text-primary">{opName}</p>
-              <p className="mt-0.5 truncate font-mono text-[10px] text-text-faint">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-text-primary">{opName}</p>
+                {previewOperations.length > 0 ? (
+                  <span className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[9px] uppercase text-text-faint">
+                    {status}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-text-secondary">
+                {summary}
+              </p>
+              <p className="mt-1 truncate font-mono text-[10px] text-text-faint">
                 {graphId}
               </p>
             </div>
@@ -1510,11 +1612,26 @@ function ArchitectPatchPreview({
         })}
       </div>
 
+      {preview?.tempIdMappings.length ? (
+        <details className="rounded-xl border border-border-default bg-bg-elevated px-3 py-2 text-[10px] text-text-muted">
+          <summary className="cursor-pointer select-none text-text-secondary">
+            Temp ID mappings
+          </summary>
+          <div className="mt-2 grid gap-1">
+            {preview.tempIdMappings.slice(0, 8).map((mapping) => (
+              <p key={`${mapping.graphId}-${mapping.tempId}-${mapping.resolvedId}`} className="truncate font-mono">
+                {mapping.tempId} → {mapping.resolvedId}
+              </p>
+            ))}
+          </div>
+        </details>
+      ) : null}
+
       <div className="flex items-center gap-2 border-t border-border-default pt-3">
         <Button
           size="sm"
           onClick={onApply}
-          disabled={isApplying || proposal.operations.length === 0}
+          disabled={isApplying || proposal.operations.length === 0 || !canApply}
           className="h-8 flex-1 gap-1.5 rounded-lg bg-accent-ai px-3 text-xs text-white hover:bg-accent-ai/80 disabled:opacity-40"
         >
           {isApplying ? (

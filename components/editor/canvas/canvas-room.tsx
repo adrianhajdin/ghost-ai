@@ -13,9 +13,19 @@ interface CanvasRoomProps {
   onSaveStatusChange?: (status: SaveStatus) => void
   onSaveReady?: (saveFn: () => void) => void
   onSelectedNodeIdsChange?: (nodeIds: string[]) => void
+  onSendSemanticFindingToArchitect?: (message: string) => void
 }
 
-export function CanvasRoom({ projectId, graphId, pendingTemplate, onTemplateImported, onSaveStatusChange, onSaveReady, onSelectedNodeIdsChange }: CanvasRoomProps) {
+export function CanvasRoom({
+  projectId,
+  graphId,
+  pendingTemplate,
+  onTemplateImported,
+  onSaveStatusChange,
+  onSaveReady,
+  onSelectedNodeIdsChange,
+  onSendSemanticFindingToArchitect,
+}: CanvasRoomProps) {
   return (
     <div className="h-full w-full">
       <ReactFlowProvider key={graphId}>
@@ -27,6 +37,7 @@ export function CanvasRoom({ projectId, graphId, pendingTemplate, onTemplateImpo
           onSaveStatusChange={onSaveStatusChange}
           onSaveReady={onSaveReady}
           onSelectedNodeIdsChange={onSelectedNodeIdsChange}
+          onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
         />
       </ReactFlowProvider>
     </div>

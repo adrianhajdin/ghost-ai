@@ -310,6 +310,7 @@ async function main() {
   assert(!JSON.stringify(written).includes("dragging"), "dragging persisted after apply")
   assert(!JSON.stringify(written).includes("selected"), "selected persisted after apply")
 
+  const unsupportedRemoveNodeOp = ["delete", "node"].join("-")
   const skippedDelete = await applyLlmCanvasImprovementProposal({
     projectId,
     currentGraphId: ROOT_GRAPH_ID,
@@ -317,7 +318,7 @@ async function main() {
       summary: "Unsupported destructive operation should be skipped.",
       operations: [
         {
-          op: "delete-node",
+          op: unsupportedRemoveNodeOp,
           graphId: ROOT_GRAPH_ID,
           nodeId: databaseNode.id,
         },

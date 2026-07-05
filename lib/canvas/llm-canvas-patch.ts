@@ -36,6 +36,7 @@ import {
 } from "@/lib/canvas/llm-canvas-patch-contract"
 
 type UpdateNodeOperation = Extract<LlmCanvasPatchOperation, { op: "update-node" }>
+type UpdateEdgeOperation = Extract<LlmCanvasPatchOperation, { op: "update-edge" }>
 type AddNodeOperation = Extract<LlmCanvasPatchOperation, { op: "add-node" }>
 type AddEdgeOperation = Extract<LlmCanvasPatchOperation, { op: "add-edge" }>
 type CreateLayerOperation = Extract<LlmCanvasPatchOperation, { op: "create-layer" }>
@@ -45,12 +46,41 @@ export interface LlmCanvasPatchApplyIssue {
   operationIndex: number
   severity: "warning" | "error"
   message: string
+  blocking: boolean
+}
+
+export interface LlmCanvasPatchTempIdMapping {
+  graphId: string
+  tempId: string
+  resolvedId: string
+}
+
+export interface LlmCanvasPatchPreviewOperation {
+  operationIndex: number
+  op: string
+  targetGraphId: string | null
+  parentGraphId?: string | null
+  summary: string
+  status: "ready" | "warning" | "blocked"
+  tempIdMappings: LlmCanvasPatchTempIdMapping[]
+}
+
+export interface LlmCanvasPatchPreviewResult {
+  proposalVersion: "2.0.0"
+  operationCount: number
+  affectedGraphIds: string[]
+  tempIdMappings: LlmCanvasPatchTempIdMapping[]
+  operations: LlmCanvasPatchPreviewOperation[]
+  issues: LlmCanvasPatchApplyIssue[]
+  blockingIssueCount: number
+  canApply: boolean
 }
 
 export interface LlmCanvasPatchApplyResult {
   applied: {
     operations: number
     updateNodes: number
+    updateEdges: number
     addNodes: number
     addEdges: number
     createLayers: number
@@ -60,6 +90,7 @@ export interface LlmCanvasPatchApplyResult {
   dirtyGraphIds: string[]
   docs: CanvasDocV1[]
   issues: LlmCanvasPatchApplyIssue[]
+  preview: LlmCanvasPatchPreviewResult
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -179,6 +210,37 @@ function edgeTypeMetadata(
 
 function patchText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function looksLikeTempId(value: unknown) {
+  if (typeof value !== "string") return false
+  return /^(temp|tmp|new|draft)[_-]/i.test(value.trim())
+}
+
+function patchNodeTempId(operation: AddNodeOperation) {
+  const nodeTempId = patchText(operation.node.tempId)
+  if (nodeTempId) return nodeTempId
+  const operationTempId = patchText(operation.tempId)
+  if (operationTempId) return operationTempId
+  return looksLikeTempId(operation.node.id) ? operation.node.id : undefined
+}
+
+function patchEdgeTempId(operation: AddEdgeOperation) {
+  const edgeTempId = patchText(operation.edge.tempId)
+  if (edgeTempId) return edgeTempId
+  const operationTempId = patchText(operation.tempId)
+  if (operationTempId) return operationTempId
+  return looksLikeTempId(operation.edge.id) ? operation.edge.id : undefined
+}
+
+function requestedNodeId(operation: AddNodeOperation) {
+  if (operation.node.id && !looksLikeTempId(operation.node.id)) return operation.node.id
+  return slugifyId(operation.node.label, `node-${Date.now()}`)
+}
+
+function requestedEdgeId(operation: AddEdgeOperation, source: string, target: string) {
+  if (operation.edge.id && !looksLikeTempId(operation.edge.id)) return operation.edge.id
+  return slugifyId(`edge-${source}-${target}`, `edge-${Date.now()}`)
 }
 
 function nodeFromPatch(
@@ -332,7 +394,24 @@ function issue(
   message: string,
   severity: "warning" | "error" = "warning"
 ) {
-  issues.push({ operationIndex, severity, message })
+  issues.push({ operationIndex, severity, message, blocking: severity === "error" })
+}
+
+function newTempIdMappings(
+  graphId: string,
+  before: Map<string, string>,
+  after: Map<string, string>
+): LlmCanvasPatchTempIdMapping[] {
+  const mappings: LlmCanvasPatchTempIdMapping[] = []
+  for (const [tempId, resolvedId] of after.entries()) {
+    if (before.get(tempId) === resolvedId) continue
+    mappings.push({ graphId, tempId, resolvedId })
+  }
+  return mappings
+}
+
+function cloneTempIdMap(map: Map<string, string>) {
+  return new Map(map.entries())
 }
 
 function getExistingSubcanvasGraphId(parentNode: CanvasNode) {
@@ -349,13 +428,13 @@ function addNodeToDoc(
   tempIdMap: Map<string, string>
 ) {
   const usedNodeIds = new Set(doc.nodes.map((node) => node.id))
-  const requestedId =
-    operation.node.id ??
-    operation.tempId ??
-    slugifyId(operation.node.label, `node-${Date.now()}`)
+  const requestedId = requestedNodeId(operation)
   const id = resolveCollision(slugifyId(requestedId, "node"), usedNodeIds)
-  if (operation.tempId) tempIdMap.set(operation.tempId, id)
-  if (operation.node.id) tempIdMap.set(operation.node.id, id)
+  const tempId = patchNodeTempId(operation)
+  if (tempId) tempIdMap.set(tempId, id)
+  if (operation.node.id && (looksLikeTempId(operation.node.id) || operation.node.id !== id)) {
+    tempIdMap.set(operation.node.id, id)
+  }
   const node = nodeFromPatch(operation.node, id, index, doc.nodes)
   return sanitizeDoc({ ...doc, nodes: [...doc.nodes, node] })
 }
@@ -372,12 +451,13 @@ function addEdgeToDoc(
   if (!nodeIds.has(source) || !nodeIds.has(target)) {
     return null
   }
-  const requestedId =
-    operation.edge.id ??
-    operation.tempId ??
-    slugifyId(`edge-${source}-${target}`, `edge-${Date.now()}`)
+  const requestedId = requestedEdgeId(operation, source, target)
   const id = resolveCollision(slugifyId(requestedId, "edge"), usedEdgeIds)
-  if (operation.tempId) tempIdMap.set(operation.tempId, id)
+  const tempId = patchEdgeTempId(operation)
+  if (tempId) tempIdMap.set(tempId, id)
+  if (operation.edge.id && (looksLikeTempId(operation.edge.id) || operation.edge.id !== id)) {
+    tempIdMap.set(operation.edge.id, id)
+  }
   const edge = edgeFromPatch(operation.edge, id, source, target)
   return sanitizeDoc({ ...doc, edges: [...doc.edges, edge] })
 }
@@ -407,6 +487,50 @@ function applyNodePatchData(node: CanvasNode, patch: Record<string, unknown>) {
   }
 }
 
+function applyEdgePatchData(edge: CanvasEdge, patch: Record<string, unknown>) {
+  const sanitizedPatch = sanitizeLlmCanvasPatchRecord(patch)
+  const relationshipTypeText =
+    patchText(sanitizedPatch.relationshipType) ??
+    patchText(sanitizedPatch.semanticType)
+  const typeText = patchText(sanitizedPatch.type)
+  const nextData: Record<string, unknown> = {
+    ...edge.data,
+    ...sanitizedPatch,
+  }
+
+  if (relationshipTypeText || typeText) {
+    const { semanticType, relationshipType, customTypeData } = edgeTypeMetadata(
+      relationshipTypeText ?? edge.data?.relationshipType ?? edge.data?.semanticType,
+      typeText
+    )
+    nextData.semanticType = semanticType
+    nextData.relationshipType = relationshipType
+    Object.assign(nextData, customTypeData)
+  }
+
+  const label = patchText(sanitizedPatch.label)
+  const labels = Array.isArray(sanitizedPatch.labels)
+    ? sanitizedPatch.labels
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 8)
+    : label
+      ? [label]
+      : null
+  if (labels) {
+    Object.assign(
+      nextData,
+      mirrorEdgeLabelData(createEdgeLabelItems(labels, [], `${edge.id}-label`))
+    )
+  }
+
+  delete nextData.type
+  return {
+    ...edge,
+    data: nextData as CanvasEdge["data"],
+  }
+}
+
 async function createLayer(
   projectId: string,
   parentDoc: CanvasDocV1,
@@ -414,11 +538,12 @@ async function createLayer(
   docsByGraphId: Map<string, CanvasDocV1>,
   dirtyGraphIds: Set<string>,
   operationIndex: number,
-  issues: LlmCanvasPatchApplyIssue[]
+  issues: LlmCanvasPatchApplyIssue[],
+  tempIdMappings?: LlmCanvasPatchTempIdMapping[]
 ) {
   const parentNode = parentDoc.nodes.find((node) => node.id === operation.parentNodeId)
   if (!parentNode) {
-    issue(issues, operationIndex, "Canvas patch references a missing node.")
+    issue(issues, operationIndex, "Canvas patch references a missing node.", "error")
     return false
   }
 
@@ -467,7 +592,12 @@ async function createLayer(
   operation.graph.nodes.forEach((node, index) => {
     nextChildDoc = addNodeToDoc(
       nextChildDoc,
-      { op: "add-node", graphId, tempId: patchText(node.tempId) ?? node.id, node },
+      {
+        op: "add-node",
+        graphId,
+        tempId: patchText(node.tempId) ?? (looksLikeTempId(node.id) ? node.id : undefined),
+        node,
+      },
       index,
       tempIdMap
     )
@@ -475,12 +605,18 @@ async function createLayer(
   operation.graph.edges.forEach((edgeOperation, index) => {
     const nextDoc = addEdgeToDoc(
       nextChildDoc,
-      { op: "add-edge", graphId, tempId: edgeOperation.id, edge: edgeOperation },
+      {
+        op: "add-edge",
+        graphId,
+        tempId: patchText(edgeOperation.tempId) ?? (looksLikeTempId(edgeOperation.id) ? edgeOperation.id : undefined),
+        edge: edgeOperation,
+      },
       tempIdMap
     )
     if (nextDoc) nextChildDoc = nextDoc
-    else issue(issues, operationIndex, `Child layer edge ${index + 1} references a missing node.`)
+    else issue(issues, operationIndex, `Child layer edge ${index + 1} references a missing node.`, "error")
   })
+  tempIdMappings?.push(...newTempIdMappings(graphId, new Map(), tempIdMap))
 
   const subcanvasRef = existingGraphId
     ? {
@@ -575,6 +711,283 @@ async function refreshDirtyChildLayerSummaries(input: {
   }
 }
 
+function safeGraphId(value: unknown) {
+  if (typeof value !== "string") return null
+  try {
+    const graphId = graphIdFromSearchParam(value)
+    return isValidGraphId(graphId) ? graphId : null
+  } catch {
+    return null
+  }
+}
+
+function operationIssues(
+  issues: LlmCanvasPatchApplyIssue[],
+  operationIndex: number
+) {
+  return issues.filter((item) => item.operationIndex === operationIndex)
+}
+
+function operationStatus(issues: LlmCanvasPatchApplyIssue[], operationIndex: number) {
+  const matching = operationIssues(issues, operationIndex)
+  if (matching.some((item) => item.blocking)) return "blocked" as const
+  if (matching.length > 0) return "warning" as const
+  return "ready" as const
+}
+
+function operationSummary(operation: LlmCanvasPatchOperation) {
+  if (operation.op === "update-node") return `Update node ${operation.nodeId}`
+  if (operation.op === "update-edge") return `Update edge ${operation.edgeId}`
+  if (operation.op === "add-node") {
+    const node = isRecord(operation.node) ? operation.node : {}
+    return `Add node ${patchText(node.label) ?? patchText(node.id) ?? "new node"}`
+  }
+  if (operation.op === "add-edge") {
+    const edge = isRecord(operation.edge) ? operation.edge : {}
+    return `Add edge ${patchText(edge.source) ?? "unknown"} -> ${patchText(edge.target) ?? "unknown"}`
+  }
+  if (operation.op === "create-layer") return `Create or reuse layer for ${operation.parentNodeId}`
+  if (operation.op === "update-graph") return `Update graph ${operation.graphId}`
+  return `Unsupported operation ${String(operation.op)}`
+}
+
+export async function previewLlmCanvasImprovementProposal(input: {
+  projectId: string
+  currentGraphId: string
+  proposal: unknown
+}): Promise<LlmCanvasPatchPreviewResult> {
+  const proposal: LlmCanvasImprovementProposal = extractLlmCanvasImprovementProposal(
+    input.proposal
+  )
+  const docsByGraphId = new Map<string, CanvasDocV1>()
+  const dirtyGraphIds = new Set<string>()
+  const issues: LlmCanvasPatchApplyIssue[] = []
+  const tempIdMapsByGraphId = new Map<string, Map<string, string>>()
+  const tempIdMappings: LlmCanvasPatchTempIdMapping[] = []
+  const previewOperations: LlmCanvasPatchPreviewOperation[] = []
+
+  await getDoc(input.projectId, input.currentGraphId, docsByGraphId)
+
+  for (const [operationIndex, operation] of proposal.operations.entries()) {
+    if (!isRecord(operation) || typeof operation.op !== "string") {
+      issue(issues, operationIndex, "Canvas patch operation is not a valid object.", "error")
+      previewOperations.push({
+        operationIndex,
+        op: "unknown",
+        targetGraphId: null,
+        summary: "Invalid patch operation",
+        status: operationStatus(issues, operationIndex),
+        tempIdMappings: [],
+      })
+      continue
+    }
+
+    if (
+      operation.op !== "update-node" &&
+      operation.op !== "update-edge" &&
+      operation.op !== "add-node" &&
+      operation.op !== "add-edge" &&
+      operation.op !== "create-layer" &&
+      operation.op !== "update-graph"
+    ) {
+      issue(
+        issues,
+        operationIndex,
+        `Unsupported patch operation "${operation.op}" was not applied.`
+      )
+      previewOperations.push({
+        operationIndex,
+        op: operation.op,
+        targetGraphId: null,
+        summary: `Unsupported operation ${operation.op}`,
+        status: operationStatus(issues, operationIndex),
+        tempIdMappings: [],
+      })
+      continue
+    }
+
+    if (operation.op === "create-layer") {
+      const layerOperation = operation as CreateLayerOperation
+      const parentGraphId = safeGraphId(layerOperation.parentGraphId)
+      if (!parentGraphId) {
+        issue(issues, operationIndex, "Invalid parentGraphId.", "error")
+        previewOperations.push({
+          operationIndex,
+          op: operation.op,
+          targetGraphId: null,
+          parentGraphId: null,
+          summary: operationSummary(operation),
+          status: operationStatus(issues, operationIndex),
+          tempIdMappings: [],
+        })
+        continue
+      }
+
+      const parentDoc = await getDoc(input.projectId, parentGraphId, docsByGraphId)
+      const beforeDirty = new Set(dirtyGraphIds)
+      const beforeMappings = tempIdMappings.length
+      let ok = false
+      if (!parentDoc) {
+        issue(issues, operationIndex, `Parent graph not found: ${parentGraphId}.`, "error")
+      } else {
+        ok = await createLayer(
+          input.projectId,
+          parentDoc,
+          layerOperation,
+          docsByGraphId,
+          dirtyGraphIds,
+          operationIndex,
+          issues,
+          tempIdMappings
+        )
+      }
+      const changedGraphIds = [...dirtyGraphIds].filter((graphId) => !beforeDirty.has(graphId))
+      const targetGraphId = changedGraphIds.find((graphId) => graphId !== parentGraphId) ?? null
+      const operationMappings = tempIdMappings.slice(beforeMappings)
+      previewOperations.push({
+        operationIndex,
+        op: operation.op,
+        targetGraphId,
+        parentGraphId,
+        summary: ok
+          ? `${operationSummary(operation)}${targetGraphId ? ` in ${targetGraphId}` : ""}`
+          : operationSummary(operation),
+        status: operationStatus(issues, operationIndex),
+        tempIdMappings: operationMappings,
+      })
+      continue
+    }
+
+    const graphId =
+      "graphId" in operation ? safeGraphId((operation as { graphId?: unknown }).graphId) : null
+    if (!graphId) {
+      issue(issues, operationIndex, "Invalid graphId.", "error")
+      previewOperations.push({
+        operationIndex,
+        op: operation.op,
+        targetGraphId: null,
+        summary: operationSummary(operation),
+        status: operationStatus(issues, operationIndex),
+        tempIdMappings: [],
+      })
+      continue
+    }
+
+    const doc = await getDoc(input.projectId, graphId, docsByGraphId)
+    if (!doc) {
+      issue(issues, operationIndex, `Graph not found: ${graphId}.`, "error")
+      previewOperations.push({
+        operationIndex,
+        op: operation.op,
+        targetGraphId: graphId,
+        summary: operationSummary(operation),
+        status: operationStatus(issues, operationIndex),
+        tempIdMappings: [],
+      })
+      continue
+    }
+
+    const tempIdMap =
+      tempIdMapsByGraphId.get(graphId) ?? new Map<string, string>()
+    tempIdMapsByGraphId.set(graphId, tempIdMap)
+    const beforeMap = cloneTempIdMap(tempIdMap)
+
+    if (operation.op === "update-node") {
+      const updateNodeOperation = operation as UpdateNodeOperation
+      const node = doc.nodes.find((item) => item.id === updateNodeOperation.nodeId)
+      if (!node) {
+        issue(issues, operationIndex, "Canvas patch references a missing node.", "error")
+      } else {
+        docsByGraphId.set(
+          graphId,
+          sanitizeDoc({
+            ...doc,
+            nodes: doc.nodes.map((item) =>
+              item.id === node.id
+                ? applyNodePatchData(item, updateNodeOperation.patch)
+                : item
+            ),
+          })
+        )
+        dirtyGraphIds.add(graphId)
+      }
+    } else if (operation.op === "update-edge") {
+      const updateEdgeOperation = operation as UpdateEdgeOperation
+      const edge = doc.edges.find((item) => item.id === updateEdgeOperation.edgeId)
+      if (!edge) {
+        issue(issues, operationIndex, "Canvas patch references a missing edge.", "error")
+      } else {
+        docsByGraphId.set(
+          graphId,
+          sanitizeDoc({
+            ...doc,
+            edges: doc.edges.map((item) =>
+              item.id === edge.id
+                ? applyEdgePatchData(item, updateEdgeOperation.patch)
+                : item
+            ),
+          })
+        )
+        dirtyGraphIds.add(graphId)
+      }
+    } else if (operation.op === "add-node") {
+      const nextDoc = addNodeToDoc(
+        doc,
+        operation as AddNodeOperation,
+        doc.nodes.length,
+        tempIdMap
+      )
+      docsByGraphId.set(graphId, nextDoc)
+      dirtyGraphIds.add(graphId)
+    } else if (operation.op === "add-edge") {
+      const nextDoc = addEdgeToDoc(doc, operation as AddEdgeOperation, tempIdMap)
+      if (!nextDoc) {
+        issue(issues, operationIndex, "Canvas patch references a missing node or tempId.", "error")
+      } else {
+        docsByGraphId.set(graphId, nextDoc)
+        dirtyGraphIds.add(graphId)
+      }
+    } else if (operation.op === "update-graph") {
+      const updateGraphOperation = operation as UpdateGraphOperation
+      const patch = sanitizeLlmCanvasPatchRecord(updateGraphOperation.patch)
+      docsByGraphId.set(graphId, {
+        ...doc,
+        title: patchText(patch.title) ?? doc.title,
+        summary:
+          typeof patch.summary === "string" ? patch.summary.trim() || null : doc.summary,
+        layerKind: patchText(patch.layerKind) ?? doc.layerKind,
+        panels: patch.metadata
+          ? { ...doc.panels, llmCanvasPatchMetadata: patch.metadata }
+          : doc.panels,
+      })
+      dirtyGraphIds.add(graphId)
+    }
+
+    const operationMappings = newTempIdMappings(graphId, beforeMap, tempIdMap)
+    tempIdMappings.push(...operationMappings)
+    previewOperations.push({
+      operationIndex,
+      op: operation.op,
+      targetGraphId: graphId,
+      summary: operationSummary(operation),
+      status: operationStatus(issues, operationIndex),
+      tempIdMappings: operationMappings,
+    })
+  }
+
+  const blockingIssueCount = issues.filter((item) => item.blocking).length
+  return {
+    proposalVersion: "2.0.0",
+    operationCount: proposal.operations.length,
+    affectedGraphIds: [...dirtyGraphIds],
+    tempIdMappings,
+    operations: previewOperations,
+    issues,
+    blockingIssueCount,
+    canApply: blockingIssueCount === 0,
+  }
+}
+
 export async function applyLlmCanvasImprovementProposal(input: {
   projectId: string
   currentGraphId: string
@@ -583,6 +996,25 @@ export async function applyLlmCanvasImprovementProposal(input: {
   const proposal: LlmCanvasImprovementProposal = extractLlmCanvasImprovementProposal(
     input.proposal
   )
+  const preview = await previewLlmCanvasImprovementProposal(input)
+  if (!preview.canApply) {
+    return {
+      applied: {
+        operations: 0,
+        updateNodes: 0,
+        updateEdges: 0,
+        addNodes: 0,
+        addEdges: 0,
+        createLayers: 0,
+        updateGraphs: 0,
+        skippedOperations: proposal.operations.length,
+      },
+      dirtyGraphIds: [],
+      docs: [],
+      issues: preview.issues,
+      preview,
+    }
+  }
   const docsByGraphId = new Map<string, CanvasDocV1>()
   const dirtyGraphIds = new Set<string>()
   const issues: LlmCanvasPatchApplyIssue[] = []
@@ -590,6 +1022,7 @@ export async function applyLlmCanvasImprovementProposal(input: {
   const applied = {
     operations: 0,
     updateNodes: 0,
+    updateEdges: 0,
     addNodes: 0,
     addEdges: 0,
     createLayers: 0,
@@ -608,6 +1041,7 @@ export async function applyLlmCanvasImprovementProposal(input: {
 
     if (
       operation.op !== "update-node" &&
+      operation.op !== "update-edge" &&
       operation.op !== "add-node" &&
       operation.op !== "add-edge" &&
       operation.op !== "create-layer" &&
@@ -694,6 +1128,29 @@ export async function applyLlmCanvasImprovementProposal(input: {
       continue
     }
 
+    if (operation.op === "update-edge") {
+      const updateEdgeOperation = operation as UpdateEdgeOperation
+      const edge = doc.edges.find((item) => item.id === updateEdgeOperation.edgeId)
+      if (!edge) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Canvas patch references a missing edge.")
+        continue
+      }
+      const nextDoc = sanitizeDoc({
+        ...doc,
+        edges: doc.edges.map((item) =>
+          item.id === edge.id
+            ? applyEdgePatchData(item, updateEdgeOperation.patch)
+            : item
+        ),
+      })
+      docsByGraphId.set(graphId, nextDoc)
+      dirtyGraphIds.add(graphId)
+      applied.operations += 1
+      applied.updateEdges += 1
+      continue
+    }
+
     if (operation.op === "add-node") {
       const nextDoc = addNodeToDoc(
         doc,
@@ -766,5 +1223,6 @@ export async function applyLlmCanvasImprovementProposal(input: {
     dirtyGraphIds: [...dirtyGraphIds],
     docs: writtenDocs,
     issues,
+    preview,
   }
 }

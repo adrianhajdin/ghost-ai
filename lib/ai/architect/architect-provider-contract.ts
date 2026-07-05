@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { CanvasPyramid, CanvasPyramidGraphIndexEntry } from "@/lib/canvas/canvas-pyramid"
+import type { LlmContextPyramid } from "@/lib/ai/context/llm-context-pyramid"
 import {
   LlmCanvasImprovementProposalSchema,
   getLlmCanvasPatchTransportIssues,
@@ -91,6 +92,7 @@ export interface GenerateArchitectReplyInput {
   selectedNodeIds: string[]
   recentMessages: ArchitectConversationMessageInput[]
   canvasPyramid: CanvasPyramid
+  llmContextPyramid?: LlmContextPyramid
 }
 
 export type GenerateArchitectReplyResult = ArchitectConversationReply
@@ -150,13 +152,17 @@ export function buildArchitectSystemPrompt() {
     "When the user asks to change the canvas, explain the intended change before proposing a small user-approved canvasPatchProposal. Do not claim that changes were already applied.",
     "Canvas patches may target any graph in the provided canvas pyramid, not only the current graph. Use graphId, parentGraphId, and parentNodeId from the canvas pyramid exactly.",
     "The canvas pyramid includes semanticScan summaries, node/edge metadataSummary records, childLayerSummary, lastLayerSummary, decompositionStatus, and graph provenance. Use those compact summaries as first-class architecture context.",
+    "When provided, use the LLM context pyramid as your primary working brief: it highlights the current graph, selected nodes, connected edges, related graph summaries, semantic warnings, graph summary cache values, and recent project-wide conversation with graph provenance.",
     "Semantic scan findings are advisory quality signals unless they indicate raw secrets, unsafe transport, malformed schema, auth/session risk, or another explicit safety issue. Do not refuse Prompt Pack handoff only because metadata is incomplete.",
     "For complete design work, propose coherent multi-layer changes when useful: update existing nodes, add nodes/edges to child layers, create deeper layers, and connect the layers through subcanvasRef-aware create-layer operations.",
     "When proposing create-layer for a selected node, include useful starter internal nodes and relationships in graph.nodes and graph.edges unless the user explicitly asks for an empty layer.",
     "Ask at most 1-3 clarification questions when required. Prefer concise, concrete guidance over broad boilerplate.",
     "Only recommend Prompt Pack handoff when the user asks for it or the architecture is clearly ready; do not repeat Prompt Pack guidance after every reply.",
     "If the user asks whether you are a real LLM, answer truthfully from the provider metadata: mock means local deterministic fixture replies; non-mock means configured external LLM through Arc Forge's provider abstraction. Never pretend to be human.",
-    "Only use supported canvas patch operations: update-node, add-node, add-edge, create-layer, update-graph.",
+    "Only use supported canvas patch operations: update-node, update-edge, add-node, add-edge, create-layer, update-graph.",
+    "For Semantic Scan cleanup, propose concrete batches that update node semanticType/description/responsibilities/owner fields and edge relationshipType/label/metadata fields. If many findings exist, fix the highest-impact set first and tell the user what remains.",
+    "Canvas patch proposals use the v2 patch contract. Use tempId for new nodes/edges that later operations reference. Do not invent existing graph IDs, node IDs, or edge IDs.",
+    "Never propose removal operations that remove nodes or edges. Never claim or imply that Arc Forge applies a patch on its own.",
     "Preferred semantic node types are: actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, generic-component, cache-store, object-store, plus existing child-layer detail types such as endpoint, entity, event-contract, business-rule, validation-rule, and policy.",
     "Advanced/contextual semantic node types are available when materially useful: reference-proxy, runtime-deployment, observability-control, ai-component. Do not overuse them and do not treat them as default root bloat.",
     "Use reference-proxy only when a layer needs cross-layer context for a node, edge, or graph owned elsewhere. Do not duplicate owned implementation targets through proxy nodes.",
@@ -209,6 +215,7 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
       ...graphStats,
       graphIndex: summarizeGraphIndex(input.canvasPyramid.graphIndex),
     },
+    llmContextPyramid: input.llmContextPyramid ?? null,
     recentMessages: input.recentMessages,
     canvasPyramid: input.canvasPyramid,
   }
@@ -223,12 +230,14 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
     "- If the user only asks a question, do not propose canvas changes unless needed.",
     "- Keep warnings and assumptions secondary.",
     "",
-    "Use the following sanitized Arc Forge canvas pyramid JSON as the source of truth.",
+    "Use the following sanitized LLM context pyramid as your compact working context. It omits coordinates and transient UI state while preserving selected-node context, connected edges, graph summaries, related layers, semantic findings, and recent conversation graph provenance.",
+    "Use the full Arc Forge canvas pyramid JSON as the source of truth when you need exact node, edge, graph, or metadata details.",
     "Each graph contains semanticScan grouped counts plus nodes and edges with metadataSummary. Prefer those summaries before asking the user for information that is already present.",
     "Treat missing metadata warnings as improvement hints. They should not block useful patch proposals or Prompt Pack readiness unless a true safety/schema/auth/transport issue is present.",
     "Do not invent existing graph IDs or node IDs; reference actual IDs for updates and relationships.",
     "You may propose operations against any existing graph in canvasPyramid.graphs when the requested change belongs in a parent layer, child layer, or deeper layer.",
-    "If you propose new nodes or edges, use tempId fields when later operations need to reference them in the same graph.",
+    "If you propose new nodes or edges, use tempId fields when later operations need to reference them in the same graph. Temp IDs are transport references only; they must not be treated as durable canvas IDs.",
+    "If an operation needs an existing ID, use an ID that appears in canvasPyramid or llmContextPyramid. Unknown existing IDs or unknown tempId references block apply.",
     "If you propose create-layer, include starter internal graph.nodes and graph.edges unless the user explicitly asked for a blank layer.",
     "If cross-layer context matters, propose reference-proxy metadata instead of duplicating the real owned component.",
     "Use runtime-deployment, observability-control, and ai-component only when they materially improve the architecture.",

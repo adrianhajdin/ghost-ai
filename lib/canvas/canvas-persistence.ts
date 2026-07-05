@@ -17,6 +17,7 @@ import {
   canvasSnapshotObjectPath,
 } from "@/lib/storage/paths"
 import { getStorageProvider } from "@/lib/storage/storage-provider"
+import { refreshGraphSummaryCache } from "@/lib/canvas/graph-summary-cache"
 
 export interface CanvasDocWriteOptions {
   graphId?: string
@@ -122,7 +123,7 @@ export async function writeCanvasDoc(
         panels: options.panels,
       })
 
-  const nextDoc: CanvasDocV1 = {
+  const nextDoc = refreshGraphSummaryCache({
     ...doc,
     projectId,
     graphId,
@@ -134,7 +135,7 @@ export async function writeCanvasDoc(
     layerKind: options.layerKind ?? doc.layerKind,
     summary: options.summary ?? doc.summary,
     panels: options.panels ?? doc.panels,
-  }
+  })
   const reference = await getStorageProvider().writeJsonObject(
     graphObjectPath(projectId, graphId),
     nextDoc,

@@ -7,7 +7,9 @@ import {
   CheckCircle2,
   ChevronDown,
   Info,
+  MessageSquare,
   SquareArrowOutUpRight,
+  Wrench,
 } from "lucide-react"
 import type {
   CanvasEdge,
@@ -50,6 +52,7 @@ interface SemanticInspectorProps {
   warnings: SemanticValidationResult[]
   semanticScanState: SemanticScanState
   onSemanticScanStateChange: (state: SemanticScanState) => void
+  onSendSemanticFindingToArchitect?: (message: string) => void
 }
 
 interface DraftFieldProps {
@@ -65,6 +68,8 @@ interface CondensedWarning {
   message: string
   severity: SemanticValidationResult["severity"]
   category: SemanticValidationResult["category"]
+  targetRefs: string[]
+  fields: string[]
   count: number
 }
 
@@ -127,13 +132,25 @@ function condenseWarnings(warnings: SemanticValidationResult[]): CondensedWarnin
     if (current) {
       current.count += 1
       current.ids.push(warning.id)
+      const targetRef = warning.targetId
+        ? `${warning.targetKind}:${warning.targetId}`
+        : warning.targetKind
+      if (!current.targetRefs.includes(targetRef)) current.targetRefs.push(targetRef)
+      if (warning.field && !current.fields.includes(warning.field)) {
+        current.fields.push(warning.field)
+      }
     } else {
+      const targetRef = warning.targetId
+        ? `${warning.targetKind}:${warning.targetId}`
+        : warning.targetKind
       byMessage.set(key, {
         id: warning.id,
         ids: [warning.id],
         message: warning.message,
         severity: warning.severity,
         category: warning.category,
+        targetRefs: [targetRef],
+        fields: warning.field ? [warning.field] : [],
         count: 1,
       })
     }
@@ -143,6 +160,53 @@ function condenseWarnings(warnings: SemanticValidationResult[]): CondensedWarnin
   return [...byMessage.values()].sort(
     (a, b) => rank[a.severity] - rank[b.severity] || b.count - a.count
   )
+}
+
+function semanticFindingArchitectPrompt(input: {
+  mode: "fix" | "ask"
+  graphId: string
+  warning: CondensedWarning
+}) {
+  const { mode, graphId, warning } = input
+  const category = SEMANTIC_VALIDATION_CATEGORY_LABELS[warning.category]
+  const targetCopy = warning.targetRefs.length
+    ? warning.targetRefs.slice(0, 12).join(", ")
+    : "current graph"
+  const fieldCopy = warning.fields.length ? warning.fields.join(", ") : "not specified"
+  const idCopy = warning.ids.slice(0, 16).join(", ")
+  const groupedCopy =
+    warning.count > 1
+      ? `This represents ${warning.count} grouped findings. Keep any proposed patch small and reviewable.`
+      : "This is one semantic scan finding."
+
+  if (mode === "ask") {
+    return [
+      "Explain this Semantic Scan finding from Arc Forge.",
+      `Graph: ${graphId}`,
+      `Category: ${category}`,
+      `Severity: ${warning.severity}`,
+      `Targets: ${targetCopy}`,
+      `Field: ${fieldCopy}`,
+      `Finding IDs: ${idCopy}`,
+      `Message: ${warning.message}`,
+      groupedCopy,
+      "Tell me why it matters, what the safe options are, and when it is okay to leave it intentional. Do not propose a canvas patch unless it is clearly useful.",
+    ].join("\n")
+  }
+
+  return [
+    "Please fix this Semantic Scan finding in Arc Forge by proposing a user-approved canvasPatchProposal.",
+    `Graph: ${graphId}`,
+    `Category: ${category}`,
+    `Severity: ${warning.severity}`,
+    `Targets: ${targetCopy}`,
+    `Field: ${fieldCopy}`,
+    `Finding IDs: ${idCopy}`,
+    `Message: ${warning.message}`,
+    groupedCopy,
+    "Use the same kind of semantic edits a human can make in the canvas/inspector: update-node for node metadata, update-edge for edge relationshipType/labels/metadata, add-node/add-edge/create-layer only when genuinely needed.",
+    "Do not claim anything was applied. Keep the proposal reviewable and mention any remaining findings after the proposed patch.",
+  ].join("\n")
 }
 
 function DraftField({ label, value, onCommit, multiline }: DraftFieldProps) {
@@ -454,11 +518,15 @@ function WarningList({
   warnings,
   semanticScanState,
   onSemanticScanStateChange,
+  currentGraphId,
+  onSendSemanticFindingToArchitect,
   showHidden = true,
 }: {
   warnings: SemanticValidationResult[]
   semanticScanState: SemanticScanState
   onSemanticScanStateChange: (state: SemanticScanState) => void
+  currentGraphId: string
+  onSendSemanticFindingToArchitect?: (message: string) => void
   showHidden?: boolean
 }) {
   const visibleWarnings = warnings.filter(
@@ -495,49 +563,91 @@ function WarningList({
                 x{warning.count}
               </span>
             ) : null}
-            {warning.severity !== "error" ? (
-              <span className="ml-1 flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSemanticScanStateChange(
-                      nextScanState(semanticScanState, warning.ids, "intentional")
-                    )
-                  }
-                  className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
-                >
-                  Mark intentional
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    onSemanticScanStateChange(
-                      nextScanState(semanticScanState, warning.ids, "dismiss")
-                    )
-                  }
-                  className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
-                >
-                  Snooze
-                </button>
-                {warning.ids.some(
-                  (id) =>
-                    semanticScanState.dismissedFindingIds.includes(id) ||
-                    semanticScanState.intentionalFindingIds.includes(id)
-                ) ? (
+            <span className="ml-1 flex shrink-0 flex-wrap justify-end gap-1">
+              {onSendSemanticFindingToArchitect ? (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Ask Architect about this semantic signal"
+                    title="Ask Architect about this semantic signal"
+                    onClick={() =>
+                      onSendSemanticFindingToArchitect(
+                        semanticFindingArchitectPrompt({
+                          mode: "ask",
+                          graphId: currentGraphId,
+                          warning,
+                        })
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-full border border-accent-ai/25 px-1.5 py-0.5 text-[10px] text-accent-ai-text transition-colors hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
+                  >
+                    <MessageSquare className="h-3 w-3" />
+                    Ask
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Ask Architect to propose a canvas patch for this semantic signal"
+                    title="Ask Architect to propose a canvas patch for this semantic signal"
+                    onClick={() =>
+                      onSendSemanticFindingToArchitect(
+                        semanticFindingArchitectPrompt({
+                          mode: "fix",
+                          graphId: currentGraphId,
+                          warning,
+                        })
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-full border border-accent-primary/30 bg-accent-dim px-1.5 py-0.5 text-[10px] text-accent-primary transition-colors hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
+                  >
+                    <Wrench className="h-3 w-3" />
+                    Fix
+                  </button>
+                </>
+              ) : null}
+              {warning.severity !== "error" ? (
+                <>
                   <button
                     type="button"
                     onClick={() =>
                       onSemanticScanStateChange(
-                        nextScanState(semanticScanState, warning.ids, "show")
+                        nextScanState(semanticScanState, warning.ids, "intentional")
                       )
                     }
-                    className="rounded-full border border-accent-primary/25 px-1.5 py-0.5 text-[10px] text-accent-primary transition-colors hover:border-accent-primary/60"
+                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
                   >
-                    Show
+                    Mark intentional
                   </button>
-                ) : null}
-              </span>
-            ) : null}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSemanticScanStateChange(
+                        nextScanState(semanticScanState, warning.ids, "dismiss")
+                      )
+                    }
+                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
+                  >
+                    Snooze
+                  </button>
+                  {warning.ids.some(
+                    (id) =>
+                      semanticScanState.dismissedFindingIds.includes(id) ||
+                      semanticScanState.intentionalFindingIds.includes(id)
+                  ) ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSemanticScanStateChange(
+                          nextScanState(semanticScanState, warning.ids, "show")
+                        )
+                      }
+                      className="rounded-full border border-accent-primary/25 px-1.5 py-0.5 text-[10px] text-accent-primary transition-colors hover:border-accent-primary/60"
+                    >
+                      Show
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+            </span>
           </div>
         )
       })}
@@ -555,11 +665,15 @@ function SemanticWarningBeacon({
   isCompactViewport,
   semanticScanState,
   onSemanticScanStateChange,
+  currentGraphId,
+  onSendSemanticFindingToArchitect,
 }: {
   warnings: SemanticValidationResult[]
   isCompactViewport: boolean
   semanticScanState: SemanticScanState
   onSemanticScanStateChange: (state: SemanticScanState) => void
+  currentGraphId: string
+  onSendSemanticFindingToArchitect?: (message: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
@@ -676,6 +790,8 @@ function SemanticWarningBeacon({
                     warnings={groupWarnings}
                     semanticScanState={semanticScanState}
                     onSemanticScanStateChange={onSemanticScanStateChange}
+                    currentGraphId={currentGraphId}
+                    onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
                     showHidden
                   />
                 </div>
@@ -930,6 +1046,7 @@ export function SemanticInspector({
   warnings,
   semanticScanState,
   onSemanticScanStateChange,
+  onSendSemanticFindingToArchitect,
 }: SemanticInspectorProps) {
   const { updateNodeData, updateEdgeData } = useCanvasMutations()
   const router = useRouter()
@@ -969,6 +1086,8 @@ export function SemanticInspector({
         isCompactViewport={isCompactViewport}
         semanticScanState={semanticScanState}
         onSemanticScanStateChange={onSemanticScanStateChange}
+        currentGraphId={currentGraphId}
+        onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
       />
     )
   }
@@ -997,6 +1116,8 @@ export function SemanticInspector({
               warnings={selectionWarnings}
               semanticScanState={semanticScanState}
               onSemanticScanStateChange={onSemanticScanStateChange}
+              currentGraphId={currentGraphId}
+              onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
             />
             <NodeSummaryCard node={selectedNode} />
             <SelectField<SemanticNodeType>
@@ -1189,6 +1310,8 @@ export function SemanticInspector({
               warnings={selectionWarnings}
               semanticScanState={semanticScanState}
               onSemanticScanStateChange={onSemanticScanStateChange}
+              currentGraphId={currentGraphId}
+              onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
             />
             <EdgeSummaryCard edge={selectedEdge} />
             <SelectField<EdgeRelationshipType>

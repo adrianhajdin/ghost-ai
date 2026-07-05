@@ -8,6 +8,8 @@ import {
   parseLlmPromptPackProposal,
 } from "@/lib/prompt-pack/llm-prompt-pack"
 import { loadProjectCanvasPyramid } from "@/lib/canvas/canvas-pyramid"
+import { buildLlmContextPyramid } from "@/lib/ai/context/llm-context-pyramid"
+import { previewLlmCanvasImprovementProposal } from "@/lib/canvas/llm-canvas-patch"
 import { ROOT_GRAPH_ID, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 
 const MAX_CANVAS_PYRAMID_JSON_CHARS = 240_000
@@ -53,7 +55,16 @@ export async function runPromptPackTask(payload: PromptPackPayload) {
     )
   }
 
-  const providerResult = await getAiProvider().generatePromptPack({
+  const provider = getAiProvider()
+  const llmContextPyramid = buildLlmContextPyramid({
+    projectId: payload.projectId,
+    projectName: payload.projectName,
+    providerName: provider.name,
+    currentGraphId,
+    selectedNodeIds: payload.selectedNodeIds,
+    canvasPyramid,
+  })
+  const providerResult = await provider.generatePromptPack({
     projectId: payload.projectId,
     projectName: payload.projectName,
     targetAgent: payload.targetAgent,
@@ -62,8 +73,16 @@ export async function runPromptPackTask(payload: PromptPackPayload) {
     selectedNodeIds: payload.selectedNodeIds,
     instructions: payload.instructions,
     canvasPyramid,
+    llmContextPyramid,
   })
   const proposal = parseLlmPromptPackProposal(providerResult)
+  if (proposal.canvasImprovementProposal) {
+    proposal.canvasImprovementProposal.preview = await previewLlmCanvasImprovementProposal({
+      projectId: payload.projectId,
+      currentGraphId,
+      proposal: proposal.canvasImprovementProposal,
+    })
+  }
   const markdown = exportLlmPromptPackMarkdown(proposal)
 
   return {

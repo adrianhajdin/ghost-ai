@@ -12,6 +12,8 @@ import {
   getRecentArchitectMessagesForProvider,
 } from "@/lib/ai/architect/architect-conversation-store"
 import { loadProjectCanvasPyramid } from "@/lib/canvas/canvas-pyramid"
+import { buildLlmContextPyramid } from "@/lib/ai/context/llm-context-pyramid"
+import { previewLlmCanvasImprovementProposal } from "@/lib/canvas/llm-canvas-patch"
 import { ROOT_GRAPH_ID, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 
 const MAX_CANVAS_PYRAMID_JSON_CHARS = 240_000
@@ -61,6 +63,15 @@ export async function runArchitectConversationTask(
   })
   const provider = getAiProvider()
   const providerMetadata = getSafeAiProviderMetadata(provider.name)
+  const llmContextPyramid = buildLlmContextPyramid({
+    projectId: payload.projectId,
+    projectName: payload.projectName,
+    providerName: providerMetadata.providerName,
+    currentGraphId,
+    selectedNodeIds: payload.selectedNodeIds,
+    recentMessages,
+    canvasPyramid,
+  })
   const providerResult = await provider.generateArchitectReply({
     projectId: payload.projectId,
     projectName: payload.projectName,
@@ -72,8 +83,16 @@ export async function runArchitectConversationTask(
     selectedNodeIds: payload.selectedNodeIds,
     recentMessages,
     canvasPyramid,
+    llmContextPyramid,
   })
   const reply = parseArchitectConversationReply(providerResult)
+  if (reply.canvasPatchProposal) {
+    reply.canvasPatchProposal.preview = await previewLlmCanvasImprovementProposal({
+      projectId: payload.projectId,
+      currentGraphId,
+      proposal: reply.canvasPatchProposal,
+    })
+  }
   const summary = createArchitectReplySummary(reply, providerMetadata)
   const assistantMessage = await createArchitectConversationMessage({
     projectId: payload.projectId,

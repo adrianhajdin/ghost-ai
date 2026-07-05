@@ -13,6 +13,7 @@ import { ROOT_GRAPH_ID } from "@/lib/canvas/graph-ids"
 export const LLM_PROMPT_PACK_SCHEMA_URL =
   "https://arcforge.dev/schemas/llm-prompt-pack.v1.json" as const
 export const LLM_PROMPT_PACK_VERSION = "1.0.0" as const
+export const LLM_CANVAS_PATCH_PROPOSAL_VERSION = "2.0.0" as const
 
 export const LLM_PROMPT_PACK_TARGET_AGENTS = [
   "codex",
@@ -34,6 +35,7 @@ export type LlmPromptPackScopeMode =
 
 const ALLOWED_CANVAS_PATCH_OPS = [
   "update-node",
+  "update-edge",
   "add-node",
   "add-edge",
   "create-layer",
@@ -48,6 +50,7 @@ const PositionSchema = z.object({
 const PatchNodeSchema = z
   .object({
     id: z.string().trim().min(1).max(120).optional(),
+    tempId: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().min(1).max(240),
     semanticType: z.string().trim().min(1).max(120).optional(),
     type: z.string().trim().min(1).max(120).optional(),
@@ -61,8 +64,10 @@ const PatchNodeSchema = z
 const PatchEdgeSchema = z
   .object({
     id: z.string().trim().min(1).max(120).optional(),
+    tempId: z.string().trim().min(1).max(120).optional(),
     source: z.string().trim().min(1).max(120),
     target: z.string().trim().min(1).max(120),
+    relationshipType: z.string().trim().min(1).max(120).optional(),
     semanticType: z.string().trim().min(1).max(120).optional(),
     type: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().max(240).optional(),
@@ -75,6 +80,13 @@ const UpdateNodeOperationSchema = z.object({
   op: z.literal("update-node"),
   graphId: z.string().trim().min(1).max(120),
   nodeId: z.string().trim().min(1).max(120),
+  patch: z.record(z.unknown()).default({}),
+})
+
+const UpdateEdgeOperationSchema = z.object({
+  op: z.literal("update-edge"),
+  graphId: z.string().trim().min(1).max(120),
+  edgeId: z.string().trim().min(1).max(120),
   patch: z.record(z.unknown()).default({}),
 })
 
@@ -136,6 +148,7 @@ const UnsupportedCanvasPatchOperationSchema = z
 
 export const LlmCanvasPatchOperationSchema = z.union([
   UpdateNodeOperationSchema,
+  UpdateEdgeOperationSchema,
   AddNodeOperationSchema,
   AddEdgeOperationSchema,
   CreateLayerOperationSchema,
@@ -145,6 +158,7 @@ export const LlmCanvasPatchOperationSchema = z.union([
 
 export const LlmCanvasImprovementProposalSchema = z
   .object({
+    proposalVersion: z.literal(LLM_CANVAS_PATCH_PROPOSAL_VERSION).default(LLM_CANVAS_PATCH_PROPOSAL_VERSION),
     summary: z.string().trim().max(4000).default(""),
     operations: z.array(LlmCanvasPatchOperationSchema).default([]),
   })
@@ -385,6 +399,7 @@ export function extractCanvasImprovementProposal(
       : value
 
   return LlmCanvasImprovementProposalSchema.parse(raw ?? {
+    proposalVersion: LLM_CANVAS_PATCH_PROPOSAL_VERSION,
     summary: "",
     operations: [],
   })

@@ -12,6 +12,10 @@ import {
   summarizeNodeMetadataForLlm,
 } from "@/lib/canvas/metadata-summaries"
 import {
+  graphSummaryCacheFromDoc,
+  type GraphSummaryCache,
+} from "@/lib/canvas/graph-summary-cache"
+import {
   looksLikeRawSecretValue,
   shouldStripSecretField,
 } from "@/lib/canvas/secret-guards"
@@ -92,6 +96,7 @@ export interface CanvasPyramidGraph {
   nodes: CanvasPyramidNode[]
   edges: CanvasPyramidEdge[]
   semanticScan: CanvasPyramidSemanticScanSummary
+  graphSummaryCache: GraphSummaryCache
 }
 
 export interface CanvasPyramidGraphIndexEntry {
@@ -103,6 +108,7 @@ export interface CanvasPyramidGraphIndexEntry {
   layerKind: string | null
   nodeCount: number
   edgeCount: number
+  summary: string
 }
 
 export interface CanvasPyramid {
@@ -226,6 +232,7 @@ function graphFromDoc(doc: CanvasDocV1): CanvasPyramidGraph {
     nodes: doc.nodes.map(sanitizeNode),
     edges: doc.edges.map(sanitizeEdge),
     semanticScan: semanticScanSummary(doc),
+    graphSummaryCache: graphSummaryCacheFromDoc(doc),
   }
 }
 
@@ -246,6 +253,7 @@ function graphIndexEntry(graph: CanvasPyramidGraph): CanvasPyramidGraphIndexEntr
     layerKind: graph.layerKind,
     nodeCount: graph.nodes.length,
     edgeCount: graph.edges.length,
+    summary: graph.graphSummaryCache.summary,
   }
 }
 

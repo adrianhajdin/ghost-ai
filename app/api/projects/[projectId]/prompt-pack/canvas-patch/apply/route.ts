@@ -77,6 +77,7 @@ export async function POST(
   return Response.json({
     applied: result.applied,
     issues: result.issues,
+    preview: result.preview,
     dirtyGraphIds: result.dirtyGraphIds,
     doc: currentDoc ?? null,
     canvas: currentDoc ? { nodes: currentDoc.nodes, edges: currentDoc.edges } : null,
