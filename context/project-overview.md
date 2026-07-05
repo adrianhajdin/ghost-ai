@@ -30,6 +30,8 @@ Edges carry a relationshipType separate from freeform labels. Fast relationship 
 
 Canvas v2 Phase 2 deepens the same contract without expanding the taxonomy. The inspector is organized into progressive metadata sections for node overview, interfaces, data, events, security, operations, Prompt Pack notes, open questions, child layer state, edge mechanism, edge data/events, and trust notes. Semantic Scan v2 groups advisory findings by relationship clarity, topology quality, state ownership, async integrity, security integration, operability, AI governance, and safety; users can snooze or mark non-blocking findings intentional. Child layers now maintain parent-visible summary metadata such as childLayerSummary, lastLayerSummary, decompositionStatus, and childLayerUpdatedAt so the LLM and Prompt Pack flow can understand decomposition state from the CanvasDoc pyramid.
 
+Canvas v2 Phase 3 keeps the compact model while improving serious-system modeling. Relationship types stay general-purpose, but edges can now carry criticality, directionality, reliability, retry/idempotency, consistency, rate-limit, timeout, fallback, and ownership notes. Trust boundaries are metadata and subtle visual context through boundary, trustZone, exposure, dataSensitivity, authExpectation, securityNotes, and trustNotes; trust boundary crossing is not an edge type. Cross-layer reference-proxy nodes can point at nodes, edges, or graphs owned elsewhere without becoming duplicate implementation targets. Runtime / Deployment Unit, Observability / Control Plane, AI Component, and Reference Proxy are advanced/contextual semantic types behind secondary UI and LLM suggestions, not default toolbar bloat.
+
 ## Goals
 
 1. Let authenticated users create and manage architecture projects.
@@ -70,9 +72,9 @@ Canvas v2 Phase 2 deepens the same contract without expanding the taxonomy. The 
 - Internal realtime provides authenticated room tokens, presence, chat/status events, and canvas synchronization.
 - Live cursors, presence indicators, and node/edge editing.
 - Canvas v2 semantic node taxonomy, typed edge relationships, compact architecture metadata, and advisory validation warnings for incomplete technical meaning.
-- Rich semantic inspector sections for overview, interfaces, data, events, security, operations, Prompt Pack notes, open questions, child layer state, relationship mechanism, data/events, and trust notes.
-- Semantic Scan v2 grouped advisory signals with user snooze/intentional state persisted per graph, while safety/schema/transport/auth issues remain the only blocking class.
-- Semantic templates for actor, client surface, service, worker, database, event channel, external system, identity/auth, generic component, cache store, object store, and internal child-layer detail nodes.
+- Rich semantic inspector sections for overview, interfaces, data, events, security, operations, Prompt Pack notes, open questions, child layer state, relationship mechanism, reliability, data/events, and trust notes.
+- Semantic Scan v2 grouped advisory signals for relationship clarity, topology, state ownership, async integrity, trust boundaries, cross-layer references, runtime operations, AI governance, and safety, with user snooze/intentional state persisted per graph while safety/schema/transport/auth issues remain the only blocking class.
+- Semantic templates for actor, client surface, service, worker, database, event channel, external system, identity/auth, generic component, cache store, object store, advanced contextual runtime/observability/AI/reference proxy nodes, and internal child-layer detail nodes.
 - Any node may have an inner architecture layer. Child layers can be created from the root canvas or another child layer.
 - Child layer summaries are reflected on the parent node and included in the sanitized canvas pyramid for Architect and Prompt Pack generation.
 - CanvasDoc v1, Design IR v1, and LLM Prompt Pack v1 foundations for external coding-agent instruction generation.

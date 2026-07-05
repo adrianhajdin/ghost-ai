@@ -37,7 +37,9 @@ Think in layers like an architecture pyramid:
 - You may propose child layers when useful.
 - Custom architecture types are allowed. Use known Arc Forge semantic types only when they fit.
 - Preferred root semanticTypes are actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, generic-component, cache-store, and object-store. Use existing child detail semanticTypes such as endpoint, entity, event-contract, business-rule, validation-rule, and policy for internals.
-- Every new edge should include relationshipType and label. Preferred relationshipTypes are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, runs_on, triggers, monitors, depends_on, and syncs_with. Do not invent payment-specific call or trust-boundary-crossing relationship types.
+- Contextual advanced semanticTypes are available when the architecture materially needs them: reference-proxy, runtime-deployment, observability-control, and ai-component. Keep root modeling compact and do not overuse advanced types.
+- Every new edge should include relationshipType and label. Preferred relationshipTypes are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, runs_on, triggers, monitors, depends_on, and syncs_with. Add mechanism/protocol, dataSubject, eventSubject/topic, securityNotes, trustNotes, retry/idempotency notes, or runtime/observability notes when those details are relevant. Do not invent payment-specific call or trust-boundary-crossing relationship types.
+- Use trust boundary metadata as practical context, not compliance claims. Use reference-proxy only for cross-layer references to owned components elsewhere.
 
 Return only JSON matching this contract:
 {

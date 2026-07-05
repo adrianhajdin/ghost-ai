@@ -31,6 +31,7 @@
     "test:canvas-v2-guardrails": "tsx scripts/canvas-v2-guardrails-smoke.ts",
     "test:canvas-v2-phase1": "tsx scripts/canvas-v2-phase1-smoke.ts",
     "test:canvas-v2-phase2": "tsx scripts/canvas-v2-phase2-smoke.ts",
+    "test:canvas-v2-phase3": "tsx scripts/canvas-v2-phase3-smoke.ts",
     "test:auth-cookie-name": "tsx scripts/auth-cookie-name-smoke.ts",
     "db:migrate": "prisma migrate dev",
     "prisma:generate": "prisma generate",

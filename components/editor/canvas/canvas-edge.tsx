@@ -16,6 +16,35 @@ import { useCanvasMutations } from "@/components/editor/canvas/canvas-mutation-c
 
 type EditingTarget = number | "new" | null
 
+function relationshipLineStyle(
+  relationshipType: ReturnType<typeof normalizeEdgeRelationshipType>,
+  isActive: boolean
+) {
+  const baseStroke = isActive ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.34)"
+
+  if (relationshipType === "reads") {
+    return { stroke: isActive ? "rgba(139,180,255,0.72)" : "rgba(139,180,255,0.36)", strokeDasharray: "7 7" }
+  }
+
+  if (relationshipType === "publishes" || relationshipType === "consumes") {
+    return { stroke: isActive ? "rgba(191,122,240,0.78)" : "rgba(191,122,240,0.38)", strokeDasharray: "8 5" }
+  }
+
+  if (relationshipType === "monitors" || relationshipType === "runs_on") {
+    return { stroke: isActive ? "rgba(10,199,180,0.68)" : "rgba(10,199,180,0.32)", strokeDasharray: "2 6" }
+  }
+
+  if (relationshipType === "authenticates_via") {
+    return { stroke: isActive ? "rgba(0,200,212,0.8)" : "rgba(0,200,212,0.42)", strokeDasharray: undefined }
+  }
+
+  if (relationshipType === "writes") {
+    return { stroke: isActive ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.42)", strokeDasharray: undefined }
+  }
+
+  return { stroke: baseStroke, strokeDasharray: undefined }
+}
+
 export function CanvasEdgeComponent({
   id,
   sourceX,
@@ -54,7 +83,7 @@ export function CanvasEdgeComponent({
   const isEditing = editingTarget !== null
   const isActive = selected || isHovered || isEditing
   const showCompactAddButton = labels.length > 0 || !isActive
-  const stroke = isActive ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.35)"
+  const lineStyle = relationshipLineStyle(relationshipType, Boolean(isActive))
 
   const updateLabels = useCallback(
     (nextLabels: string[]) => {
@@ -174,8 +203,9 @@ export function CanvasEdgeComponent({
         path={edgePath}
         markerEnd={markerEnd}
         style={{
-          stroke,
+          stroke: lineStyle.stroke,
           strokeWidth: 1.5,
+          strokeDasharray: lineStyle.strokeDasharray,
           strokeLinecap: "round",
           transition: "stroke 0.15s",
         }}

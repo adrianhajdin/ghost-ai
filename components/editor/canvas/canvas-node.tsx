@@ -67,6 +67,28 @@ function cssBorderRadius(shape: NodeShape): string {
   return "12px"
 }
 
+function metadataAccent(data: CanvasNode["data"]) {
+  const exposure = String(data.exposure ?? "").trim().toLowerCase()
+  const boundary = String(data.boundary ?? "").trim().toLowerCase()
+  const value = exposure || boundary
+
+  if (value === "public") return "rgba(247,95,143,0.55)"
+  if (value === "external" || value === "partner") return "rgba(255,153,10,0.55)"
+  if (value === "regulated" || value === "restricted") return "rgba(255,97,102,0.6)"
+  if (value === "tenant" || value === "shared") return "rgba(191,122,240,0.55)"
+  if (value === "internal") return "rgba(10,199,180,0.5)"
+  if (data.semanticType === "reference-proxy") return "rgba(255,255,255,0.45)"
+  return null
+}
+
+function trustBadgeText(data: CanvasNode["data"]) {
+  const exposure = String(data.exposure ?? "").trim()
+  const boundary = String(data.boundary ?? "").trim()
+  const trustZone = String(data.trustZone ?? "").trim()
+  const value = exposure && exposure !== "unknown" ? exposure : boundary || trustZone
+  return value || null
+}
+
 interface ColorSwatchProps {
   pair: (typeof NODE_COLORS)[number]
   isActive: boolean
@@ -133,6 +155,9 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
   const shape = data.shape ?? "rectangle"
   const semanticType = data.semanticType ?? "unclassified"
   const stroke = selected ? BORDER_SELECTED : BORDER_REST
+  const accent = metadataAccent(data)
+  const isReferenceProxy = semanticType === "reference-proxy"
+  const boundaryBadge = trustBadgeText(data)
   const isSvg = shape === "diamond" || shape === "hexagon" || shape === "cylinder"
   const hasLabel = Boolean(data.label?.trim())
 
@@ -283,12 +308,28 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
         {semanticNodeTypeLabel(semanticType)}
       </div>
 
+      {isReferenceProxy ? (
+        <div className="pointer-events-none absolute right-1.5 top-1.5 z-20 rounded-full border border-white/25 bg-bg-surface/85 px-1.5 py-0.5 text-[9px] font-medium uppercase leading-none text-text-muted">
+          Ref
+        </div>
+      ) : null}
+
+      {boundaryBadge ? (
+        <div
+          className="pointer-events-none absolute bottom-1.5 right-1.5 z-20 max-w-[calc(100%-12px)] truncate rounded-full border bg-bg-surface/85 px-1.5 py-0.5 text-[9px] font-medium uppercase leading-none text-text-muted"
+          style={{ borderColor: accent ?? "rgba(255,255,255,0.18)" }}
+          title={`Boundary / exposure: ${boundaryBadge}`}
+        >
+          {boundaryBadge}
+        </div>
+      ) : null}
+
       {isSvg ? (
         <>
           <div className="absolute inset-0">
-            {shape === "diamond" && <DiamondShape fill={fill} stroke={stroke} />}
-            {shape === "hexagon" && <HexagonShape fill={fill} stroke={stroke} />}
-            {shape === "cylinder" && <CylinderShape fill={fill} stroke={stroke} />}
+            {shape === "diamond" && <DiamondShape fill={fill} stroke={accent ?? stroke} />}
+            {shape === "hexagon" && <HexagonShape fill={fill} stroke={accent ?? stroke} />}
+            {shape === "cylinder" && <CylinderShape fill={fill} stroke={accent ?? stroke} />}
           </div>
           {labelContent}
         </>
@@ -297,7 +338,8 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
           style={{
             background: fill,
             borderRadius: cssBorderRadius(shape),
-            border: `1px solid ${stroke}`,
+            border: `1px ${isReferenceProxy ? "dashed" : "solid"} ${accent ?? stroke}`,
+            boxShadow: accent ? `0 0 0 1px ${accent}22, inset 0 0 18px ${accent}18` : undefined,
             width: "100%",
             height: "100%",
           }}

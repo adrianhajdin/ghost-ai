@@ -22,6 +22,10 @@ export type SemanticTemplateType =
   | "generic-component"
   | "cache-store"
   | "object-store"
+  | "reference-proxy"
+  | "runtime-deployment"
+  | "observability-control"
+  | "ai-component"
 export type ServiceInternalTemplateType =
   | "endpoint"
   | "entity"
@@ -217,6 +221,73 @@ export const SEMANTIC_NODE_TEMPLATES: SemanticNodeTemplate[] = [
       dataOwned: [],
     },
   },
+  {
+    semanticType: "reference-proxy",
+    title: "Reference Proxy",
+    shape: "rectangle",
+    colorIndex: 0,
+    group: "advanced",
+    data: {
+      semanticType: "reference-proxy",
+      label: "Reference Proxy",
+      name: "Reference Proxy",
+      responsibilities: ["Reference a node, edge, or layer owned elsewhere"],
+      layerRole: "cross-layer-reference",
+      referenceKind: "node",
+      proxyDirection: "context",
+    },
+  },
+  {
+    semanticType: "runtime-deployment",
+    title: "Runtime / Deployment Unit",
+    shape: "hexagon",
+    colorIndex: 1,
+    group: "advanced",
+    data: {
+      semanticType: "runtime-deployment",
+      label: "Runtime / Deployment Unit",
+      name: "Runtime / Deployment Unit",
+      responsibilities: ["Describe where software runs"],
+      layerRole: "runtime-deployment",
+      runtimeKind: "",
+      environment: "",
+      region: "",
+      operationalNotes: "",
+    },
+  },
+  {
+    semanticType: "observability-control",
+    title: "Observability / Control Plane",
+    shape: "hexagon",
+    colorIndex: 7,
+    group: "advanced",
+    data: {
+      semanticType: "observability-control",
+      label: "Observability / Control Plane",
+      name: "Observability / Control Plane",
+      responsibilities: ["Capture signals, audit, alerts, and operational control"],
+      layerRole: "observability-control",
+      signalTypes: [],
+      operationalNotes: "",
+    },
+  },
+  {
+    semanticType: "ai-component",
+    title: "AI Component",
+    shape: "pill",
+    colorIndex: 2,
+    group: "advanced",
+    data: {
+      semanticType: "ai-component",
+      label: "AI Component",
+      name: "AI Component",
+      responsibilities: ["Own AI reasoning, retrieval, moderation, or tool access"],
+      layerRole: "ai-component",
+      toolAccess: [],
+      safetyNotes: "",
+      securityNotes: "",
+    },
+  },
 ]
 
 export const SERVICE_INTERNAL_NODE_TEMPLATES: SemanticNodeTemplate[] = [
@@ -338,6 +409,10 @@ export function baseNodeData(label = ""): CanvasNodeData {
     decisionRefs: [],
     owner: null,
     boundary: "",
+    trustZone: "",
+    exposure: "unknown",
+    dataSensitivity: "unknown",
+    authExpectation: "",
     layerRole: "",
     interfacesExposed: [],
     interfacesConsumed: [],
@@ -347,11 +422,18 @@ export function baseNodeData(label = ""): CanvasNodeData {
     eventsConsumed: [],
     technology: "",
     runtimeKind: "",
+    environment: "",
+    region: "",
     securityNotes: "",
     privacyClass: "",
     operationalNotes: "",
     openQuestions: [],
     promptPackNotes: "",
+    signalTypes: [],
+    toolAccess: [],
+    safetyNotes: "",
+    retrievalNotes: "",
+    costNotes: "",
     color: NODE_COLORS[0].fill,
     textColor: NODE_COLORS[0].text,
     shape: "rectangle",
@@ -474,6 +556,49 @@ export function semanticDefaultsForType(
       layerRole: "blob-store",
       responsibilities: ["Store objects, files, or generated artifacts"],
       dataOwned: [],
+    }
+  }
+
+  if (canonicalType === "reference-proxy") {
+    return {
+      ...common,
+      layerRole: "cross-layer-reference",
+      responsibilities: ["Reference a node, edge, or layer owned elsewhere"],
+      referenceKind: "node",
+      proxyDirection: "context",
+    }
+  }
+
+  if (canonicalType === "runtime-deployment") {
+    return {
+      ...common,
+      layerRole: "runtime-deployment",
+      responsibilities: ["Describe where software runs"],
+      runtimeKind: "",
+      environment: "",
+      region: "",
+      operationalNotes: "",
+    }
+  }
+
+  if (canonicalType === "observability-control") {
+    return {
+      ...common,
+      layerRole: "observability-control",
+      responsibilities: ["Capture signals, audit, alerts, and operational control"],
+      signalTypes: [],
+      operationalNotes: "",
+    }
+  }
+
+  if (canonicalType === "ai-component") {
+    return {
+      ...common,
+      layerRole: "ai-component",
+      responsibilities: ["Own AI reasoning, retrieval, moderation, or tool access"],
+      toolAccess: [],
+      safetyNotes: "",
+      securityNotes: "",
     }
   }
 
