@@ -33,7 +33,7 @@ export function EditorWorkspaceClient({
   graphId,
 }: EditorWorkspaceClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [aiSidebarOpen, setAiSidebarOpen] = useState(true)
+  const [aiSidebarOpen, setAiSidebarOpen] = useState(false)
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
   const [templatesOpen, setTemplatesOpen] = useState(false)
   const [designIrOpen, setDesignIrOpen] = useState(false)
@@ -50,8 +50,15 @@ export function EditorWorkspaceClient({
   const handleSaveReady = useCallback((fn: () => void) => { saveFnRef.current = fn }, [])
 
   useEffect(() => {
+    let initializedAiSidebar = false
+
     function updateDesktopGutters() {
-      setUsesDesktopGutters(window.innerWidth >= 1024)
+      const isDesktop = window.innerWidth >= 1024
+      setUsesDesktopGutters(isDesktop)
+      if (!initializedAiSidebar) {
+        initializedAiSidebar = true
+        setAiSidebarOpen(isDesktop)
+      }
     }
 
     updateDesktopGutters()

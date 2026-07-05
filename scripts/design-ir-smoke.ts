@@ -87,6 +87,11 @@ const databaseNode = node("database-main", "Primary Database", {
   engine: "postgresql",
   orm: "prisma",
 })
+const actorNode = node("actor-admin", "Ops Admin", {
+  semanticType: "actor",
+  description: "Operator who reviews settlement exceptions.",
+  responsibilities: ["Review exceptions"],
+})
 const unclassifiedNode = node("legacy-shape", "Legacy Shape")
 const secretNode = node("external-payments", "Payment Provider", {
   semanticType: "external-system",
@@ -97,7 +102,7 @@ const secretNode = node("external-payments", "Payment Provider", {
 
 const rootDoc = createCanvasDocV1(
   {
-    nodes: [unclassifiedNode, secretNode, serviceNode, databaseNode],
+    nodes: [unclassifiedNode, secretNode, actorNode, serviceNode, databaseNode],
     edges: [
       edge("edge-service-db", serviceNode.id, databaseNode.id, "db-write", [
         "writes",
@@ -192,10 +197,14 @@ assert(
 const rootDbRelation = resultA.ir.relations.find((item) => item.id === "edge-service-db")
 assert(rootDbRelation?.sourceGraphId === ROOT_GRAPH_ID, "root relation sourceGraphId missing")
 assert(rootDbRelation?.labels[1] === "ledger", "root relation labels were not preserved")
+assert(
+  resultA.ir.actors.some((item) => item.id === actorNode.id),
+  "actor node missing from Design IR actors"
+)
 
 const childDbRelation = resultA.ir.relations.find((item) => item.id === "edge-endpoint-entity")
 assert(childDbRelation?.sourceGraphId === childGraphId, "child relation sourceGraphId missing")
-assert(childDbRelation?.kind === "db-write", "child db-write semantic type missing")
+assert(childDbRelation?.kind === "writes", "child db-write alias did not normalize to writes")
 assert(
   childDbRelation?.sourceNodeType === "endpoint" && childDbRelation.targetNodeType === "entity",
   "child relation node types missing"
@@ -206,12 +215,16 @@ assert(
 )
 
 assert(
-  resultA.ir.unclassifiedNodes.some((item) => item.id === unclassifiedNode.id),
-  "unclassified node missing from unclassifiedNodes"
+  resultA.ir.genericComponents.some((item) => item.id === unclassifiedNode.id),
+  "generic fallback node missing from Design IR genericComponents"
 )
 assert(
   resultA.validation.some((item) => item.id.includes("unclassified")),
-  "unclassified validation warning missing"
+  "untyped relation validation warning missing"
+)
+assert(
+  resultA.validation.some((item) => item.id.includes("generic-description")),
+  "generic fallback metadata warning missing"
 )
 
 const missingChildDoc = createCanvasDocV1(

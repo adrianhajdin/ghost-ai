@@ -30,7 +30,7 @@ export function CanvasControls({
     <div
       className={
         isStacked
-          ? "pointer-events-none absolute inset-x-4 bottom-20 z-10 flex justify-start"
+          ? "pointer-events-none absolute inset-x-4 bottom-28 z-10 flex justify-start"
           : "absolute bottom-4 left-4 z-10"
       }
       data-testid="canvas-controls"
@@ -41,7 +41,7 @@ export function CanvasControls({
           onClose={() => setIsHelpOpen(false)}
         />
       ) : null}
-      <div className="pointer-events-auto flex max-w-[calc(100vw-1rem)] items-center gap-0.5 overflow-x-auto rounded-full border border-border-default bg-bg-surface/95 px-2 py-1.5 shadow-xl backdrop-blur-xl">
+      <div className="pointer-events-auto flex max-w-[min(16rem,calc(100vw-2rem))] items-center gap-0.5 overflow-x-auto overflow-y-hidden rounded-full border border-border-default bg-bg-surface/95 px-2 py-1.5 shadow-xl backdrop-blur-xl [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <ControlButton onClick={onZoomOut} title="Zoom out">
           <Minus className="h-3.5 w-3.5" />
         </ControlButton>

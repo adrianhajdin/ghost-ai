@@ -848,20 +848,33 @@ export function AiSidebar({
         </DialogContent>
       </Dialog>
 
+    {isOpen ? (
+      <button
+        type="button"
+        aria-label="Close AI Workspace overlay"
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px] lg:hidden"
+      />
+    ) : null}
+
     <aside
       className={cn(
-        "fixed inset-y-3 right-3 top-15 z-40 hidden w-84 flex-col rounded-3xl border border-border-subtle bg-bg-surface/95 shadow-xl ring-1 ring-accent-ai/10 backdrop-blur-xl transition-transform duration-300 lg:flex",
-        isOpen ? "translate-x-0" : "translate-x-[calc(100%+1rem)]"
+        "fixed inset-x-2 bottom-2 top-[3.25rem] z-50 flex flex-col rounded-3xl border border-border-subtle bg-bg-surface/95 shadow-xl ring-1 ring-accent-ai/10 backdrop-blur-xl transition-[transform,opacity] duration-300 lg:inset-x-auto lg:inset-y-3 lg:right-3 lg:top-15 lg:w-84",
+        isOpen
+          ? "translate-x-0 translate-y-0 opacity-100"
+          : "pointer-events-none translate-y-[calc(100%+1rem)] opacity-0 lg:translate-x-[calc(100%+1rem)] lg:translate-y-0"
       )}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-border-default px-5 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border-default px-4 py-3 lg:px-5 lg:py-4">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-ai/15">
           <Bot className="h-4 w-4 text-accent-ai-text" />
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-text-primary">{AI_WORKSPACE_TITLE}</p>
-          <p className="text-xs text-text-muted">{AI_WORKSPACE_TAGLINE}</p>
+          <p className="text-xs text-text-muted [@media(max-height:460px)]:hidden">
+            {AI_WORKSPACE_TAGLINE}
+          </p>
         </div>
         {isAiBusy && (
           <div className="flex items-center gap-1 rounded-full bg-accent-ai/15 px-2 py-0.5 text-[10px] text-accent-ai-text">
@@ -879,7 +892,7 @@ export function AiSidebar({
 
       {/* Tabs */}
       <Tabs defaultValue="architect" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <TabsList className="mx-4 mt-3 grid h-auto w-auto shrink-0 grid-cols-3 rounded-xl bg-bg-subtle p-1">
+        <TabsList className="mx-3 mt-2 grid h-auto w-auto shrink-0 grid-cols-3 rounded-xl bg-bg-subtle p-1 lg:mx-4 lg:mt-3">
           <TabsTrigger
             value="architect"
             className="rounded-lg px-3 py-1.5 text-xs font-medium data-active:bg-accent-ai data-active:text-white data-active:shadow-none"
@@ -903,15 +916,15 @@ export function AiSidebar({
         {/* Architect Tab */}
         <TabsContent value="architect" className="min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-h-0 flex-col">
-            <div className="shrink-0 border-b border-border-default bg-bg-surface/95 px-4 py-3">
-              <div className="grid gap-3">
-                <div className="grid grid-cols-3 gap-2">
+            <div className="shrink-0 border-b border-border-default bg-bg-surface/95 px-3 py-2 lg:px-4 lg:py-3">
+              <div className="grid gap-2 lg:gap-3">
+                <div className="grid grid-cols-3 gap-2 [@media(max-height:460px)]:hidden">
                   <MetricPill label="Nodes" value={nodes.length} />
                   <MetricPill label="Edges" value={edges.length} />
                   <MetricPill label="Selected" value={selectedNodeIds.length} />
                 </div>
 
-                <div className="rounded-2xl border border-accent-ai/20 bg-accent-ai/10 p-3">
+                <div className="rounded-2xl border border-accent-ai/20 bg-accent-ai/10 p-2.5 lg:p-3">
                   <div className="flex items-start gap-2">
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-ai-text" />
                     <div className="min-w-0">
@@ -923,7 +936,7 @@ export function AiSidebar({
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="mt-2 flex items-center justify-between gap-2 lg:mt-3">
                     <div
                       className={cn(
                         "min-w-0 rounded-full border px-2.5 py-1 text-[10px]",

@@ -40,6 +40,7 @@ const PatchEdgeSchema = z
     id: z.string().trim().min(1).max(120).optional(),
     source: z.string().trim().min(1).max(120),
     target: z.string().trim().min(1).max(120),
+    relationshipType: z.string().trim().min(1).max(120).optional(),
     semanticType: z.string().trim().min(1).max(120).optional(),
     type: z.string().trim().min(1).max(120).optional(),
     label: z.string().trim().max(240).optional(),

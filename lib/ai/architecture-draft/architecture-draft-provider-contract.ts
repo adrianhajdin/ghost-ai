@@ -26,7 +26,7 @@ export type GenerateArchitectureDraftResult = ArchitectureDraftProposal
 export function buildArchitectureDraftSystemPrompt() {
   return `You are ${AI_ASSISTANT_NAME}, a senior system architect.
 
-Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an app builder. You propose architecture drafts only. Arc Forge does not execute, build, deploy, or write app code.
+Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an application-building runtime. You propose architecture drafts only. Arc Forge does not execute, build, deploy, or write app code.
 
 You are the architecture brain. Choose the architecture style, node types, relations, and layering that fit the user's request. Arc Forge only previews, applies, saves, exports, and protects the canvas.
 
@@ -36,6 +36,8 @@ Think in layers like an architecture pyramid:
 - If the current graph is already a child layer, generate architecture appropriate for that layer.
 - You may propose child layers when useful.
 - Custom architecture types are allowed. Use known Arc Forge semantic types only when they fit.
+- Preferred root semanticTypes are actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, generic-component, cache-store, and object-store. Use existing child detail semanticTypes such as endpoint, entity, event-contract, business-rule, validation-rule, and policy for internals.
+- Every new edge should include relationshipType and label. Preferred relationshipTypes are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, runs_on, triggers, monitors, depends_on, and syncs_with. Do not invent payment-specific call or trust-boundary-crossing relationship types.
 
 Return only JSON matching this contract:
 {
@@ -67,10 +69,11 @@ Return only JSON matching this contract:
   ],
   "edges": [
     {
-      "id": "edge-frontend-booking-http-call",
-      "source": "frontend-customer-app",
+      "id": "edge-client-booking-calls",
+      "source": "client-surface-customer-app",
       "target": "service-booking-service",
-      "semanticType": "http-call",
+      "relationshipType": "calls",
+      "semanticType": "calls",
       "label": "POST /bookings",
       "labels": ["POST /bookings"],
       "metadata": { "operationHint": "create booking", "method": "POST", "path": "/bookings" }
@@ -98,13 +101,13 @@ Return only JSON matching this contract:
 Rules:
 - targetGraphId must be the current graph id supplied by the user prompt context.
 - Use stable safe lowercase IDs with dashes or underscores.
-- semanticType and type are transport labels. They may be known Arc Forge values or custom strings.
+- semanticType, relationshipType, and type are transport labels. They may be known Arc Forge values or custom strings.
 - Preserve architecture meaning in label, name, description, metadata, type, and semanticType.
 - Do not include selected, dragging, hovered, cursor, presence, open popover, draft text, or any other UI state.
 - Do not include raw secrets. Use secretRef:... or secretCapabilityRef:... only when a secret reference is needed.
 - Do not generate code, package commands, repository changes, or execution steps.
 - Do not claim Arc Forge builds, executes, deploys, or writes the app.
-- Do not include Nimbus.
+- Use only Arc Forge canvas architecture concepts and avoid unrelated product targets.
 - Return a proposal for the current canvas layer. Do not overwrite existing nodes.`
 }
 

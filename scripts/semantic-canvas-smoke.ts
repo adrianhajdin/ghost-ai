@@ -39,6 +39,7 @@ function nodeFromTemplate(templateId: "service" | "database"): CanvasNode {
     data: {
       ...baseNodeData(template.title),
       ...template.data,
+      owner: "platform-team",
       color: color.fill,
       textColor: color.text,
       shape: template.shape,

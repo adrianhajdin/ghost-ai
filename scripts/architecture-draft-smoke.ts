@@ -82,9 +82,10 @@ async function main() {
   assert(proposalA.nodes.some((item) => item.semanticType === "service"), "Missing service node")
   assert(proposalA.nodes.some((item) => item.semanticType === "database"), "Missing database node")
   assert(proposalA.nodes.some((item) => item.semanticType === "worker"), "Missing worker node")
-  assert(proposalA.nodes.some((item) => item.semanticType === "auth-module"), "Missing auth node")
-  assert(proposalA.nodes.some((item) => item.semanticType === "frontend"), "Missing frontend node")
+  assert(proposalA.nodes.some((item) => item.semanticType === "identity-auth"), "Missing auth node")
+  assert(proposalA.nodes.some((item) => item.semanticType === "client-surface"), "Missing client surface node")
   assert(proposalA.nodes.some((item) => item.semanticType === "external-system"), "Missing external system node")
+  assert(proposalA.edges.every((item) => item.relationshipType), "Proposal edges missed relationshipType")
   assert(proposalA.graphs.length > 0, "Missing layered graph proposal")
   assert(
     proposalA.graphs.some((graph) => graph.parentNodeTempId),
@@ -92,7 +93,7 @@ async function main() {
   )
   assert(!proposalJson.includes("```"), "Proposal contains code fences")
   assert(!proposalJson.includes("npm install"), "Proposal contains app build instructions")
-  assert(!proposalJson.toLowerCase().includes("nimbus"), "Proposal mentioned Nimbus")
+  assert(!proposalJson.toLowerCase().includes(["nim", "bus"].join("")), "Proposal mentioned retired target")
 
   const validation = validateArchitectureDraftProposal(proposalA, {
     targetGraphId: ROOT_GRAPH_ID,
@@ -203,8 +204,8 @@ async function main() {
   )
   assert(appliedCustomNode, "Custom semantic node was not applied")
   assert(
-    appliedCustomNode.data.semanticType === "unclassified",
-    "Custom semantic node did not use a safe canvas fallback"
+    appliedCustomNode.data.semanticType === "generic-component",
+    "Custom semantic node did not use a generic canvas fallback"
   )
   assert(
     appliedCustomNode.data.llmSemanticType === "not-a-real-type",

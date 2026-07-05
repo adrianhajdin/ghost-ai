@@ -14,14 +14,16 @@ import type {
   CanvasEdgeData,
   CanvasNode,
   CanvasNodeData,
-  SemanticEdgeType,
   SemanticNodeType,
 } from "@/types/canvas"
 import {
-  SEMANTIC_EDGE_TYPES,
-  SEMANTIC_NODE_TYPES,
-  semanticEdgeTypeLabel,
+  ADVANCED_EDGE_RELATIONSHIP_TYPES,
+  QUICK_EDGE_RELATIONSHIP_TYPES,
+  SEMANTIC_NODE_PICKER_TYPES,
+  edgeRelationshipTypeLabel,
+  normalizeEdgeRelationshipType,
   semanticNodeTypeLabel,
+  type EdgeRelationshipType,
 } from "@/types/canvas"
 import { semanticDefaultsForType } from "@/lib/canvas/semantic-defaults"
 import type { SemanticValidationResult } from "@/lib/canvas/semantic-validation"
@@ -54,6 +56,16 @@ interface CondensedWarning {
   severity: SemanticValidationResult["severity"]
   count: number
 }
+
+const NODE_TYPE_OPTIONS = [
+  "unclassified",
+  ...SEMANTIC_NODE_PICKER_TYPES,
+] as const satisfies readonly SemanticNodeType[]
+
+const RELATIONSHIP_TYPE_OPTIONS = [
+  ...QUICK_EDGE_RELATIONSHIP_TYPES,
+  ...ADVANCED_EDGE_RELATIONSHIP_TYPES,
+] as const satisfies readonly EdgeRelationshipType[]
 
 function toList(value: unknown): string[] {
   return Array.isArray(value)
@@ -466,7 +478,25 @@ function NodeSpecificFields({
     )
   }
 
-  if (type === "auth-module") {
+  if (type === "client-surface" || type === "frontend") {
+    return (
+      <>
+        <DraftField label="Framework" value={node.data.framework ?? ""} onCommit={(framework) => patch({ framework })} />
+        <DraftField label="Auth mode" value={node.data.authMode ?? ""} onCommit={(authMode) => patch({ authMode })} />
+      </>
+    )
+  }
+
+  if (type === "event-channel" || type === "queue") {
+    return (
+      <>
+        <DraftField label="Topic" value={node.data.topic ?? ""} onCommit={(topic) => patch({ topic })} />
+        <DraftField label="Delivery guarantee" value={node.data.deliveryGuarantee ?? ""} onCommit={(deliveryGuarantee) => patch({ deliveryGuarantee })} />
+      </>
+    )
+  }
+
+  if (type === "identity-auth" || type === "auth-module") {
     return (
       <>
         <DraftField label="Auth strategy" value={node.data.authStrategy ?? ""} onCommit={(authStrategy) => patch({ authStrategy })} />
@@ -596,7 +626,7 @@ export function SemanticInspector({
           <SelectField<SemanticNodeType>
             label="Node type"
             value={semanticType}
-            options={SEMANTIC_NODE_TYPES}
+            options={NODE_TYPE_OPTIONS}
             optionLabel={semanticNodeTypeLabel}
             onChange={(nextType) =>
               patch({
@@ -608,6 +638,10 @@ export function SemanticInspector({
           <DraftField label="Name" value={selectedNode.data.name ?? ""} onCommit={(name) => patch({ name })} />
           <DraftField label="Label" value={selectedNode.data.label ?? ""} onCommit={(label) => patch({ label })} />
           <DraftField label="Description" value={selectedNode.data.description ?? ""} onCommit={(description) => patch({ description })} multiline />
+          <ListField label="Responsibilities" values={toList(selectedNode.data.responsibilities)} onCommit={(responsibilities) => patch({ responsibilities })} />
+          <DraftField label="Owner" value={selectedNode.data.owner ?? ""} onCommit={(owner) => patch({ owner: owner || null })} />
+          <DraftField label="Boundary" value={selectedNode.data.boundary ?? ""} onCommit={(boundary) => patch({ boundary })} />
+          <DraftField label="Layer role" value={selectedNode.data.layerRole ?? ""} onCommit={(layerRole) => patch({ layerRole })} />
           <SelectField
             label="Status"
             value={selectedNode.data.status ?? "draft"}
@@ -615,12 +649,32 @@ export function SemanticInspector({
             optionLabel={(value) => value}
             onChange={(status) => patch({ status })}
           />
+          <DraftField label="Maturity" value={String(selectedNode.data.maturity ?? selectedNode.data.status ?? "draft")} onCommit={(maturity) => patch({ maturity })} />
+          <ListField label="Interfaces exposed" values={toList(selectedNode.data.interfacesExposed)} onCommit={(interfacesExposed) => patch({ interfacesExposed })} />
+          <ListField label="Interfaces consumed" values={toList(selectedNode.data.interfacesConsumed)} onCommit={(interfacesConsumed) => patch({ interfacesConsumed })} />
+          <ListField label="Data owned" values={toList(selectedNode.data.dataOwned)} onCommit={(dataOwned) => patch({ dataOwned })} />
+          <ListField label="Data read" values={toList(selectedNode.data.dataRead)} onCommit={(dataRead) => patch({ dataRead })} />
+          <ListField label="Events emitted" values={toList(selectedNode.data.eventsEmitted)} onCommit={(eventsEmitted) => patch({ eventsEmitted })} />
+          <ListField label="Events consumed" values={toList(selectedNode.data.eventsConsumed)} onCommit={(eventsConsumed) => patch({ eventsConsumed })} />
           <ListField label="Tags" values={toList(selectedNode.data.tags)} onCommit={(tags) => patch({ tags })} />
-          <DraftField label="Owner" value={selectedNode.data.owner ?? ""} onCommit={(owner) => patch({ owner: owner || null })} />
-          <ListField label="Source refs" values={toList(selectedNode.data.sourceRefs)} onCommit={(sourceRefs) => patch({ sourceRefs })} />
-          <ListField label="Assumptions" values={toList(selectedNode.data.assumptions)} onCommit={(assumptions) => patch({ assumptions })} />
-          <ListField label="Decision refs" values={toList(selectedNode.data.decisionRefs)} onCommit={(decisionRefs) => patch({ decisionRefs })} />
           <NodeSpecificFields node={selectedNode} patch={patch} />
+          <details className="rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2">
+            <summary className="cursor-pointer text-[11px] font-semibold text-text-secondary">
+              Advanced metadata
+            </summary>
+            <div className="mt-2 grid gap-2">
+              <DraftField label="Technology" value={selectedNode.data.technology ?? ""} onCommit={(technology) => patch({ technology })} />
+              <DraftField label="Runtime kind" value={selectedNode.data.runtimeKind ?? ""} onCommit={(runtimeKind) => patch({ runtimeKind })} />
+              <DraftField label="Security notes" value={selectedNode.data.securityNotes ?? ""} onCommit={(securityNotes) => patch({ securityNotes })} multiline />
+              <DraftField label="Privacy class" value={selectedNode.data.privacyClass ?? ""} onCommit={(privacyClass) => patch({ privacyClass })} />
+              <DraftField label="Operational notes" value={selectedNode.data.operationalNotes ?? ""} onCommit={(operationalNotes) => patch({ operationalNotes })} multiline />
+              <ListField label="Open questions" values={toList(selectedNode.data.openQuestions)} onCommit={(openQuestions) => patch({ openQuestions })} />
+              <DraftField label="Prompt Pack notes" value={selectedNode.data.promptPackNotes ?? ""} onCommit={(promptPackNotes) => patch({ promptPackNotes })} multiline />
+              <ListField label="Source refs" values={toList(selectedNode.data.sourceRefs)} onCommit={(sourceRefs) => patch({ sourceRefs })} />
+              <ListField label="Assumptions" values={toList(selectedNode.data.assumptions)} onCommit={(assumptions) => patch({ assumptions })} />
+              <ListField label="Decision refs" values={toList(selectedNode.data.decisionRefs)} onCommit={(decisionRefs) => patch({ decisionRefs })} />
+            </div>
+          </details>
           <SubcanvasNotice
             node={selectedNode}
             projectId={projectId}
@@ -634,7 +688,9 @@ export function SemanticInspector({
 
   if (selectedEdge) {
     const edgeData = selectedEdge.data ?? {}
-    const semanticType = edgeData.semanticType ?? "unclassified"
+    const relationshipType =
+      normalizeEdgeRelationshipType(edgeData.relationshipType ?? edgeData.semanticType) ??
+      "depends_on"
     const patch = (nextPatch: Partial<CanvasEdgeData>) =>
       updateEdgeData(selectedEdge.id, nextPatch)
     const edgeLabels = edgeLabelTexts(edgeData)
@@ -647,12 +703,12 @@ export function SemanticInspector({
         </div>
         <div className="grid gap-2">
           <WarningList warnings={selectionWarnings} />
-          <SelectField<SemanticEdgeType>
-            label="Edge type"
-            value={semanticType}
-            options={SEMANTIC_EDGE_TYPES}
-            optionLabel={semanticEdgeTypeLabel}
-            onChange={(nextType) => patch({ semanticType: nextType })}
+          <SelectField<EdgeRelationshipType>
+            label="Relationship type"
+            value={relationshipType}
+            options={RELATIONSHIP_TYPE_OPTIONS}
+            optionLabel={edgeRelationshipTypeLabel}
+            onChange={(nextType) => patch({ relationshipType: nextType, semanticType: nextType })}
           />
           <DraftField label="Name" value={edgeData.name ?? ""} onCommit={(name) => patch({ name })} />
           <DraftField
@@ -667,6 +723,17 @@ export function SemanticInspector({
             }}
           />
           <DraftField label="Description" value={edgeData.description ?? ""} onCommit={(description) => patch({ description })} multiline />
+          <DraftField label="Mechanism" value={String(edgeData.mechanism ?? "")} onCommit={(mechanism) => patch({ mechanism })} />
+          <DraftField label="Protocol" value={String(edgeData.protocol ?? "")} onCommit={(protocol) => patch({ protocol })} />
+          <DraftField label="Data subject" value={String(edgeData.dataSubject ?? "")} onCommit={(dataSubject) => patch({ dataSubject })} />
+          <DraftField label="Event subject" value={String(edgeData.eventSubject ?? "")} onCommit={(eventSubject) => patch({ eventSubject })} />
+          <SelectField
+            label="Sync mode"
+            value={edgeData.syncMode ?? "unknown"}
+            options={["sync", "async", "unknown"] as const}
+            optionLabel={(value) => value}
+            onChange={(syncMode) => patch({ syncMode })}
+          />
           <SelectField
             label="Status"
             value={edgeData.status ?? "draft"}
@@ -680,9 +747,18 @@ export function SemanticInspector({
           <DraftField label="Operation hint" value={String(edgeData.operationHint ?? "")} onCommit={(operationHint) => patch({ operationHint })} />
           <DraftField label="Event name" value={String(edgeData.eventName ?? "")} onCommit={(eventName) => patch({ eventName })} />
           <DraftField label="Topic" value={String(edgeData.topic ?? "")} onCommit={(topic) => patch({ topic })} />
-          <ListField label="Source refs" values={toList(edgeData.sourceRefs)} onCommit={(sourceRefs) => patch({ sourceRefs })} />
-          <ListField label="Assumptions" values={toList(edgeData.assumptions)} onCommit={(assumptions) => patch({ assumptions })} />
-          <ListField label="Decision refs" values={toList(edgeData.decisionRefs)} onCommit={(decisionRefs) => patch({ decisionRefs })} />
+          <details className="rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2">
+            <summary className="cursor-pointer text-[11px] font-semibold text-text-secondary">
+              Advanced relationship metadata
+            </summary>
+            <div className="mt-2 grid gap-2">
+              <DraftField label="Security notes" value={String(edgeData.securityNotes ?? "")} onCommit={(securityNotes) => patch({ securityNotes })} multiline />
+              <DraftField label="Trust notes" value={String(edgeData.trustNotes ?? "")} onCommit={(trustNotes) => patch({ trustNotes })} multiline />
+              <ListField label="Source refs" values={toList(edgeData.sourceRefs)} onCommit={(sourceRefs) => patch({ sourceRefs })} />
+              <ListField label="Assumptions" values={toList(edgeData.assumptions)} onCommit={(assumptions) => patch({ assumptions })} />
+              <ListField label="Decision refs" values={toList(edgeData.decisionRefs)} onCommit={(decisionRefs) => patch({ decisionRefs })} />
+            </div>
+          </details>
         </div>
       </aside>
     )

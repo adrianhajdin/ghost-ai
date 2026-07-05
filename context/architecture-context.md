@@ -47,6 +47,16 @@
 - Arc Forge must not become a full UML/BPMN/ArchiMate clone, cloud vendor mega-palette, code execution environment, app builder, external repo writer, target-app PR creator, or deployment system.
 - Nimbus, image/multimodal input, auto-apply patches, and multiple AI editing personas are not active Canvas v2 behavior.
 
+### Canvas v2 Phase 1 Semantic Foundation
+
+- The semantic taxonomy version is `2.0.0`.
+- Default root node types: actor, client-surface, service, worker, database, event-channel, external-system, identity-auth, and generic-component.
+- Advanced root node types: cache-store and object-store.
+- Internal child-layer node types: api, domain-model, entity, endpoint-group, endpoint, event-contract, business-rule, validation-rule, policy, and spec-note.
+- Legacy aliases normalize as compatibility metadata: frontend maps to client-surface, queue maps to event-channel, cache maps to cache-store, and auth-module maps to identity-auth. Unknown/custom semantic types load as generic-component while preserving originalSemanticType, architectureType, and LLM semantic metadata where present.
+- Default relationship types are interacts_with, calls, reads, writes, publishes, consumes, authenticates_via, and runs_on. Advanced relationship types are triggers, monitors, depends_on, and syncs_with. Legacy edge semantic aliases normalize into relationshipType while label and labelItems remain preserved.
+- Durable node metadata may include responsibilities, maturity, boundary, layerRole, interfaces exposed/consumed, data owned/read, events emitted/consumed, technology, runtime kind, security/privacy notes, operational notes, open questions, and Prompt Pack notes. Durable edge metadata may include mechanism, protocol, data/event subject, sync mode, security notes, and trust notes.
+
 ## Storage Model
 
 - **Database**: metadata, ownership, relationships, AI task runs/events/attempts, realtime room events, Architect conversation messages, and project spec records.
@@ -82,7 +92,7 @@
 - Templates are loaded into the active internal realtime canvas state when a user imports one.
 - Import can occur on canvas creation or from within the editor at any time.
 - Template data follows the same node/edge schema as user-created canvas content.
-- Semantic templates seed typed node metadata for service, database, worker, and auth-module nodes while preserving the existing shape templates.
+- Semantic templates seed typed Canvas v2 node metadata for the compact root taxonomy and internal child-layer detail nodes while preserving the existing shape templates.
 - Templates do not require a separate database record; they are resolved by template ID at import time.
 
 ## AI Generation Model
@@ -153,3 +163,4 @@ Architect is the single LLM architecture surface. Arc Forge no longer exposes a 
 17. Architect conversation must remain separate from collaborator Chat and must only mutate canvas state through user-approved LLM canvas patch apply.
 18. Semantic Scan warnings are advisory for architecture completeness and must not block child-layer creation, LLM proposals, Prompt Pack generation, Actor/Generic/custom node drill-down, or user-approved non-destructive patches.
 19. New node types, modes, or palettes must pass the anti-bloat rule: add them only when they materially improve clarity, LLM reasoning, Prompt Pack quality, commonness, non-redundancy, and non-expert UX.
+20. Typed edge relationships must stay compact and general-purpose. Domain-specific edge semantics belong in labels, metadata, notes, or LLM-authored Prompt Packs, not in new relationshipType values unless the product contract is updated.

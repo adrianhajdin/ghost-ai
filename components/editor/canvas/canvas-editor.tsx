@@ -16,7 +16,13 @@ import {
 import "@xyflow/react/dist/style.css"
 import { useReactFlow } from "@xyflow/react"
 import type { Connection, EdgeChange, NodeChange, OnReconnect } from "@xyflow/react"
-import type { CanvasNode, CanvasEdge, CanvasNodeData, NodeShape } from "@/types/canvas"
+import type {
+  CanvasNode,
+  CanvasEdge,
+  CanvasNodeData,
+  EdgeRelationshipType,
+  NodeShape,
+} from "@/types/canvas"
 import { NODE_COLORS } from "@/types/canvas"
 import { CanvasNodeComponent } from "@/components/editor/canvas/canvas-node"
 import { CanvasEdgeComponent } from "@/components/editor/canvas/canvas-edge"
@@ -238,6 +244,8 @@ export function CanvasEditor({
   const suppressSelectionMouseEventsRef = useRef(false)
   const [selectionBox, setSelectionBox] = useState<SelectionBox | null>(null)
   const [isCanvasChromeStacked, setIsCanvasChromeStacked] = useState(false)
+  const [selectedRelationshipType, setSelectedRelationshipType] =
+    useState<EdgeRelationshipType>("calls")
   const [historyState, setHistoryState] = useState({
     canUndo: false,
     canRedo: false,
@@ -748,12 +756,19 @@ export function CanvasEditor({
         targetHandle: connection.targetHandle ?? null,
         type: "canvasEdge",
         data: {
-          semanticType: "unclassified",
+          semanticType: selectedRelationshipType,
+          relationshipType: selectedRelationshipType,
           name: "",
           label: "",
           labels: [],
           labelItems: [],
           status: "draft",
+          syncMode:
+            selectedRelationshipType === "publishes" ||
+            selectedRelationshipType === "consumes" ||
+            selectedRelationshipType === "triggers"
+              ? "async"
+              : "unknown",
           tags: [],
           sourceRefs: [],
           assumptions: [],
@@ -770,7 +785,7 @@ export function CanvasEditor({
 
       commitCanvas(nodesRef.current, [...edgesRef.current, nextEdge])
     },
-    [commitCanvas]
+    [commitCanvas, selectedRelationshipType]
   )
 
   const onReconnect = useCallback<OnReconnect<CanvasEdge>>(
@@ -837,6 +852,42 @@ export function CanvasEditor({
     },
     [commitCanvas, screenToFlowPosition]
   )
+
+  const openOrCreateSelectedNodeLayer = useCallback(async () => {
+    const node = selectedNode
+    if (!node) return
+
+    const existingGraphId = node.data.subcanvasRef?.graphId
+    if (existingGraphId) {
+      router.push(`/editor/${projectId}?graphId=${encodeURIComponent(existingGraphId)}`)
+      return
+    }
+
+    const response = await fetch(`/api/projects/${projectId}/subcanvas`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        parentGraphId: graphId,
+        parentNodeId: node.id,
+        title: `${node.data.name || node.data.label || node.id} Layer`,
+        summary: node.data.description ?? undefined,
+      }),
+    })
+
+    if (!response.ok) return
+    const data = (await response.json()) as {
+      subcanvasRef?: NonNullable<CanvasNodeData["subcanvasRef"]>
+    }
+    if (!data.subcanvasRef?.graphId) return
+
+    const nextNodes = nodesRef.current.map((item) =>
+      item.id === node.id
+        ? { ...item, data: { ...item.data, subcanvasRef: data.subcanvasRef } }
+        : item
+    )
+    commitCanvas(nextNodes, edgesRef.current)
+    router.push(`/editor/${projectId}?graphId=${encodeURIComponent(data.subcanvasRef.graphId)}`)
+  }, [commitCanvas, graphId, projectId, router, selectedNode])
 
   const mutationContext = useMemo(
     () => ({
@@ -978,6 +1029,10 @@ export function CanvasEditor({
         <ShapePanel
           graphScopeKind={graphScopeKind}
           isStacked={isCanvasChromeStacked}
+          selectedNode={selectedNode}
+          selectedRelationshipType={selectedRelationshipType}
+          onRelationshipTypeChange={setSelectedRelationshipType}
+          onOpenDrilldownLayer={openOrCreateSelectedNodeLayer}
         />
         <SemanticInspector
           projectId={projectId}

@@ -3,9 +3,25 @@ import type {
   NodeShape,
   SemanticNodeType,
 } from "@/types/canvas"
-import { NODE_COLORS, SHAPE_DEFAULTS } from "@/types/canvas"
+import {
+  NODE_COLORS,
+  SHAPE_DEFAULTS,
+  normalizeSemanticNodeType,
+  semanticNodeTypeLabel,
+} from "@/types/canvas"
 
-export type SemanticTemplateType = "service" | "database" | "worker" | "auth-module"
+export type SemanticTemplateType =
+  | "actor"
+  | "client-surface"
+  | "service"
+  | "worker"
+  | "database"
+  | "event-channel"
+  | "external-system"
+  | "identity-auth"
+  | "generic-component"
+  | "cache-store"
+  | "object-store"
 export type ServiceInternalTemplateType =
   | "endpoint"
   | "entity"
@@ -20,19 +36,38 @@ export interface SemanticNodeTemplate {
   title: string
   shape: NodeShape
   colorIndex: number
+  group?: "default" | "advanced" | "internal"
   data: Partial<CanvasNodeData>
 }
 
 export const SEMANTIC_NODE_TEMPLATES: SemanticNodeTemplate[] = [
   {
+    semanticType: "client-surface",
+    title: "Client Surface",
+    shape: "rectangle",
+    colorIndex: 5,
+    group: "default",
+    data: {
+      semanticType: "client-surface",
+      label: "Client Surface",
+      name: "Client Surface",
+      responsibilities: ["User-facing interaction surface"],
+      layerRole: "experience",
+      interfacesConsumed: [],
+    },
+  },
+  {
     semanticType: "service",
     title: "Service",
     shape: "pill",
     colorIndex: 1,
+    group: "default",
     data: {
       semanticType: "service",
       label: "Service",
       name: "Service",
+      responsibilities: ["Own a bounded runtime responsibility"],
+      layerRole: "application-service",
       serviceKind: "application-service",
       runtime: "node-typescript",
       language: "typescript",
@@ -42,45 +77,144 @@ export const SEMANTIC_NODE_TEMPLATES: SemanticNodeTemplate[] = [
     },
   },
   {
-    semanticType: "database",
-    title: "Database",
-    shape: "cylinder",
-    colorIndex: 7,
-    data: {
-      semanticType: "database",
-      label: "Database",
-      name: "Database",
-      dbKind: "relational",
-      engine: "postgresql",
-      orm: "prisma",
-    },
-  },
-  {
     semanticType: "worker",
-    title: "Worker",
+    title: "Worker / Job",
     shape: "hexagon",
     colorIndex: 6,
+    group: "default",
     data: {
       semanticType: "worker",
-      label: "Worker",
-      name: "Worker",
+      label: "Worker / Job",
+      name: "Worker / Job",
+      responsibilities: ["Process asynchronous work safely"],
+      layerRole: "background-job",
       triggerType: "manual-or-event",
       retryPolicy: "required",
       idempotencyRequired: true,
     },
   },
   {
-    semanticType: "auth-module",
-    title: "Auth",
+    semanticType: "database",
+    title: "Database",
+    shape: "cylinder",
+    colorIndex: 7,
+    group: "default",
+    data: {
+      semanticType: "database",
+      label: "Database",
+      name: "Database",
+      responsibilities: ["Persist durable application data"],
+      layerRole: "state-store",
+      dbKind: "relational",
+      engine: "postgresql",
+      orm: "prisma",
+    },
+  },
+  {
+    semanticType: "event-channel",
+    title: "Event Channel",
+    shape: "diamond",
+    colorIndex: 3,
+    group: "default",
+    data: {
+      semanticType: "event-channel",
+      label: "Event Channel",
+      name: "Event Channel",
+      responsibilities: ["Carry asynchronous domain events or commands"],
+      layerRole: "message-channel",
+      eventsEmitted: [],
+      eventsConsumed: [],
+    },
+  },
+  {
+    semanticType: "external-system",
+    title: "External System",
+    shape: "hexagon",
+    colorIndex: 3,
+    group: "default",
+    data: {
+      semanticType: "external-system",
+      label: "External System",
+      name: "External System",
+      responsibilities: ["Represent an external dependency or provider"],
+      layerRole: "external-provider",
+      securityNotes: "",
+      trustNotes: "",
+    },
+  },
+  {
+    semanticType: "identity-auth",
+    title: "Identity / Auth",
     shape: "pill",
     colorIndex: 2,
+    group: "default",
     data: {
-      semanticType: "auth-module",
-      label: "Auth Module",
-      name: "Auth Module",
+      semanticType: "identity-auth",
+      label: "Identity / Auth",
+      name: "Identity / Auth",
+      responsibilities: ["Authenticate users, sessions, and access boundaries"],
+      layerRole: "identity-boundary",
       authStrategy: "internal-cookie-session",
       sessionMode: "httpOnly-cookie",
       emailVerification: true,
+    },
+  },
+  {
+    semanticType: "generic-component",
+    title: "Generic Component",
+    shape: "rectangle",
+    colorIndex: 0,
+    group: "default",
+    data: {
+      semanticType: "generic-component",
+      label: "Generic Component",
+      name: "Generic Component",
+      responsibilities: [],
+      layerRole: "custom",
+    },
+  },
+  {
+    semanticType: "actor",
+    title: "Actor",
+    shape: "circle",
+    colorIndex: 2,
+    group: "advanced",
+    data: {
+      semanticType: "actor",
+      label: "Actor",
+      name: "Actor",
+      responsibilities: ["Initiates or participates in system interactions"],
+      layerRole: "external-persona",
+    },
+  },
+  {
+    semanticType: "cache-store",
+    title: "Cache / Session Store",
+    shape: "cylinder",
+    colorIndex: 6,
+    group: "advanced",
+    data: {
+      semanticType: "cache-store",
+      label: "Cache / Session Store",
+      name: "Cache / Session Store",
+      responsibilities: ["Hold short-lived or session-oriented state"],
+      layerRole: "ephemeral-store",
+      dataOwned: [],
+    },
+  },
+  {
+    semanticType: "object-store",
+    title: "Object / File Store",
+    shape: "cylinder",
+    colorIndex: 7,
+    group: "advanced",
+    data: {
+      semanticType: "object-store",
+      label: "Object / File Store",
+      name: "Object / File Store",
+      responsibilities: ["Store objects, files, or generated artifacts"],
+      layerRole: "blob-store",
+      dataOwned: [],
     },
   },
 ]
@@ -194,13 +328,30 @@ export function baseNodeData(label = ""): CanvasNodeData {
   return {
     label,
     name: label,
-    semanticType: "unclassified",
+    semanticType: label ? "generic-component" : "unclassified",
     status: "draft",
+    maturity: "draft",
+    responsibilities: [],
     tags: [],
     sourceRefs: [],
     assumptions: [],
     decisionRefs: [],
     owner: null,
+    boundary: "",
+    layerRole: "",
+    interfacesExposed: [],
+    interfacesConsumed: [],
+    dataOwned: [],
+    dataRead: [],
+    eventsEmitted: [],
+    eventsConsumed: [],
+    technology: "",
+    runtimeKind: "",
+    securityNotes: "",
+    privacyClass: "",
+    operationalNotes: "",
+    openQuestions: [],
+    promptPackNotes: "",
     color: NODE_COLORS[0].fill,
     textColor: NODE_COLORS[0].text,
     shape: "rectangle",
@@ -210,9 +361,35 @@ export function baseNodeData(label = ""): CanvasNodeData {
 export function semanticDefaultsForType(
   semanticType: SemanticNodeType
 ): Partial<CanvasNodeData> {
-  if (semanticType === "service") {
+  const canonicalType = normalizeSemanticNodeType(semanticType) ?? "generic-component"
+  const common = {
+    semanticType: canonicalType,
+    layerRole: "",
+    responsibilities: [],
+  } satisfies Partial<CanvasNodeData>
+
+  if (canonicalType === "actor") {
     return {
-      semanticType,
+      ...common,
+      layerRole: "external-persona",
+      responsibilities: ["Initiates or participates in system interactions"],
+    }
+  }
+
+  if (canonicalType === "client-surface") {
+    return {
+      ...common,
+      layerRole: "experience",
+      responsibilities: ["User-facing interaction surface"],
+      interfacesConsumed: [],
+    }
+  }
+
+  if (canonicalType === "service") {
+    return {
+      ...common,
+      layerRole: "application-service",
+      responsibilities: ["Own a bounded runtime responsibility"],
       serviceKind: "application-service",
       runtime: "node-typescript",
       language: "typescript",
@@ -222,36 +399,87 @@ export function semanticDefaultsForType(
     }
   }
 
-  if (semanticType === "database") {
+  if (canonicalType === "database") {
     return {
-      semanticType,
+      ...common,
+      layerRole: "state-store",
+      responsibilities: ["Persist durable application data"],
       dbKind: "relational",
       engine: "postgresql",
       orm: "prisma",
     }
   }
 
-  if (semanticType === "worker") {
+  if (canonicalType === "event-channel") {
     return {
-      semanticType,
+      ...common,
+      layerRole: "message-channel",
+      responsibilities: ["Carry asynchronous domain events or commands"],
+      eventsEmitted: [],
+      eventsConsumed: [],
+    }
+  }
+
+  if (canonicalType === "worker") {
+    return {
+      ...common,
+      layerRole: "background-job",
+      responsibilities: ["Process asynchronous work safely"],
       triggerType: "manual-or-event",
       retryPolicy: "required",
       idempotencyRequired: true,
     }
   }
 
-  if (semanticType === "auth-module") {
+  if (canonicalType === "external-system") {
     return {
-      semanticType,
+      ...common,
+      layerRole: "external-provider",
+      responsibilities: ["Represent an external dependency or provider"],
+      securityNotes: "",
+      trustNotes: "",
+    }
+  }
+
+  if (canonicalType === "identity-auth") {
+    return {
+      ...common,
+      layerRole: "identity-boundary",
+      responsibilities: ["Authenticate users, sessions, and access boundaries"],
       authStrategy: "internal-cookie-session",
       sessionMode: "httpOnly-cookie",
       emailVerification: true,
     }
   }
 
-  if (semanticType === "endpoint") {
+  if (canonicalType === "generic-component") {
     return {
-      semanticType,
+      ...common,
+      layerRole: "custom",
+    }
+  }
+
+  if (canonicalType === "cache-store") {
+    return {
+      ...common,
+      layerRole: "ephemeral-store",
+      responsibilities: ["Hold short-lived or session-oriented state"],
+      dataOwned: [],
+    }
+  }
+
+  if (canonicalType === "object-store") {
+    return {
+      ...common,
+      layerRole: "blob-store",
+      responsibilities: ["Store objects, files, or generated artifacts"],
+      dataOwned: [],
+    }
+  }
+
+  if (canonicalType === "endpoint") {
+    return {
+      ...common,
       method: "POST",
       path: "/resource",
       authRequired: true,
@@ -259,48 +487,51 @@ export function semanticDefaultsForType(
     }
   }
 
-  if (semanticType === "entity") {
+  if (canonicalType === "entity") {
     return {
-      semanticType,
+      ...common,
       fields: [],
       tenantKey: "tenantId",
     }
   }
 
-  if (semanticType === "event-contract") {
+  if (canonicalType === "event-contract") {
     return {
-      semanticType,
+      ...common,
       direction: "published",
       topic: "domain.event",
       deliveryGuarantee: "at-least-once",
     }
   }
 
-  if (semanticType === "business-rule") {
+  if (canonicalType === "business-rule") {
     return {
-      semanticType,
+      ...common,
       ruleType: "invariant",
     }
   }
 
-  if (semanticType === "validation-rule") {
+  if (canonicalType === "validation-rule") {
     return {
-      semanticType,
+      ...common,
       validationScope: "input",
       severity: "error",
     }
   }
 
-  if (semanticType === "policy") {
+  if (canonicalType === "policy") {
     return {
-      semanticType,
+      ...common,
       policyKind: "security",
       enforcementMode: "server-side",
       auditRequired: true,
     }
   }
 
-  return { semanticType }
+  return {
+    ...common,
+    layerRole: semanticNodeTypeLabel(canonicalType).toLowerCase().replace(/\s+\/\s+/g, "-"),
+  }
 }
 
 export function semanticTemplateSize(template: SemanticNodeTemplate) {

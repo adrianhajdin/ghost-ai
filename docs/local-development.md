@@ -157,6 +157,14 @@ npm run test:canvas-v2-guardrails
 
 The guardrail smoke verifies that legacy deterministic design/Prompt Pack generation stays removed, every node can still receive a child layer through safe CanvasDoc patch apply, Semantic Scan remains advisory for architecture completeness, Architect remains the LLM architecture reasoning surface, React Flow remains the renderer, CanvasDoc remains the source of truth, and no app-builder, repo write-back, Nimbus, or image/multimodal behavior has been introduced.
 
+Canvas v2 Phase 1 semantic foundation checks can also be run locally:
+
+```bash
+npm run test:canvas-v2-phase1
+```
+
+The Phase 1 smoke verifies the compact node taxonomy, legacy type normalization, typed relationship model, metadata persistence, child-layer availability for every node type, advisory semantic validation, Prompt Pack/Architect prompt context, and removal of legacy design-generation paths.
+
 ## Keys Needed For Full Behavior
 
 Full local artifact persistence does not require an external object storage key. Local AI smoke does not require an external AI key because `AI_PROVIDER=mock` is the default:
