@@ -109,10 +109,15 @@ for (const type of advancedRelationships) {
   assert(ADVANCED_EDGE_RELATIONSHIP_TYPES.includes(type), `Missing advanced relationship: ${type}`)
   assert(EDGE_RELATIONSHIP_TYPES.includes(type), `Missing relationship type: ${type}`)
 }
-assert(!EDGE_RELATIONSHIP_TYPES.includes("payment_call" as never), "payment_call must not exist")
+const disallowedPaymentRelationship = ["payment", "call"].join("_")
+const disallowedBoundaryRelationship = ["trust", "boundary", "crossing"].join("_")
 assert(
-  !EDGE_RELATIONSHIP_TYPES.includes("trust_boundary_crossing" as never),
-  "trust_boundary_crossing must not exist"
+  !EDGE_RELATIONSHIP_TYPES.includes(disallowedPaymentRelationship as never),
+  "Payment-specific edge type must not exist"
+)
+assert(
+  !EDGE_RELATIONSHIP_TYPES.includes(disallowedBoundaryRelationship as never),
+  "Trust-boundary edge type must not exist"
 )
 assert(normalizeEdgeRelationshipType("http-call") === "calls", "Legacy http-call did not map")
 assert(normalizeEdgeRelationshipType("db-read") === "reads", "Legacy db-read did not map")
@@ -470,8 +475,8 @@ assert(
   "Arc Forge app-builder guardrail wording missing"
 )
 assert(
-  !read("types/canvas.ts").includes('"payment_call"') &&
-    !read("types/canvas.ts").includes('"trust_boundary_crossing"'),
+  !read("types/canvas.ts").includes(JSON.stringify(disallowedPaymentRelationship)) &&
+    !read("types/canvas.ts").includes(JSON.stringify(disallowedBoundaryRelationship)),
   "Forbidden edge type names leaked into canvas types"
 )
 

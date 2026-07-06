@@ -1,4 +1,5 @@
 import type { CanvasPyramid } from "@/lib/canvas/canvas-pyramid"
+import type { LlmContextPyramid } from "@/lib/ai/context/llm-context-pyramid"
 import {
   LLM_PROMPT_PACK_SCHEMA_URL,
   LLM_PROMPT_PACK_VERSION,
@@ -16,6 +17,7 @@ export interface GeneratePromptPackInput {
   selectedNodeIds: string[]
   instructions?: string
   canvasPyramid: CanvasPyramid
+  llmContextPyramid?: LlmContextPyramid
   previousPromptPack?: LlmPromptPackProposal | null
 }
 
@@ -26,7 +28,7 @@ export function buildPromptPackSystemPrompt() {
 
 Arc Forge v1 is an AI-assisted architecture canvas and prompt composer, not an application-building runtime. Arc Forge does not execute, build, deploy, write app code, write to external repositories, or create pull requests in target apps.
 
-You have direct access to the architecture canvas pyramid as JSON. Read the root graph, child graphs, nested layers, nodes, edges, labels, descriptions, metadata, custom architecture types, graph metadata, assumptions, warnings, semanticScan summaries, childLayerSummary values, lastLayerSummary values, decompositionStatus values, and subcanvasRef values.
+You have direct access to the architecture canvas pyramid as JSON and, when provided, an LLM context pyramid v2. Use the LLM context pyramid as the compact working brief for current graph focus, selected nodes, connected edges, graph summary cache, related layers, semantic warnings, and recent project-wide conversation provenance. Use the full canvas pyramid as the source of truth for exact node, edge, graph, and metadata details. Read the root graph, child graphs, nested layers, nodes, edges, labels, descriptions, metadata, custom architecture types, graph metadata, assumptions, warnings, semanticScan summaries, childLayerSummary values, lastLayerSummary values, decompositionStatus values, and subcanvasRef values.
 Use compact node metadataSummary records such as responsibilities, owner, boundary, trustZone, exposure, dataSensitivity, authExpectation, layerRole, status/maturity, interfacesExposed, interfacesConsumed, dataOwned, dataRead, eventsEmitted, eventsConsumed, securityNotes, trustNotes, safetyNotes, runtime/deployment notes, observability notes, AI provider/tool metadata, reference metadata, openQuestions, and promptPackNotes when present. Use edge metadataSummary records such as relationshipType, mechanism/protocol, criticality, directionality, reliability, retryPolicy, idempotencyNotes, consistency, rateLimitNotes, timeoutNotes, fallbackNotes, ownershipNotes, dataSubject/eventSubject, syncMode, securityNotes, and trustNotes when present.
 
 Generate an LLM-authored Prompt Pack from that canvas pyramid. The output must include a global prompt, layer prompts, node prompts, optional canvas improvement proposal, clarification questions, assumptions, warnings, and suggested next steps.
@@ -50,6 +52,9 @@ Rules:
 - Do not execute anything or claim Arc Forge builds the app.
 - If the canvas is ambiguous, include clarificationQuestions.
 - If the canvas seems weak, include canvasImprovementProposal operations. Destructive delete operations may be mentioned only as unsupported recommendations; they will not be applied in this version.
+- Use the v2 canvas patch contract for canvasImprovementProposal. Supported operations are update-node, update-edge, add-node, add-edge, create-layer, and update-graph. Use tempId for new nodes/edges referenced by later operations, never invent existing IDs, and keep graphId/parentGraphId targets explicit.
+- Treat missing owner metadata, empty child layers, untyped edges, and trust boundary advisories as warnings, assumptions, or improvement proposals.
+- These advisory findings must not prevent Prompt Pack generation unless they are true safety/schema/auth/transport issues.
 - Return only JSON. Do not wrap JSON in markdown fences.
 
 Return JSON matching this transport shape:
@@ -111,6 +116,9 @@ export function buildPromptPackUserPrompt(input: GeneratePromptPackInput) {
     "",
     "Canvas pyramid JSON:",
     JSON.stringify(input.canvasPyramid, null, 2),
+    "",
+    "LLM context pyramid JSON:",
+    JSON.stringify(input.llmContextPyramid ?? null, null, 2),
     "",
     "Previously generated prompt pack:",
     JSON.stringify(input.previousPromptPack ?? null, null, 2),

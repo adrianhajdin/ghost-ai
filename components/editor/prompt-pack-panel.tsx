@@ -25,6 +25,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import type { LlmCanvasPatchPreviewResult } from "@/lib/canvas/llm-canvas-patch"
 
 type PromptPackTargetAgent = "codex" | "claude-code" | "generic-ai-builder"
 type PromptPackScopeMode = "full-project" | "current-layer" | "selected-nodes"
@@ -65,6 +66,7 @@ interface PromptPackNodePrompt {
 interface CanvasImprovementProposal {
   summary: string
   operations: Array<{ op: string; [key: string]: unknown }>
+  preview?: LlmCanvasPatchPreviewResult
 }
 
 interface PromptPackProposal {
@@ -261,6 +263,8 @@ export function PromptPackPanel({
   const currentStatus = run?.status ?? "idle"
   const improvement = proposal?.canvasImprovementProposal ?? null
   const hasImprovements = Boolean(improvement?.operations.length)
+  const improvementPreview = improvement?.preview
+  const improvementCanApply = improvementPreview ? improvementPreview.canApply : hasImprovements
   const selectedScopeBlocked =
     scopeMode === "selected-nodes" && selectedNodeIds.length === 0
 
@@ -371,6 +375,7 @@ export function PromptPackPanel({
 
   async function handleApplyImprovements() {
     if (!improvement || improvement.operations.length === 0) return
+    if (!improvementCanApply) return
     setApplyLoading(true)
     setError(null)
 
@@ -764,8 +769,42 @@ export function PromptPackPanel({
                         <p className="font-semibold text-accent-primary">
                           {improvement.summary || "Canvas improvement proposal"}
                         </p>
-                        <p className="mt-1">Apply only after reviewing the operations below.</p>
+                        <p className="mt-1">
+                          {improvementPreview
+                            ? "Server preview validates target graphs, temp IDs, and blocking issues before apply."
+                            : "Apply only after reviewing the operations below."}
+                        </p>
                       </div>
+                      {improvementPreview?.affectedGraphIds.length ? (
+                        <div className="flex flex-wrap gap-1.5 rounded-lg border border-border-subtle bg-bg-surface p-3">
+                          {improvementPreview.affectedGraphIds.map((graphId) => (
+                            <span
+                              key={graphId}
+                              className="rounded-full border border-accent-primary/25 bg-accent-primary-dim px-2 py-1 font-mono text-[10px] text-accent-primary"
+                            >
+                              {graphId}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {improvementPreview?.issues.length ? (
+                        <div className="space-y-2">
+                          {improvementPreview.issues.slice(0, 4).map((item) => (
+                            <div
+                              key={`${item.operationIndex}-${item.message}`}
+                              className={cn(
+                                "flex gap-2 rounded-lg border p-3 text-xs",
+                                item.blocking
+                                  ? "border-state-error/30 bg-state-error/10 text-state-error"
+                                  : "border-state-warning/25 bg-state-warning/10 text-state-warning"
+                              )}
+                            >
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>{item.message}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="space-y-2">
                         {improvement.operations.map((operation, index) => (
                           <div
@@ -784,7 +823,7 @@ export function PromptPackPanel({
                       <Button
                         className="gap-2 rounded-lg bg-accent-primary text-bg-base hover:bg-accent-primary/90"
                         onClick={() => void handleApplyImprovements()}
-                        disabled={applyLoading}
+                        disabled={applyLoading || !improvementCanApply}
                         aria-label="Apply canvas improvements"
                       >
                         {applyLoading ? (

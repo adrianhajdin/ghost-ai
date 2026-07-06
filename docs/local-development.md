@@ -181,6 +181,14 @@ npm run test:canvas-v2-phase3
 
 The Phase 3 smoke verifies compact relationship types with richer edge metadata, advisory trust boundary and runtime/AI findings, cross-layer Reference Proxy metadata, contextual advanced node types outside the default palette, proxy child-layer support, Prompt Pack/Architect/Architecture Draft prompt context, and continued removal of legacy design generation, image/multimodal support, app-builder behavior, and forbidden edge types.
 
+Canvas v2 Phase 4 LLM context and patch quality checks can also be run locally:
+
+```bash
+npm run test:canvas-v2-phase4
+```
+
+The Phase 4 smoke verifies derived graph summary caches, LLM Context Pyramid v2 payloads, node and edge patch previews, temp ID mapping for proposed nodes/edges, blocking previews for unknown existing IDs or unresolved temp references, existing child-layer population, Semantic Scan Ask/Fix routing into Architect, advisory-only Prompt Pack quality guidance, and continued removal of legacy design generation, image/multimodal support, app-builder behavior, and unsafe unattended apply behavior.
+
 ## Keys Needed For Full Behavior
 
 Full local artifact persistence does not require an external object storage key. Local AI smoke does not require an external AI key because `AI_PROVIDER=mock` is the default:

@@ -132,5 +132,6 @@ export async function getRecentArchitectMessagesForProvider(input: {
     content: message.content,
     createdAt: message.createdAt,
     graphId: message.graphId,
+    metadata: message.metadata,
   }))
 }

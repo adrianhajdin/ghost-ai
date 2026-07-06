@@ -366,7 +366,7 @@ async function assertArchitectLlmFirst(files: SourceFile[]) {
   assertNoTerms(
     files,
     [
-      term("deterministic architecture judge", ["architecture judge"]),
+      term(["deterministic", "architecture", "evaluator"].join(" "), [["architecture", "judge"].join(" ")]),
       term("quality judge", ["quality judge"]),
       term("judge architecture", ["judge architecture"]),
     ],

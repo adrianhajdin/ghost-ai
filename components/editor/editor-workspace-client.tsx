@@ -40,6 +40,10 @@ export function EditorWorkspaceClient({
   const [promptPackOpen, setPromptPackOpen] = useState(false)
   const [pendingTemplate, setPendingTemplate] = useState<CanvasTemplate | null>(null)
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
+  const [architectCommand, setArchitectCommand] = useState<{
+    id: string
+    message: string
+  } | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle")
   const [usesDesktopGutters, setUsesDesktopGutters] = useState(false)
   const saveFnRef = useRef<() => void>(() => {})
@@ -48,6 +52,13 @@ export function EditorWorkspaceClient({
 
   const handleSaveStatusChange = useCallback((status: SaveStatus) => setSaveStatus(status), [])
   const handleSaveReady = useCallback((fn: () => void) => { saveFnRef.current = fn }, [])
+  const handleSendSemanticFindingToArchitect = useCallback((message: string) => {
+    setAiSidebarOpen(true)
+    setArchitectCommand({
+      id: `semantic-scan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      message,
+    })
+  }, [])
 
   useEffect(() => {
     let initializedAiSidebar = false
@@ -105,6 +116,7 @@ export function EditorWorkspaceClient({
               onSaveStatusChange={handleSaveStatusChange}
               onSaveReady={handleSaveReady}
               onSelectedNodeIdsChange={setSelectedNodeIds}
+              onSendSemanticFindingToArchitect={handleSendSemanticFindingToArchitect}
             />
           </main>
 
@@ -127,6 +139,7 @@ export function EditorWorkspaceClient({
             graphId={graphId}
             selectedNodeIds={selectedNodeIds}
             onOpenPromptPack={() => setPromptPackOpen(true)}
+            architectCommand={architectCommand}
           />
 
           <ProjectDialogs {...actions} />

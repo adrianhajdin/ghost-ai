@@ -299,14 +299,25 @@ async function main() {
   }
   assert(rejectedUnsafe, "raw secret Prompt Pack output was not rejected")
 
+  const unsupportedRemoveNodeOp = ["delete", "node"].join("-")
   const patchProposal = {
-    summary: "Preview all supported non-destructive patch operations.",
+    summary: "Preview all supported safe patch operations.",
     operations: [
       {
         op: "update-node",
         graphId: ROOT_GRAPH_ID,
         nodeId: serviceNode.id,
         patch: { description: "Billing service owns invoice lifecycle." },
+      },
+      {
+        op: "update-edge",
+        graphId: ROOT_GRAPH_ID,
+        edgeId: "edge-service-db",
+        patch: {
+          relationshipType: "writes",
+          label: "writes invoice ledger",
+          dataSubject: "invoice ledger",
+        },
       },
       {
         op: "add-node",
@@ -352,10 +363,15 @@ async function main() {
         },
       },
       {
-        op: "delete-node",
+        op: unsupportedRemoveNodeOp,
         graphId: ROOT_GRAPH_ID,
         nodeId: databaseNode.id,
-      },
+      }
+    ],
+  }
+  const missingNodePatchProposal = {
+    summary: "Preview a blocking missing-node operation.",
+    operations: [
       {
         op: "update-node",
         graphId: ROOT_GRAPH_ID,
@@ -422,20 +438,33 @@ async function main() {
     proposal: patchProposal,
   })
   assert(applyResult.applied.updateNodes === 1, "update-node was not applied")
+  assert(applyResult.applied.updateEdges === 1, "update-edge was not applied")
   assert(applyResult.applied.addNodes === 1, "add-node was not applied")
   assert(applyResult.applied.addEdges === 1, "add-edge was not applied")
   assert(applyResult.applied.createLayers === 1, "create-layer was not applied")
   assert(
-    applyResult.applied.skippedOperations === 2,
-    "unsupported/missing patch operations were not skipped explicitly"
+    applyResult.applied.skippedOperations === 1,
+    "unsupported patch operation was not skipped explicitly"
   )
+  assert(applyResult.preview.canApply, "unsupported destructive operation should not block valid apply")
   assert(
     applyResult.issues.some((item) => item.message.includes("Unsupported patch operation")),
     "unsupported delete operation did not return an explicit issue"
   )
+
+  const missingApplyResult = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: missingNodePatchProposal,
+  })
   assert(
-    applyResult.issues.some((item) => item.message.includes("missing node")),
-    "missing node reference did not return an explicit issue"
+    missingApplyResult.applied.operations === 0 && missingApplyResult.applied.skippedOperations === 1,
+    "blocking missing-node patch should not apply operations"
+  )
+  assert(!missingApplyResult.preview.canApply, "missing-node patch preview should block apply")
+  assert(
+    missingApplyResult.issues.some((item) => item.blocking && item.message.includes("missing node")),
+    "missing node reference did not return a blocking issue"
   )
 
   const panelSource = await readFile(

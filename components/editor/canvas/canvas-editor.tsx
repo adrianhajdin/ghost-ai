@@ -202,6 +202,7 @@ interface CanvasEditorProps {
   onSaveStatusChange?: (status: SaveStatus) => void
   onSaveReady?: (saveFn: () => void) => void
   onSelectedNodeIdsChange?: (nodeIds: string[]) => void
+  onSendSemanticFindingToArchitect?: (message: string) => void
 }
 
 export function CanvasEditor({
@@ -212,6 +213,7 @@ export function CanvasEditor({
   onSaveStatusChange,
   onSaveReady,
   onSelectedNodeIdsChange,
+  onSendSemanticFindingToArchitect,
 }: CanvasEditorProps) {
   const {
     nodes,
@@ -1059,6 +1061,7 @@ export function CanvasEditor({
           warnings={semanticWarnings}
           semanticScanState={semanticScanState}
           onSemanticScanStateChange={updateSemanticScanState}
+          onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
         />
         <PresenceCursors />
         <CollaboratorAvatars />
