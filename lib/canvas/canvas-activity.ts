@@ -1,5 +1,9 @@
 import type { CanvasDocV1 } from "@/lib/canvas/canvas-doc"
-import { validateCanvasSemantics } from "@/lib/canvas/semantic-validation"
+import {
+  normalizeSemanticScanState,
+  summarizeSemanticFindingSeverities,
+  validateCanvasSemantics,
+} from "@/lib/canvas/semantic-validation"
 
 export const CANVAS_ACTIVITY_PANEL_KEY = "canvasActivity" as const
 
@@ -24,6 +28,9 @@ export interface CanvasActivityEvent {
   edgeCount: number
   activeSemanticFindings: number
   blockingSemanticFindings: number
+  problemSemanticFindings: number
+  warningSemanticFindings: number
+  infoSemanticFindings: number
   changes: CanvasActivityChangeSummary
   applied?: {
     operations: number
@@ -119,9 +126,16 @@ export function summarizeCanvasActivityChanges(
 
 function semanticCounts(doc: CanvasDocV1) {
   const findings = validateCanvasSemantics({ nodes: doc.nodes, edges: doc.edges })
+  const summary = summarizeSemanticFindingSeverities(
+    findings,
+    normalizeSemanticScanState(doc.panels.semanticScan)
+  )
   return {
-    activeSemanticFindings: findings.length,
-    blockingSemanticFindings: findings.filter((finding) => finding.blocking).length,
+    activeSemanticFindings: summary.activeFindings,
+    blockingSemanticFindings: summary.blockingFindings,
+    problemSemanticFindings: summary.problemFindings,
+    warningSemanticFindings: summary.warningFindings,
+    infoSemanticFindings: summary.infoFindings,
   }
 }
 
@@ -156,6 +170,9 @@ export function createCanvasActivityEvent(input: {
     edgeCount: input.afterDoc.edges.length,
     activeSemanticFindings: counts.activeSemanticFindings,
     blockingSemanticFindings: counts.blockingSemanticFindings,
+    problemSemanticFindings: counts.problemSemanticFindings,
+    warningSemanticFindings: counts.warningSemanticFindings,
+    infoSemanticFindings: counts.infoSemanticFindings,
     changes,
     applied: input.applied,
   }

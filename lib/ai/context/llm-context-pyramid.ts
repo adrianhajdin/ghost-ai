@@ -91,7 +91,16 @@ export interface LlmContextGraphCard {
   childGraphCount: number
   nodes: LlmContextNodeCard[]
   edges: LlmContextEdgeCard[]
-  semanticScan: Pick<CanvasPyramidSemanticScanSummary, "activeCount" | "blockingCount" | "groupedCounts">
+  semanticScan: Pick<
+    CanvasPyramidSemanticScanSummary,
+    | "activeCount"
+    | "blockingCount"
+    | "problemCount"
+    | "warningCount"
+    | "infoCount"
+    | "hiddenCount"
+    | "groupedCounts"
+  >
 }
 
 export interface LlmContextNodeCard {
@@ -146,6 +155,9 @@ export interface LlmContextCanvasActivityEvent {
   edgeCount: number
   activeSemanticFindings: number
   blockingSemanticFindings: number
+  problemSemanticFindings?: number
+  warningSemanticFindings?: number
+  infoSemanticFindings?: number
   changes?: unknown
   applied?: unknown
 }
@@ -159,6 +171,9 @@ export interface LlmContextAppFeedback {
     edgeCount: number
     semanticScanActiveCount: number
     semanticScanBlockingCount: number
+    semanticScanProblemCount: number
+    semanticScanWarningCount: number
+    semanticScanInfoCount: number
     lastCanvasEvent: LlmContextCanvasActivityEvent | null
   } | null
   recentCanvasEvents: LlmContextCanvasActivityEvent[]
@@ -240,6 +255,10 @@ function graphCard(graph: CanvasPyramidGraph): LlmContextGraphCard {
     semanticScan: {
       activeCount: graph.semanticScan.activeCount,
       blockingCount: graph.semanticScan.blockingCount,
+      problemCount: graph.semanticScan.problemCount,
+      warningCount: graph.semanticScan.warningCount,
+      infoCount: graph.semanticScan.infoCount,
+      hiddenCount: graph.semanticScan.hiddenCount,
       groupedCounts: graph.semanticScan.groupedCounts,
     },
   }
@@ -400,6 +419,9 @@ function appFeedbackEventFromGraph(
     edgeCount: event.edgeCount,
     activeSemanticFindings: event.activeSemanticFindings,
     blockingSemanticFindings: event.blockingSemanticFindings,
+    problemSemanticFindings: event.problemSemanticFindings,
+    warningSemanticFindings: event.warningSemanticFindings,
+    infoSemanticFindings: event.infoSemanticFindings,
     changes: event.changes,
     applied: event.applied,
   }
@@ -437,6 +459,9 @@ function appFeedback(input: {
         edgeCount: input.currentGraph.edges.length,
         semanticScanActiveCount: input.currentGraph.semanticScan.activeCount,
         semanticScanBlockingCount: input.currentGraph.semanticScan.blockingCount,
+        semanticScanProblemCount: input.currentGraph.semanticScan.problemCount,
+        semanticScanWarningCount: input.currentGraph.semanticScan.warningCount,
+        semanticScanInfoCount: input.currentGraph.semanticScan.infoCount,
         lastCanvasEvent: currentEvent,
       }
     : null

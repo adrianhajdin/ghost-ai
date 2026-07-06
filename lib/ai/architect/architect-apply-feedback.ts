@@ -3,8 +3,8 @@ import type { LlmCanvasPatchApplyResult } from "@/lib/canvas/llm-canvas-patch"
 import {
   SEMANTIC_VALIDATION_CATEGORY_LABELS,
   groupSemanticFindings,
-  isSemanticFindingHidden,
   normalizeSemanticScanState,
+  summarizeSemanticFindingSeverities,
   validateCanvasSemantics,
 } from "@/lib/canvas/semantic-validation"
 
@@ -19,6 +19,9 @@ export interface ArchitectApplySemanticScanSummary {
   activeFindings: number
   hiddenFindings: number
   blockingFindings: number
+  problemFindings: number
+  warningFindings: number
+  infoFindings: number
   topCategories: string[]
 }
 
@@ -38,15 +41,15 @@ export function summarizeSemanticScanAfterApply(
 ): ArchitectApplySemanticScanSummary {
   const findings = validateCanvasSemantics({ nodes: doc.nodes, edges: doc.edges })
   const scanState = normalizeSemanticScanState(doc.panels.semanticScan)
-  const activeFindings = findings.filter(
-    (finding) => !isSemanticFindingHidden(finding, scanState)
-  )
-  const grouped = [...groupSemanticFindings(activeFindings).entries()]
+  const severitySummary = summarizeSemanticFindingSeverities(findings, scanState)
+  const grouped = [...groupSemanticFindings(severitySummary.active).entries()]
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 3)
     .map(([category, categoryFindings]) => {
       const label = SEMANTIC_VALIDATION_CATEGORY_LABELS[category]
-      return `${label}: ${categoryFindings.length}`
+      const problemCount = categoryFindings.filter((finding) => finding.severity !== "info").length
+      const infoCount = categoryFindings.length - problemCount
+      return `${label}: ${problemCount} issue${problemCount === 1 ? "" : "s"}${infoCount ? `, ${infoCount} info` : ""}`
     })
 
   return {
@@ -54,10 +57,13 @@ export function summarizeSemanticScanAfterApply(
     title: doc.title,
     nodes: doc.nodes.length,
     edges: doc.edges.length,
-    totalFindings: findings.length,
-    activeFindings: activeFindings.length,
-    hiddenFindings: Math.max(0, findings.length - activeFindings.length),
-    blockingFindings: activeFindings.filter((finding) => finding.blocking).length,
+    totalFindings: severitySummary.totalFindings,
+    activeFindings: severitySummary.activeFindings,
+    hiddenFindings: severitySummary.hiddenFindings,
+    blockingFindings: severitySummary.blockingFindings,
+    problemFindings: severitySummary.problemFindings,
+    warningFindings: severitySummary.warningFindings,
+    infoFindings: severitySummary.infoFindings,
     topCategories: grouped,
   }
 }
@@ -96,13 +102,13 @@ export function buildArchitectApplyFeedbackMessage(
     ? result.dirtyGraphIds.join(", ")
     : "none"
   const currentScanSummary = currentScan
-    ? ` Current graph semantic scan after apply: ${currentScan.activeFindings} active finding${currentScan.activeFindings === 1 ? "" : "s"} (${currentScan.blockingFindings} blocking) across ${currentScan.nodes} nodes and ${currentScan.edges} edges${currentScan.topCategories.length ? `; top categories: ${currentScan.topCategories.join(", ")}` : ""}.`
+    ? ` Current graph Semantic Scan after apply: ${currentScan.problemFindings} issue${currentScan.problemFindings === 1 ? "" : "s"} (${currentScan.blockingFindings} blocking, ${currentScan.warningFindings} warning${currentScan.warningFindings === 1 ? "" : "s"}) and ${currentScan.infoFindings} info signal${currentScan.infoFindings === 1 ? "" : "s"} across ${currentScan.nodes} nodes and ${currentScan.edges} edges${currentScan.topCategories.length ? `; top categories: ${currentScan.topCategories.join(", ")}` : ""}.`
     : ""
   const allScanSummary = scanSummaries.length
     ? ` Updated graph scan summaries: ${scanSummaries
         .map(
           (summary) =>
-            `${summary.graphId}: ${summary.activeFindings} active, ${summary.hiddenFindings} hidden`
+            `${summary.graphId}: ${summary.problemFindings} issue${summary.problemFindings === 1 ? "" : "s"}, ${summary.infoFindings} info, ${summary.hiddenFindings} hidden`
         )
         .join("; ")}.`
     : ""

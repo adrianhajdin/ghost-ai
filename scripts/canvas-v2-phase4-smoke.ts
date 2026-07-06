@@ -28,6 +28,7 @@ import {
   buildArchitectSystemPrompt,
   buildArchitectUserPrompt,
 } from "@/lib/ai/architect/architect-provider-contract"
+import { buildArchitectCanvasManual } from "@/lib/ai/architect/architect-canvas-manual"
 import { buildArchitectApplyFeedbackMessage } from "@/lib/ai/architect/architect-apply-feedback"
 import {
   buildPromptPackSystemPrompt,
@@ -283,6 +284,12 @@ async function main() {
       context.currentGraph?.semanticScan.activeCount,
     "LLM app feedback missed current graph semantic scan facts"
   )
+  assert(
+    context.currentGraph?.semanticScan.problemCount !== undefined &&
+      context.appFeedback.currentGraphFacts?.semanticScanProblemCount ===
+        context.currentGraph.semanticScan.problemCount,
+    "LLM app feedback missed problem/info semantic scan facts"
+  )
   assert(!contextJson.includes('"position"'), "LLM context should not include node coordinates")
   assert(!contextJson.includes('"selected"'), "LLM context leaked selected UI state")
   assert(!contextJson.includes('"dragging"'), "LLM context leaked dragging UI state")
@@ -391,6 +398,15 @@ async function main() {
     "Architect apply feedback missed user-facing apply copy"
   )
   assert(
+    updateEdgeFeedback.content.includes("issue") &&
+      updateEdgeFeedback.summary.semanticScanAfterApply.every(
+        (summary) =>
+          typeof summary.problemFindings === "number" &&
+          typeof summary.infoFindings === "number"
+      ),
+    "Architect apply feedback missed separated Semantic Scan issue/info counts"
+  )
+  assert(
     !updateEdgeFeedback.content.includes("canvasPatchProposal"),
     "Architect apply feedback leaked internal patch field name"
   )
@@ -407,8 +423,119 @@ async function main() {
   const applyActivity = rootAfterEdgeApply?.panels[CANVAS_ACTIVITY_PANEL_KEY]
   assert(
     JSON.stringify(applyActivity).includes("architect-apply") &&
-      JSON.stringify(applyActivity).includes("activeSemanticFindings"),
+      JSON.stringify(applyActivity).includes("activeSemanticFindings") &&
+      JSON.stringify(applyActivity).includes("problemSemanticFindings"),
     "Apply did not persist factual canvas activity for LLM context"
+  )
+
+  const nestedNodeMetadataPatch = {
+    summary: "Repair node metadata using update-node metadata payload.",
+    operations: [
+      {
+        op: "update-node",
+        graphId: ROOT_GRAPH_ID,
+        nodeId: catalog.id,
+        patch: {
+          metadata: {
+            description: "Owns catalog read APIs and product availability handoff.",
+            responsibilities: ["Serve product catalog reads", "Expose product availability contracts"],
+            owner: "Catalog domain",
+            customArchitectureField: "kept-for-llm-handoff",
+          },
+        },
+      },
+    ],
+  }
+  const nestedNodePreview = await previewLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: nestedNodeMetadataPatch,
+  })
+  assert(nestedNodePreview.canApply, "update-node metadata patch should be applyable")
+  const nestedNodeApply = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: nestedNodeMetadataPatch,
+  })
+  assert(nestedNodeApply.applied.updateNodes === 1, "update-node metadata patch did not apply")
+  const rootAfterNestedPatch = await readCanvasDoc(projectId, ROOT_GRAPH_ID)
+  const catalogAfterNestedPatch = rootAfterNestedPatch?.nodes.find((item) => item.id === catalog.id)
+  assert(
+    catalogAfterNestedPatch?.data.description === "Owns catalog read APIs and product availability handoff.",
+    "update-node metadata patch did not merge description into node data"
+  )
+  assert(
+    Array.isArray(catalogAfterNestedPatch?.data.responsibilities) &&
+      catalogAfterNestedPatch.data.responsibilities.includes("Serve product catalog reads"),
+    "update-node metadata patch did not merge responsibilities into node data"
+  )
+  assert(
+    catalogAfterNestedPatch?.data.customArchitectureField === "kept-for-llm-handoff",
+    "update-node did not preserve custom durable node metadata"
+  )
+
+  const emptyNodePreview = await previewLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: {
+      summary: "Empty update should be blocked.",
+      operations: [
+        {
+          op: "update-node",
+          graphId: ROOT_GRAPH_ID,
+          nodeId: catalog.id,
+          patch: {},
+        },
+      ],
+    },
+  })
+  assert(!emptyNodePreview.canApply, "Empty update-node patch should block apply")
+  assert(
+    emptyNodePreview.issues.some((item) => item.message.includes("empty")),
+    "Empty update-node patch did not report a clear issue"
+  )
+  const emptyNodeApply = await applyLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: {
+      summary: "Empty update should not write.",
+      operations: [
+        {
+          op: "update-node",
+          graphId: ROOT_GRAPH_ID,
+          nodeId: catalog.id,
+          patch: {},
+        },
+      ],
+    },
+  })
+  assert(emptyNodeApply.applied.operations === 0, "Empty update-node patch should not apply")
+  assert(emptyNodeApply.dirtyGraphIds.length === 0, "Empty update-node patch should not dirty graphs")
+
+  const noOpEdgePreview = await previewLlmCanvasImprovementProposal({
+    projectId,
+    currentGraphId: ROOT_GRAPH_ID,
+    proposal: {
+      summary: "No-op edge update should be blocked.",
+      operations: [
+        {
+          op: "update-edge",
+          graphId: ROOT_GRAPH_ID,
+          edgeId: "edge-catalog-db",
+          patch: {
+            relationshipType: "reads",
+            semanticType: "reads",
+            label: "reads product data",
+            dataSubject: "product catalog",
+          },
+        },
+      ],
+    },
+  })
+  assert(!noOpEdgePreview.canApply, "No-op update-edge patch should block apply")
+  assert(
+    noOpEdgePreview.issues.some((item) => item.message.includes("does not change")),
+    "No-op update-edge patch did not report a clear issue"
   )
 
   const unknownTempPatch = {
@@ -562,7 +689,58 @@ async function main() {
     canvasPyramid: await loadProjectCanvasPyramid(projectId),
     llmContextPyramid: context,
   })
+  const architectManual = buildArchitectCanvasManual()
+  assert(
+    architectManual.operations.some((item) => item.op === "update-node") &&
+      architectManual.operations.some((item) => item.op === "create-layer"),
+    "Architect canvas manual missed core operations"
+  )
+  assert(
+    architectManual.hardRules.some((item) => item.includes("Any node in any graph can be edited")) &&
+      architectManual.hardRules.some((item) => item.includes("not a restrictive allowlist")),
+    "Architect canvas manual missed graph-wide edit rules"
+  )
+  assert(
+    architectManual.nodeFields.some((item) => item.field.includes("serviceKind")) &&
+      architectManual.nodeFields.some((item) => item.field === "promptPackNotes") &&
+      architectManual.edgeFields.some((item) => item.field === "relationshipType") &&
+      architectManual.edgeFields.some((item) => item.field === "idempotencyNotes"),
+    "Architect canvas manual missed inspector node/edge fields"
+  )
+  assert(
+    architectManual.nodeDurableFields.includes("semanticType") &&
+      architectManual.nodeDurableFields.includes("subcanvasRef") &&
+      architectManual.nodeDurableFields.includes("shape") &&
+      architectManual.nodeDurableFields.includes("architectureType") &&
+      architectManual.edgeDurableFields.includes("relationshipType") &&
+      architectManual.edgeDurableFields.includes("labelItems") &&
+      architectManual.edgeDurableFields.includes("ownershipNotes"),
+    "Architect canvas manual missed durable node/edge field inventory"
+  )
+  assert(
+    architectManual.semanticScanRepairPlaybook.some((item) =>
+      item.findingPattern.includes("Node is unclassified")
+    ) &&
+      architectManual.semanticScanRepairPlaybook.some((item) =>
+        item.findingPattern.includes("edge is untyped")
+      ),
+    "Architect canvas manual missed Semantic Scan repair playbook"
+  )
   assert(architectPrompt.includes("LLM context pyramid"), "Architect prompt missed LLM context pyramid")
+  assert(architectPrompt.includes("canvasManual"), "Architect prompt missed canvas manual")
+  assert(
+    architectPrompt.includes("Any durable CanvasNode.data or CanvasEdge.data field may be patched") &&
+      architectPrompt.includes("Every node can have a child layer"),
+    "Architect prompt missed durable-field and any-node layer instructions"
+  )
+  assert(
+    architectPrompt.includes("semanticScanRepairPlaybook") &&
+      architectPrompt.includes("nodeDurableFields") &&
+      architectPrompt.includes("edgeDurableFields") &&
+      architectPrompt.includes("relationshipType") &&
+      architectPrompt.includes("promptPackNotes"),
+    "Architect prompt missed field dictionary or repair playbook"
+  )
   assert(architectPrompt.includes("unknown tempId references block apply"), "Architect prompt missed tempId guardrail")
   assert(architectPrompt.includes("Temp IDs are transport references only"), "Architect prompt missed tempId persistence rule")
   assert(buildArchitectSystemPrompt().includes("update-edge"), "Architect prompt missed update-edge support")

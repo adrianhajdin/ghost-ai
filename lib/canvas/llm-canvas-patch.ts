@@ -216,6 +216,42 @@ function patchText(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
 }
 
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`
+  }
+
+  if (isRecord(value)) {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, childValue]) => `${JSON.stringify(key)}:${stableStringify(childValue)}`)
+      .join(",")}}`
+  }
+
+  return JSON.stringify(value)
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return stableStringify(left) === stableStringify(right)
+}
+
+function normalizeDataPatch(patch: Record<string, unknown>) {
+  const sanitizedPatch = sanitizeLlmCanvasPatchRecord(patch)
+  const metadata = isRecord(sanitizedPatch.metadata)
+    ? sanitizeLlmCanvasPatchRecord(sanitizedPatch.metadata)
+    : {}
+  const nextPatch = {
+    ...metadata,
+    ...sanitizedPatch,
+  }
+  delete nextPatch.metadata
+  return nextPatch
+}
+
+function hasPatchFields(patch: Record<string, unknown>) {
+  return Object.keys(patch).length > 0
+}
+
 function looksLikeTempId(value: unknown) {
   if (typeof value !== "string") return false
   return /^(temp|tmp|new|draft)[_-]/i.test(value.trim())
@@ -467,7 +503,7 @@ function addEdgeToDoc(
 }
 
 function applyNodePatchData(node: CanvasNode, patch: Record<string, unknown>) {
-  const sanitizedPatch = sanitizeLlmCanvasPatchRecord(patch)
+  const sanitizedPatch = normalizeDataPatch(patch)
   const semanticTypeText = patchText(sanitizedPatch.semanticType)
   const typeText = patchText(sanitizedPatch.type)
   const nextData: Record<string, unknown> = {
@@ -492,7 +528,7 @@ function applyNodePatchData(node: CanvasNode, patch: Record<string, unknown>) {
 }
 
 function applyEdgePatchData(edge: CanvasEdge, patch: Record<string, unknown>) {
-  const sanitizedPatch = sanitizeLlmCanvasPatchRecord(patch)
+  const sanitizedPatch = normalizeDataPatch(patch)
   const relationshipTypeText =
     patchText(sanitizedPatch.relationshipType) ??
     patchText(sanitizedPatch.semanticType)
@@ -532,6 +568,25 @@ function applyEdgePatchData(edge: CanvasEdge, patch: Record<string, unknown>) {
   return {
     ...edge,
     data: nextData as CanvasEdge["data"],
+  }
+}
+
+function buildGraphPatchDoc(doc: CanvasDocV1, patchInput: Record<string, unknown>) {
+  const patch = sanitizeLlmCanvasPatchRecord(patchInput)
+  const metadata = isRecord(patch.metadata)
+    ? sanitizeLlmCanvasPatchRecord(patch.metadata)
+    : null
+  const hasMetadata = metadata ? Object.keys(metadata).length > 0 : false
+
+  return {
+    ...doc,
+    title: patchText(patch.title) ?? doc.title,
+    summary:
+      typeof patch.summary === "string" ? patch.summary.trim() || null : doc.summary,
+    layerKind: patchText(patch.layerKind) ?? doc.layerKind,
+    panels: hasMetadata
+      ? { ...doc.panels, llmCanvasPatchMetadata: metadata }
+      : doc.panels,
   }
 }
 
@@ -902,18 +957,24 @@ export async function previewLlmCanvasImprovementProposal(input: {
       if (!node) {
         issue(issues, operationIndex, "Canvas patch references a missing node.", "error")
       } else {
-        docsByGraphId.set(
-          graphId,
-          sanitizeDoc({
-            ...doc,
-            nodes: doc.nodes.map((item) =>
-              item.id === node.id
-                ? applyNodePatchData(item, updateNodeOperation.patch)
-                : item
-            ),
-          })
-        )
-        dirtyGraphIds.add(graphId)
+        const normalizedPatch = normalizeDataPatch(updateNodeOperation.patch)
+        const nextNode = applyNodePatchData(node, updateNodeOperation.patch)
+        if (!hasPatchFields(normalizedPatch)) {
+          issue(issues, operationIndex, "Update node patch is empty after sanitization.", "error")
+        } else if (sameValue(node.data, nextNode.data)) {
+          issue(issues, operationIndex, "Update node patch does not change any durable node field.", "error")
+        } else {
+          docsByGraphId.set(
+            graphId,
+            sanitizeDoc({
+              ...doc,
+              nodes: doc.nodes.map((item) =>
+                item.id === node.id ? nextNode : item
+              ),
+            })
+          )
+          dirtyGraphIds.add(graphId)
+        }
       }
     } else if (operation.op === "update-edge") {
       const updateEdgeOperation = operation as UpdateEdgeOperation
@@ -921,18 +982,24 @@ export async function previewLlmCanvasImprovementProposal(input: {
       if (!edge) {
         issue(issues, operationIndex, "Canvas patch references a missing edge.", "error")
       } else {
-        docsByGraphId.set(
-          graphId,
-          sanitizeDoc({
-            ...doc,
-            edges: doc.edges.map((item) =>
-              item.id === edge.id
-                ? applyEdgePatchData(item, updateEdgeOperation.patch)
-                : item
-            ),
-          })
-        )
-        dirtyGraphIds.add(graphId)
+        const normalizedPatch = normalizeDataPatch(updateEdgeOperation.patch)
+        const nextEdge = applyEdgePatchData(edge, updateEdgeOperation.patch)
+        if (!hasPatchFields(normalizedPatch)) {
+          issue(issues, operationIndex, "Update edge patch is empty after sanitization.", "error")
+        } else if (sameValue(edge.data, nextEdge.data)) {
+          issue(issues, operationIndex, "Update edge patch does not change any durable edge field.", "error")
+        } else {
+          docsByGraphId.set(
+            graphId,
+            sanitizeDoc({
+              ...doc,
+              edges: doc.edges.map((item) =>
+                item.id === edge.id ? nextEdge : item
+              ),
+            })
+          )
+          dirtyGraphIds.add(graphId)
+        }
       }
     } else if (operation.op === "add-node") {
       const nextDoc = addNodeToDoc(
@@ -954,17 +1021,20 @@ export async function previewLlmCanvasImprovementProposal(input: {
     } else if (operation.op === "update-graph") {
       const updateGraphOperation = operation as UpdateGraphOperation
       const patch = sanitizeLlmCanvasPatchRecord(updateGraphOperation.patch)
-      docsByGraphId.set(graphId, {
-        ...doc,
-        title: patchText(patch.title) ?? doc.title,
-        summary:
-          typeof patch.summary === "string" ? patch.summary.trim() || null : doc.summary,
-        layerKind: patchText(patch.layerKind) ?? doc.layerKind,
-        panels: patch.metadata
-          ? { ...doc.panels, llmCanvasPatchMetadata: patch.metadata }
-          : doc.panels,
-      })
-      dirtyGraphIds.add(graphId)
+      const nextDoc = buildGraphPatchDoc(doc, updateGraphOperation.patch)
+      if (!hasPatchFields(patch)) {
+        issue(issues, operationIndex, "Update graph patch is empty after sanitization.", "error")
+      } else if (
+        doc.title === nextDoc.title &&
+        doc.summary === nextDoc.summary &&
+        doc.layerKind === nextDoc.layerKind &&
+        sameValue(doc.panels, nextDoc.panels)
+      ) {
+        issue(issues, operationIndex, "Update graph patch does not change any durable graph field.", "error")
+      } else {
+        docsByGraphId.set(graphId, nextDoc)
+        dirtyGraphIds.add(graphId)
+      }
     }
 
     const operationMappings = newTempIdMappings(graphId, beforeMap, tempIdMap)
@@ -1117,12 +1187,22 @@ export async function applyLlmCanvasImprovementProposal(input: {
         issue(issues, operationIndex, "Canvas patch references a missing node.")
         continue
       }
+      const normalizedPatch = normalizeDataPatch(updateNodeOperation.patch)
+      const nextNode = applyNodePatchData(node, updateNodeOperation.patch)
+      if (!hasPatchFields(normalizedPatch)) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update node patch is empty after sanitization.", "error")
+        continue
+      }
+      if (sameValue(node.data, nextNode.data)) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update node patch does not change any durable node field.", "error")
+        continue
+      }
       const nextDoc = sanitizeDoc({
         ...doc,
         nodes: doc.nodes.map((item) =>
-          item.id === node.id
-            ? applyNodePatchData(item, updateNodeOperation.patch)
-            : item
+          item.id === node.id ? nextNode : item
         ),
       })
       docsByGraphId.set(graphId, nextDoc)
@@ -1140,12 +1220,22 @@ export async function applyLlmCanvasImprovementProposal(input: {
         issue(issues, operationIndex, "Canvas patch references a missing edge.")
         continue
       }
+      const normalizedPatch = normalizeDataPatch(updateEdgeOperation.patch)
+      const nextEdge = applyEdgePatchData(edge, updateEdgeOperation.patch)
+      if (!hasPatchFields(normalizedPatch)) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update edge patch is empty after sanitization.", "error")
+        continue
+      }
+      if (sameValue(edge.data, nextEdge.data)) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update edge patch does not change any durable edge field.", "error")
+        continue
+      }
       const nextDoc = sanitizeDoc({
         ...doc,
         edges: doc.edges.map((item) =>
-          item.id === edge.id
-            ? applyEdgePatchData(item, updateEdgeOperation.patch)
-            : item
+          item.id === edge.id ? nextEdge : item
         ),
       })
       docsByGraphId.set(graphId, nextDoc)
@@ -1186,15 +1276,21 @@ export async function applyLlmCanvasImprovementProposal(input: {
     if (operation.op === "update-graph") {
       const updateGraphOperation = operation as UpdateGraphOperation
       const patch = sanitizeLlmCanvasPatchRecord(updateGraphOperation.patch)
-      const nextDoc: CanvasDocV1 = {
-        ...doc,
-        title: patchText(patch.title) ?? doc.title,
-        summary:
-          typeof patch.summary === "string" ? patch.summary.trim() || null : doc.summary,
-        layerKind: patchText(patch.layerKind) ?? doc.layerKind,
-        panels: patch.metadata
-          ? { ...doc.panels, llmCanvasPatchMetadata: patch.metadata }
-          : doc.panels,
+      const nextDoc = buildGraphPatchDoc(doc, updateGraphOperation.patch)
+      if (!hasPatchFields(patch)) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update graph patch is empty after sanitization.", "error")
+        continue
+      }
+      if (
+        doc.title === nextDoc.title &&
+        doc.summary === nextDoc.summary &&
+        doc.layerKind === nextDoc.layerKind &&
+        sameValue(doc.panels, nextDoc.panels)
+      ) {
+        applied.skippedOperations += 1
+        issue(issues, operationIndex, "Update graph patch does not change any durable graph field.", "error")
+        continue
       }
       docsByGraphId.set(graphId, nextDoc)
       dirtyGraphIds.add(graphId)

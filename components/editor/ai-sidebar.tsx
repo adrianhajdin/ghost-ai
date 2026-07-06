@@ -95,6 +95,7 @@ interface ArchitectRunOutput {
 }
 
 const ARCHITECT_APPLY_FEEDBACK_KIND = "canvas_patch_apply_result"
+const ARCHITECT_MANUAL_CANVAS_EVENT_KIND = "canvas_manual_save_result"
 
 function architectMessageMetadata(message: ArchitectMessage) {
   const metadata = message.metadata
@@ -106,6 +107,11 @@ function architectMessageMetadata(message: ArchitectMessage) {
 
 function isArchitectApplyFeedbackMessage(message: ArchitectMessage) {
   return architectMessageMetadata(message)?.kind === ARCHITECT_APPLY_FEEDBACK_KIND
+}
+
+function isArchitectAppEventMessage(message: ArchitectMessage) {
+  const kind = architectMessageMetadata(message)?.kind
+  return kind === ARCHITECT_APPLY_FEEDBACK_KIND || kind === ARCHITECT_MANUAL_CANVAS_EVENT_KIND
 }
 
 function getFilename(filePath: string): string {
@@ -202,30 +208,6 @@ function getArchitectRunErrorMessage(error?: string) {
   return "Architect connection dropped. Reconnect and try again."
 }
 
-function getArchitectProviderCopy(provider: ArchitectProviderMetadata | null) {
-  if (!provider || provider.providerName === "mock" || provider.isMockProvider) {
-    return {
-      label: "Mock mode",
-      detail: "Mock provider — fixture replies",
-      className: "border-state-warning/25 bg-state-warning/10 text-state-warning",
-    }
-  }
-
-  if (provider.providerName === "google") {
-    return {
-      label: "Gemini / Google mode",
-      detail: "Real LLM provider",
-      className: "border-accent-ai/30 bg-accent-ai/10 text-accent-ai-text",
-    }
-  }
-
-  return {
-    label: "OpenAI-compatible mode",
-    detail: "Real LLM provider",
-    className: "border-accent-ai/30 bg-accent-ai/10 text-accent-ai-text",
-  }
-}
-
 export function AiSidebar({
   isOpen,
   onClose,
@@ -259,8 +241,6 @@ export function AiSidebar({
     useState<LlmCanvasImprovementProposal | null>(null)
   const [architectError, setArchitectError] = useState<string | null>(null)
   const [architectApplyMessage, setArchitectApplyMessage] = useState<string | null>(null)
-  const [architectProvider, setArchitectProvider] =
-    useState<ArchitectProviderMetadata | null>(null)
   const [isClearingArchitectConversation, setIsClearingArchitectConversation] =
     useState(false)
   const [animatedArchitectMessageIds, setAnimatedArchitectMessageIds] = useState<Set<string>>(
@@ -331,13 +311,9 @@ export function AiSidebar({
       if (!response.ok) throw new Error("Failed to load Architect history")
       const data = (await response.json()) as {
         messages?: ArchitectMessage[]
-        provider?: ArchitectProviderMetadata
       }
       const nextMessages = Array.isArray(data.messages) ? data.messages : []
       setArchitectMessages(nextMessages)
-      if (data.provider) {
-        setArchitectProvider(data.provider)
-      }
 
       const latestReplyMessage = [...nextMessages]
         .reverse()
@@ -390,6 +366,40 @@ export function AiSidebar({
     scrollScrollAreaToBottomAfterRender(architectScrollRef.current)
   }, [])
 
+  useEffect(() => {
+    if (!isOpen) return undefined
+
+    function handleArchitectAppEvent(event: Event) {
+      const detail = (event as CustomEvent).detail
+      if (!detail || typeof detail !== "object") return
+      if ((detail as { projectId?: unknown }).projectId !== projectId) return
+
+      const message = (detail as { message?: unknown }).message
+      if (!message || typeof message !== "object" || Array.isArray(message)) return
+      const candidate = message as Partial<ArchitectMessage>
+      if (
+        typeof candidate.id !== "string" ||
+        candidate.role !== "assistant" ||
+        typeof candidate.content !== "string" ||
+        typeof candidate.graphId !== "string" ||
+        typeof candidate.createdAt !== "string"
+      ) {
+        return
+      }
+
+      setArchitectMessages((prev) => {
+        if (prev.some((item) => item.id === candidate.id)) return prev
+        return [...prev, candidate as ArchitectMessage]
+      })
+      scrollArchitectToBottom()
+    }
+
+    window.addEventListener("arc-forge:architect-app-event", handleArchitectAppEvent)
+    return () => {
+      window.removeEventListener("arc-forge:architect-app-event", handleArchitectAppEvent)
+    }
+  }, [isOpen, projectId, scrollArchitectToBottom])
+
   const handleArchitectMessageStreamDone = useCallback((messageId: string) => {
     setAnimatedArchitectMessageIds((prev) => {
       if (!prev.has(messageId)) return prev
@@ -423,14 +433,6 @@ export function AiSidebar({
         return
       }
 
-      if (typedOutput.provider) {
-        setArchitectProvider(typedOutput.provider)
-      } else if (typedOutput.summary?.providerName) {
-        setArchitectProvider({
-          providerName: typedOutput.summary.providerName,
-          isMockProvider: Boolean(typedOutput.summary.isMockProvider),
-        })
-      }
       setArchitectReply(typedOutput.reply)
       setArchitectPatchProposal(typedOutput.reply.canvasPatchProposal ?? null)
       setArchitectError(null)
@@ -657,6 +659,9 @@ export function AiSidebar({
           graphId: string
           activeFindings: number
           blockingFindings: number
+          problemFindings?: number
+          warningFindings?: number
+          infoFindings?: number
         }>
       }
 
@@ -676,8 +681,11 @@ export function AiSidebar({
       const currentScan = data.semanticScanAfterApply?.find(
         (summary) => summary.graphId === graphId
       )
+      const currentProblems = currentScan?.problemFindings ?? currentScan?.activeFindings
+      const currentWarnings = currentScan?.warningFindings ?? 0
+      const currentInfo = currentScan?.infoFindings ?? 0
       const scanSummary = currentScan
-        ? ` Semantic Scan now has ${currentScan.activeFindings} active signal${currentScan.activeFindings === 1 ? "" : "s"} on this layer.`
+        ? ` Semantic Scan now has ${currentProblems} issue${currentProblems === 1 ? "" : "s"} (${currentScan.blockingFindings} blocking, ${currentWarnings} warning${currentWarnings === 1 ? "" : "s"}) and ${currentInfo} info signal${currentInfo === 1 ? "" : "s"} on this layer.`
         : " Architect thread was updated with the apply result."
       setArchitectApplyMessage(
         `Applied ${appliedOps} canvas operation${appliedOps === 1 ? "" : "s"}${skippedSummary}${issueSummary}.${scanSummary}`
@@ -840,7 +848,6 @@ export function AiSidebar({
 
   const architectHandoff = architectReply?.promptPackHandoff
   const isAiBusy = isArchitectThinking || isApplyingArchitectPatch || isSpecGenerating
-  const providerCopy = getArchitectProviderCopy(architectProvider)
   const showRealtimeWarning =
     realtimeStatus === "disconnected" || realtimeStatus === "error"
 
@@ -991,53 +998,39 @@ export function AiSidebar({
         {/* Architect Tab */}
         <TabsContent value="architect" className="min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-h-0 flex-col">
-            <div className="shrink-0 border-b border-border-default bg-bg-surface/95 px-3 py-2 lg:px-4 lg:py-3">
-              <div className="grid gap-2 lg:gap-3">
-                <div className="grid grid-cols-3 gap-2 [@media(max-height:460px)]:hidden">
+            <div className="shrink-0 border-b border-border-default/80 bg-bg-surface/95 px-3 py-2">
+              <div className="grid gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5 [@media(max-height:460px)]:hidden">
                   <MetricPill label="Nodes" value={nodes.length} />
                   <MetricPill label="Edges" value={edges.length} />
                   <MetricPill label="Selected" value={selectedNodeIds.length} />
                 </div>
 
-                <div className="rounded-2xl border border-accent-ai/20 bg-accent-ai/10 p-2.5 lg:p-3">
-                  <div className="flex items-start gap-2">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent-ai-text" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-text-primary">
+                <div className="rounded-xl border border-accent-ai/20 bg-accent-ai/10 px-2.5 py-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent-ai-text" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-text-primary">
                         {AI_ASSISTANT_NAME}
                       </p>
-                      <p className="mt-1 break-all font-mono text-[10px] text-text-faint">
-                        {graphId}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex items-center justify-between gap-2 lg:mt-3">
-                    <div
-                      className={cn(
-                        "min-w-0 rounded-full border px-2.5 py-1 text-[10px]",
-                        providerCopy.className
-                      )}
-                      title={providerCopy.detail}
-                    >
-                      <span className="block truncate font-semibold">{providerCopy.label}</span>
-                      <span className="block truncate opacity-80">{providerCopy.detail}</span>
+                      <p className="truncate font-mono text-[9px] text-text-faint">{graphId}</p>
                     </div>
                     <button
                       type="button"
                       aria-label="Clear Architect conversation"
+                      title="Clear Architect conversation"
                       onClick={handleClearArchitectConversation}
                       disabled={
                         isClearingArchitectConversation ||
                         (architectMessages.length === 0 && !architectReply)
                       }
-                      className="flex h-7 shrink-0 items-center gap-1 rounded-lg border border-border-subtle bg-bg-elevated px-2 text-[10px] text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border-subtle bg-bg-elevated text-text-muted transition-colors hover:border-border-default hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {isClearingArchitectConversation ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
                       ) : (
                         <Trash2 className="h-3 w-3" />
                       )}
-                      Reset
                     </button>
                   </div>
                 </div>
@@ -1051,11 +1044,13 @@ export function AiSidebar({
               </div>
             </div>
 
-            <ScrollArea
-              className="min-h-0 flex-1 overflow-hidden"
-              ref={architectScrollRef as React.Ref<HTMLDivElement>}
-            >
-              <div className="grid gap-3 px-4 py-3 pb-4">
+            <div className="relative min-h-0 flex-1 overflow-hidden bg-gradient-to-b from-bg-elevated/20 via-bg-surface/0 to-bg-surface/0">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-5 bg-gradient-to-b from-bg-surface via-bg-surface/80 to-transparent" />
+              <ScrollArea
+                className="h-full min-h-0 overflow-hidden"
+                ref={architectScrollRef as React.Ref<HTMLDivElement>}
+              >
+                <div className="grid gap-3 px-4 pb-4 pt-4">
                 {architectMessages.length === 0 ? (
                   <div className="flex flex-col items-center gap-3 rounded-2xl border border-border-subtle bg-bg-elevated px-4 py-8 text-center">
                     <Bot className="h-6 w-6 text-accent-ai-text" />
@@ -1070,7 +1065,7 @@ export function AiSidebar({
                   <div className="flex flex-col gap-3">
                     {architectMessages.map((message) => {
                       const isUser = message.role === "user"
-                      const isAppEvent = isArchitectApplyFeedbackMessage(message)
+                      const isAppEvent = isArchitectAppEventMessage(message)
                       const shouldAnimate =
                         !isUser && !isAppEvent && animatedArchitectMessageIds.has(message.id)
                       const replyDetails = isUser ? null : readReplyFromMessage(message)
@@ -1179,8 +1174,9 @@ export function AiSidebar({
                     </Button>
                   </div>
                 ) : null}
-              </div>
-            </ScrollArea>
+                </div>
+              </ScrollArea>
+            </div>
 
             <div className="shrink-0 border-t border-border-default p-3">
               <div className="grid gap-2 rounded-2xl border border-border-subtle bg-bg-elevated p-3">
@@ -1714,9 +1710,9 @@ function ArchitectPatchPreview({
 
 function MetricPill({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2">
-      <p className="text-[10px] text-text-faint">{label}</p>
-      <p className="mt-0.5 text-sm font-semibold text-text-primary">{value}</p>
+    <div className="min-w-0 rounded-lg border border-border-default/80 bg-bg-elevated/80 px-2 py-1.5">
+      <p className="truncate text-[9px] leading-none text-text-faint">{label}</p>
+      <p className="mt-1 text-xs font-semibold leading-none text-text-primary">{value}</p>
     </div>
   )
 }

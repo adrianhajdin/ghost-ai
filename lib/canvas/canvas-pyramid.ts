@@ -5,6 +5,8 @@ import { ROOT_GRAPH_ID, isValidGraphId } from "@/lib/canvas/graph-ids"
 import {
   SEMANTIC_VALIDATION_CATEGORY_LABELS,
   groupSemanticFindings,
+  normalizeSemanticScanState,
+  summarizeSemanticFindingSeverities,
   validateCanvasSemantics,
 } from "@/lib/canvas/semantic-validation"
 import {
@@ -69,12 +71,18 @@ export interface CanvasPyramidEdge {
 export interface CanvasPyramidSemanticScanSummary {
   activeCount: number
   blockingCount: number
+  problemCount: number
+  warningCount: number
+  infoCount: number
+  hiddenCount: number
   groupedCounts: Array<{
     category: string
     label: string
     count: number
     highCount: number
     blockingCount: number
+    problemCount: number
+    infoCount: number
   }>
   findings: Array<{
     id: string
@@ -198,11 +206,19 @@ function sanitizeEdge(edge: CanvasDocV1["edges"][number]): CanvasPyramidEdge {
 
 function semanticScanSummary(doc: CanvasDocV1): CanvasPyramidSemanticScanSummary {
   const findings = validateCanvasSemantics({ nodes: doc.nodes, edges: doc.edges })
-  const grouped = groupSemanticFindings(findings)
+  const summary = summarizeSemanticFindingSeverities(
+    findings,
+    normalizeSemanticScanState(doc.panels.semanticScan)
+  )
+  const grouped = groupSemanticFindings(summary.active)
 
   return {
-    activeCount: findings.length,
-    blockingCount: findings.filter((finding) => finding.blocking).length,
+    activeCount: summary.activeFindings,
+    blockingCount: summary.blockingFindings,
+    problemCount: summary.problemFindings,
+    warningCount: summary.warningFindings,
+    infoCount: summary.infoFindings,
+    hiddenCount: summary.hiddenFindings,
     groupedCounts: [...grouped.entries()].map(([category, groupFindings]) => ({
       category,
       label: SEMANTIC_VALIDATION_CATEGORY_LABELS[category],
@@ -210,8 +226,10 @@ function semanticScanSummary(doc: CanvasDocV1): CanvasPyramidSemanticScanSummary
       highCount: groupFindings.filter((finding) => finding.qualitySeverity === "high")
         .length,
       blockingCount: groupFindings.filter((finding) => finding.blocking).length,
+      problemCount: groupFindings.filter((finding) => finding.severity !== "info").length,
+      infoCount: groupFindings.filter((finding) => finding.severity === "info").length,
     })),
-    findings: findings.slice(0, 30).map((finding) => ({
+    findings: summary.active.slice(0, 30).map((finding) => ({
       id: finding.id,
       category: finding.category,
       severity: finding.qualitySeverity ?? finding.severity,

@@ -178,6 +178,40 @@ export function isSemanticFindingHidden(
   )
 }
 
+export interface SemanticFindingSeveritySummary {
+  totalFindings: number
+  activeFindings: number
+  hiddenFindings: number
+  blockingFindings: number
+  errorFindings: number
+  warningFindings: number
+  infoFindings: number
+  problemFindings: number
+  active: SemanticValidationResult[]
+}
+
+export function summarizeSemanticFindingSeverities(
+  findings: SemanticValidationResult[],
+  state: SemanticScanState = EMPTY_SEMANTIC_SCAN_STATE
+): SemanticFindingSeveritySummary {
+  const active = findings.filter((findingResult) => !isSemanticFindingHidden(findingResult, state))
+  const errorFindings = active.filter((findingResult) => findingResult.severity === "error").length
+  const warningFindings = active.filter((findingResult) => findingResult.severity === "warning").length
+  const infoFindings = active.filter((findingResult) => findingResult.severity === "info").length
+
+  return {
+    totalFindings: findings.length,
+    activeFindings: active.length,
+    hiddenFindings: Math.max(0, findings.length - active.length),
+    blockingFindings: active.filter((findingResult) => findingResult.blocking).length,
+    errorFindings,
+    warningFindings,
+    infoFindings,
+    problemFindings: errorFindings + warningFindings,
+    active,
+  }
+}
+
 export function groupSemanticFindings(findings: SemanticValidationResult[]) {
   const groups = new Map<SemanticValidationCategory, SemanticValidationResult[]>()
   for (const findingResult of findings) {

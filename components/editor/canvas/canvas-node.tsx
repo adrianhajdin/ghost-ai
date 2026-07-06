@@ -231,7 +231,8 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
     return () => document.removeEventListener("pointerdown", handlePointerDown, true)
   }, [commitEdit, isEditing])
 
-  const labelClassName = isSvg ? "relative z-10 truncate px-3" : "truncate px-3"
+  const labelClassName =
+    "relative z-10 block min-w-0 max-w-full overflow-hidden truncate px-3 text-center leading-tight"
   const labelContent = hasLabel ? (
     <span
       className={labelClassName}
@@ -242,7 +243,7 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
   ) : (
     <button
       type="button"
-      className={`${labelClassName} nodrag nopan flex items-center gap-1 text-xs font-medium opacity-60 transition-opacity hover:opacity-100`}
+      className={`${labelClassName} nodrag nopan flex items-center justify-center gap-1 text-xs font-medium opacity-60 transition-opacity hover:opacity-100`}
       style={{ color: textColor, visibility: isEditing ? "hidden" : "visible" }}
       title="Add node label"
       onClick={startEditing}
@@ -326,7 +327,7 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
 
       {isSvg ? (
         <>
-          <div className="absolute inset-0">
+          <div className="absolute inset-0 overflow-hidden">
             {shape === "diamond" && <DiamondShape fill={fill} stroke={accent ?? stroke} />}
             {shape === "hexagon" && <HexagonShape fill={fill} stroke={accent ?? stroke} />}
             {shape === "cylinder" && <CylinderShape fill={fill} stroke={accent ?? stroke} />}
@@ -343,7 +344,7 @@ export function CanvasNodeComponent({ id, data, selected }: NodeProps<CanvasNode
             width: "100%",
             height: "100%",
           }}
-          className="flex items-center justify-center"
+          className="flex items-center justify-center overflow-hidden"
         >
           {labelContent}
         </div>

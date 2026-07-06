@@ -69,6 +69,20 @@ export function useCanvasAutosave(
           panels: optionsRef.current.panels,
         }),
       })
+      const data = (await res.json().catch(() => null)) as
+        | { architectEventMessage?: unknown }
+        | null
+      if (res.ok && data?.architectEventMessage) {
+        window.dispatchEvent(
+          new CustomEvent("arc-forge:architect-app-event", {
+            detail: {
+              projectId: projectIdRef.current,
+              graphId: graphIdRef.current,
+              message: data.architectEventMessage,
+            },
+          })
+        )
+      }
       setStatus(res.ok ? "saved" : "error")
     } catch {
       setStatus("error")

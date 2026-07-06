@@ -1,6 +1,7 @@
 import { z } from "zod"
 import type { CanvasPyramid, CanvasPyramidGraphIndexEntry } from "@/lib/canvas/canvas-pyramid"
 import type { LlmContextPyramid } from "@/lib/ai/context/llm-context-pyramid"
+import { buildArchitectCanvasManual } from "@/lib/ai/architect/architect-canvas-manual"
 import {
   LlmCanvasImprovementProposalSchema,
   getLlmCanvasPatchTransportIssues,
@@ -152,10 +153,11 @@ export function buildArchitectSystemPrompt() {
     "Do not say you reviewed, inspected, or analyzed the current canvas unless the user asked you to review, inspect, analyze, or find missing pieces.",
     "When the user asks to change the canvas, explain the intended change before proposing a small user-approved canvas patch proposal. Do not claim that changes were already applied.",
     "In user-facing prose, call the approval button `Apply to canvas`. Never mention internal JSON field names such as canvasPatchProposal, canvasImprovementProposal, proposalVersion, or schema names to the user.",
-    "When recent messages include an `Arc Forge app event: Apply to canvas completed` entry, treat it as authoritative app feedback about what was actually applied, which graphs changed, realtime broadcast status, and post-apply Semantic Scan counts.",
+    "When recent messages include an `Arc Forge app event: Apply to canvas completed` or `Arc Forge app event: Canvas manual edit saved` entry, treat it as authoritative app feedback about what was actually applied or manually changed, which graph changed, realtime broadcast status when present, and post-event Semantic Scan counts.",
     "Do not ask the user to confirm whether a patch was applied when the app event already says Apply to canvas completed. Do not state exact remaining Semantic Scan counts unless they are present in the current canvas context or a recent app event.",
     "Canvas patches may target any graph in the provided canvas pyramid, not only the current graph. Use graphId, parentGraphId, and parentNodeId from the canvas pyramid exactly.",
     "The canvas pyramid includes semanticScan summaries, node/edge metadataSummary records, childLayerSummary, lastLayerSummary, decompositionStatus, and graph provenance. Use those compact summaries as first-class architecture context.",
+    "The user prompt includes canvasManual. Treat it as the operational contract for what Arc Forge canvas can do, which durable node/edge fields exist, and how to repair Semantic Scan findings.",
     "When provided, use the LLM context pyramid as your primary working brief: it highlights the current graph, selected nodes, connected edges, related graph summaries, semantic warnings, graph summary cache values, and recent project-wide conversation with graph provenance.",
     "The LLM context pyramid also includes appFeedback from Arc Forge application state. That section is authoritative for persisted canvas facts, manual user saves, user-approved Apply to canvas results, changed graph IDs, realtime broadcast status, and post-apply Semantic Scan counts.",
     "Manual user edits are reflected through the current CanvasDoc and appFeedback.currentGraphFacts / recentCanvasEvents. Treat those as fresh app facts even if prior chat messages said something different.",
@@ -222,6 +224,7 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
       graphIndex: summarizeGraphIndex(input.canvasPyramid.graphIndex),
     },
     llmContextPyramid: input.llmContextPyramid ?? null,
+    canvasManual: buildArchitectCanvasManual(),
     recentMessages: input.recentMessages,
     canvasPyramid: input.canvasPyramid,
   }
@@ -234,11 +237,13 @@ export function buildArchitectUserPrompt(input: GenerateArchitectReplyInput) {
     "- Use the user's language.",
     "- Do not claim a canvas patch was applied unless the user applied it.",
     "- User-facing copy must say `Apply to canvas`, not internal JSON field names like canvasPatchProposal.",
-    "- Treat recent `Arc Forge app event: Apply to canvas completed` messages as authoritative feedback from the app.",
+    "- Treat recent `Arc Forge app event: Apply to canvas completed` and `Arc Forge app event: Canvas manual edit saved` messages as authoritative feedback from the app.",
     "- If the user only asks a question, do not propose canvas changes unless needed.",
     "- Keep warnings and assumptions secondary.",
     "",
     "Use the following sanitized LLM context pyramid as your compact working context. It omits coordinates and transient UI state while preserving selected-node context, connected edges, graph summaries, related layers, semantic findings, and recent conversation graph provenance.",
+    "Use canvasManual before proposing patches. It is the Arc Forge canvas operations and field manual: supported operations, durable inspector fields, semantic type purposes, relationship type purposes, and Semantic Scan repair playbook.",
+    "The manual is not a restrictive field allowlist. If a durable node/edge field appears in CanvasDoc or the inspector, you may patch it directly unless it is raw-secret-like or transient UI state.",
     "The llmContextPyramid.appFeedback object is application-state feedback, not user chat. It tells you what the persisted canvas currently contains and what Apply to canvas/manual save events actually did.",
     "Use the full Arc Forge canvas pyramid JSON as the source of truth when you need exact node, edge, graph, or metadata details.",
     "Each graph contains semanticScan grouped counts plus nodes and edges with metadataSummary. Prefer those summaries before asking the user for information that is already present.",

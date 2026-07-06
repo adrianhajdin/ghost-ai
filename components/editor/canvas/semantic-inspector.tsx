@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
@@ -33,6 +33,7 @@ import {
   SEMANTIC_VALIDATION_CATEGORY_LABELS,
   groupSemanticFindings,
   isSemanticFindingHidden,
+  summarizeSemanticFindingSeverities,
   type SemanticScanState,
   type SemanticValidationResult,
 } from "@/lib/canvas/semantic-validation"
@@ -521,6 +522,8 @@ function WarningList({
   currentGraphId,
   onSendSemanticFindingToArchitect,
   showHidden = true,
+  spinDirection = null,
+  spinTick = 0,
 }: {
   warnings: SemanticValidationResult[]
   semanticScanState: SemanticScanState
@@ -528,6 +531,8 @@ function WarningList({
   currentGraphId: string
   onSendSemanticFindingToArchitect?: (message: string) => void
   showHidden?: boolean
+  spinDirection?: "up" | "down" | null
+  spinTick?: number
 }) {
   const visibleWarnings = warnings.filter(
     (warning) => showHidden || !isSemanticFindingHidden(warning, semanticScanState)
@@ -550,25 +555,61 @@ function WarningList({
         const Icon = warning.severity === "info" ? Info : AlertTriangle
         const color =
           warning.severity === "info" ? "text-text-muted" : "text-state-warning"
+        const severityCopy =
+          warning.severity === "error"
+            ? "Blocking"
+            : warning.severity === "warning"
+              ? "Issue"
+              : "Info"
+        const spinOffset = Math.min(index, 4)
+        const spinPulse = spinTick % 2
+        const spinTransform = spinDirection
+          ? `perspective(720px) rotateX(${
+              spinDirection === "down" ? -6 - spinPulse : 6 + spinPulse
+            }deg) translateY(${spinDirection === "down" ? -3 : 3}px) scale(${
+              1 - spinOffset * 0.007
+            })`
+          : undefined
 
         return (
           <div
             key={warning.id}
-            className="group grid min-w-0 gap-2 overflow-hidden rounded-xl border border-border-default bg-bg-elevated px-2.5 py-2 text-xs text-text-secondary shadow-[0_0_0_rgba(0,0,0,0)] transition-all duration-200 ease-out motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 hover:-translate-y-0.5 hover:border-accent-primary/30 hover:bg-bg-subtle/80 hover:shadow-[0_12px_32px_rgba(0,200,212,0.08)]"
-            style={{ animationDelay: `${index * 35}ms` }}
+            className="group grid min-w-0 max-w-full snap-center gap-2 overflow-hidden rounded-2xl border border-border-default/80 bg-bg-elevated/90 px-2.5 py-2 text-xs text-text-secondary shadow-[0_0_0_rgba(0,0,0,0)] transition-[transform,background-color,border-color,box-shadow] duration-200 ease-out will-change-transform motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-1 hover:border-accent-primary/30 hover:bg-bg-subtle/80 hover:shadow-[0_12px_32px_rgba(0,200,212,0.08)]"
+            style={{
+              animationDelay: `${index * 35}ms`,
+              transform: spinTransform,
+              transitionDelay: spinDirection ? `${spinOffset * 18}ms` : "0ms",
+            }}
           >
-            <div className="grid min-w-0 grid-cols-[auto_1fr] items-start gap-x-2">
+            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2">
               <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
-              <span className="min-w-0 max-w-full whitespace-normal break-words leading-5 text-pretty">
-                {warning.message}
-              </span>
-            </div>
-            <div className="ml-5 flex min-w-0 flex-wrap items-center gap-1.5">
-              {warning.count > 1 ? (
-                <span className="shrink-0 rounded-full border border-state-warning/25 bg-state-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-state-warning transition-colors group-hover:border-state-warning/45 group-hover:bg-state-warning/15">
-                  x{warning.count}
+              <div className="grid min-w-0 gap-1">
+                <span className="min-w-0 max-w-full whitespace-normal break-words leading-5">
+                  {warning.message}
                 </span>
-              ) : null}
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span
+                    className={
+                      "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold " +
+                      (warning.severity === "info"
+                        ? "border-border-subtle bg-bg-subtle text-text-muted"
+                        : "border-state-warning/25 bg-state-warning/10 text-state-warning")
+                    }
+                  >
+                    {severityCopy}
+                  </span>
+                  {warning.count > 1 ? (
+                    <span className="shrink-0 rounded-full border border-state-warning/25 bg-state-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-state-warning transition-colors group-hover:border-state-warning/45 group-hover:bg-state-warning/15">
+                      x{warning.count}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+            <div
+              className="flex min-w-0 max-w-full flex-wrap items-center gap-2 pl-5"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
               {onSendSemanticFindingToArchitect ? (
                 <>
                   <button
@@ -584,9 +625,9 @@ function WarningList({
                         })
                       )
                     }
-                    className="inline-flex items-center gap-1 rounded-full border border-accent-ai/25 px-1.5 py-0.5 text-[10px] text-accent-ai-text transition-all hover:-translate-y-0.5 hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
+                    className="inline-flex min-h-8 max-w-full shrink-0 items-center gap-1 rounded-full border border-accent-ai/25 px-2.5 py-1 text-[11px] text-accent-ai-text transition-colors hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
                   >
-                    <MessageSquare className="h-3 w-3" />
+                    <MessageSquare className="h-3.5 w-3.5" />
                     Ask
                   </button>
                   <button
@@ -602,9 +643,9 @@ function WarningList({
                         })
                       )
                     }
-                    className="inline-flex items-center gap-1 rounded-full border border-accent-primary/30 bg-accent-dim px-1.5 py-0.5 text-[10px] text-accent-primary transition-all hover:-translate-y-0.5 hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
+                    className="inline-flex min-h-8 max-w-full shrink-0 items-center gap-1 rounded-full border border-accent-primary/30 bg-accent-dim px-2.5 py-1 text-[11px] text-accent-primary transition-colors hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
                   >
-                    <Wrench className="h-3 w-3" />
+                    <Wrench className="h-3.5 w-3.5" />
                     Fix
                   </button>
                 </>
@@ -618,9 +659,9 @@ function WarningList({
                         nextScanState(semanticScanState, warning.ids, "intentional")
                       )
                     }
-                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-all hover:-translate-y-0.5 hover:border-accent-primary/50 hover:text-text-primary"
+                    className="min-h-8 shrink-0 rounded-full border border-border-subtle px-2.5 py-1 text-[11px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
                   >
-                    Mark intentional
+                    Intentional
                   </button>
                   <button
                     type="button"
@@ -629,7 +670,7 @@ function WarningList({
                         nextScanState(semanticScanState, warning.ids, "dismiss")
                       )
                     }
-                    className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[10px] text-text-muted transition-all hover:-translate-y-0.5 hover:border-accent-primary/50 hover:text-text-primary"
+                    className="min-h-8 shrink-0 rounded-full border border-border-subtle px-2.5 py-1 text-[11px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
                   >
                     Snooze
                   </button>
@@ -645,7 +686,7 @@ function WarningList({
                           nextScanState(semanticScanState, warning.ids, "show")
                         )
                       }
-                      className="rounded-full border border-accent-primary/25 px-1.5 py-0.5 text-[10px] text-accent-primary transition-all hover:-translate-y-0.5 hover:border-accent-primary/60"
+                      className="min-h-8 shrink-0 rounded-full border border-accent-primary/25 px-2.5 py-1 text-[11px] text-accent-primary transition-colors hover:border-accent-primary/60"
                     >
                       Show
                     </button>
@@ -662,6 +703,188 @@ function WarningList({
         </div>
       ) : null}
     </div>
+  )
+}
+
+function SemanticSignalCylinderCard({
+  warning,
+  semanticScanState,
+  onSemanticScanStateChange,
+  currentGraphId,
+  onSendSemanticFindingToArchitect,
+  slot,
+  spinDirection,
+  spinTick,
+}: {
+  warning: CondensedWarning
+  semanticScanState: SemanticScanState
+  onSemanticScanStateChange: (state: SemanticScanState) => void
+  currentGraphId: string
+  onSendSemanticFindingToArchitect?: (message: string) => void
+  slot: "above" | "focus" | "below"
+  spinDirection: "up" | "down" | null
+  spinTick: number
+}) {
+  const Icon = warning.severity === "info" ? Info : AlertTriangle
+  const color = warning.severity === "info" ? "text-text-muted" : "text-state-warning"
+  const severityCopy =
+    warning.severity === "error"
+      ? "Blocking"
+      : warning.severity === "warning"
+        ? "Issue"
+        : "Info"
+  const isFocus = slot === "focus"
+  const slotCopy =
+    slot === "above"
+      ? "Previous semantic signal"
+      : slot === "below"
+        ? "Next semantic signal"
+        : "Focused semantic signal"
+  const slotTransform =
+    slot === "above"
+      ? "rotateX(58deg) translateY(1.8rem) scale(0.92)"
+      : slot === "below"
+        ? "rotateX(-58deg) translateY(-1.8rem) scale(0.92)"
+        : ""
+  const transformOrigin =
+    slot === "above" ? "50% 100%" : slot === "below" ? "50% 0%" : "50% 50%"
+  const spinPulse = spinTick % 2
+  const wheelNudge = spinDirection
+    ? ` translateY(${spinDirection === "down" ? -8 - spinPulse : 8 + spinPulse}px) rotateX(${
+        spinDirection === "down" ? 7 : -7
+      }deg)`
+    : ""
+  const cardTransform = isFocus ? undefined : `${slotTransform}${wheelNudge}`
+
+  return (
+    <article
+      aria-label={slotCopy}
+      className={
+        "group relative grid h-full min-h-0 w-full max-w-full grid-rows-[minmax(0,1fr)_auto] gap-2 overflow-hidden rounded-2xl border px-2.5 py-2 text-xs text-text-secondary transition-[transform,opacity,background-color,border-color,box-shadow,filter] duration-[260ms] ease-out will-change-transform [backface-visibility:hidden] [transform-style:preserve-3d] " +
+        (isFocus
+          ? "border-accent-primary/45 bg-bg-elevated shadow-[0_22px_54px_rgba(0,200,212,0.16)]"
+          : "pointer-events-none border-border-default/45 bg-bg-elevated/45 opacity-50 blur-[0.15px]")
+      }
+      style={{
+        transform: cardTransform,
+        transformOrigin,
+      }}
+    >
+      <div className="pointer-events-none absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-accent-primary/40 to-transparent opacity-70" />
+      <div
+        className={
+          "pointer-events-none absolute inset-0 " +
+          (isFocus
+            ? "bg-[radial-gradient(circle_at_50%_0%,rgba(0,200,212,0.14),transparent_58%)]"
+            : "bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.025),transparent)]")
+        }
+      />
+      <div className="relative z-10 grid min-h-0 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 overflow-hidden">
+        <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} />
+        <div className="grid min-h-0 min-w-0 gap-1 overflow-hidden">
+          <span
+            className={
+              "min-w-0 max-w-full overflow-hidden whitespace-normal break-words leading-5 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
+            }
+          >
+            {warning.message}
+          </span>
+          <div className="flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden">
+            <span
+              className={
+                "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-semibold " +
+                (warning.severity === "info"
+                  ? "border-border-subtle bg-bg-subtle text-text-muted"
+                  : "border-state-warning/25 bg-state-warning/10 text-state-warning")
+              }
+            >
+              {severityCopy}
+            </span>
+            <span className="shrink-0 rounded-full border border-border-subtle bg-bg-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
+              {SEMANTIC_VALIDATION_CATEGORY_LABELS[warning.category]}
+            </span>
+            {warning.count > 1 ? (
+              <span className="shrink-0 rounded-full border border-state-warning/25 bg-state-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-state-warning">
+                x{warning.count}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      {isFocus ? (
+        <div
+          className="relative z-10 flex min-h-8 min-w-0 max-w-full flex-nowrap items-center gap-2 overflow-visible pl-5"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {onSendSemanticFindingToArchitect ? (
+            <>
+              <button
+                type="button"
+                aria-label="Ask Architect about this semantic signal"
+                title="Ask Architect about this semantic signal"
+                onClick={() =>
+                  onSendSemanticFindingToArchitect(
+                    semanticFindingArchitectPrompt({
+                      mode: "ask",
+                      graphId: currentGraphId,
+                      warning,
+                    })
+                  )
+                }
+                className="inline-flex min-h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-accent-ai/25 px-2.5 py-1 text-[11px] text-accent-ai-text transition-colors hover:border-accent-ai/60 hover:bg-accent-ai/10 hover:text-text-primary"
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Ask
+              </button>
+              <button
+                type="button"
+                aria-label="Ask Architect to propose a canvas patch for this semantic signal"
+                title="Ask Architect to propose a canvas patch for this semantic signal"
+                onClick={() =>
+                  onSendSemanticFindingToArchitect(
+                    semanticFindingArchitectPrompt({
+                      mode: "fix",
+                      graphId: currentGraphId,
+                      warning,
+                    })
+                  )
+                }
+                className="inline-flex min-h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-accent-primary/30 bg-accent-dim px-2.5 py-1 text-[11px] text-accent-primary transition-colors hover:border-accent-primary/70 hover:bg-accent-primary/15 hover:text-text-primary"
+              >
+                <Wrench className="h-3.5 w-3.5" />
+                Fix
+              </button>
+            </>
+          ) : null}
+          {warning.severity !== "error" ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  onSemanticScanStateChange(
+                    nextScanState(semanticScanState, warning.ids, "intentional")
+                  )
+                }
+                className="min-h-8 shrink-0 whitespace-nowrap rounded-full border border-border-subtle px-2.5 py-1 text-[11px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
+              >
+                Intentional
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  onSemanticScanStateChange(
+                    nextScanState(semanticScanState, warning.ids, "dismiss")
+                  )
+                }
+                className="min-h-8 shrink-0 whitespace-nowrap rounded-full border border-border-subtle px-2.5 py-1 text-[11px] text-text-muted transition-colors hover:border-accent-primary/50 hover:text-text-primary"
+              >
+                Snooze
+              </button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
   )
 }
 
@@ -682,9 +905,16 @@ function SemanticWarningBeacon({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
-  const activeWarnings = warnings.filter(
-    (warning) => !isSemanticFindingHidden(warning, semanticScanState)
+  const [spinDirection, setSpinDirection] = useState<"up" | "down" | null>(null)
+  const [spinTick, setSpinTick] = useState(0)
+  const [focusedSignalIndex, setFocusedSignalIndex] = useState(0)
+  const spinResetRef = useRef<number | null>(null)
+  const wheelGateRef = useRef(0)
+  const semanticSummary = useMemo(
+    () => summarizeSemanticFindingSeverities(warnings, semanticScanState),
+    [semanticScanState, warnings]
   )
+  const activeWarnings = semanticSummary.active
   const hiddenWarnings = warnings.filter((warning) =>
     isSemanticFindingHidden(warning, semanticScanState)
   )
@@ -692,12 +922,60 @@ function SemanticWarningBeacon({
     () => groupSemanticFindings(showHidden ? warnings : activeWarnings),
     [activeWarnings, showHidden, warnings]
   )
-  const actionableWarnings = activeWarnings.filter((warning) => warning.severity !== "info")
-  const hasErrors = warnings.some((warning) => warning.severity === "error")
-  const statusCopy =
-    actionableWarnings.length > 0
-      ? `${actionableWarnings.length} signal${actionableWarnings.length === 1 ? "" : "s"}`
+  const cylinderWarnings = useMemo(
+    () => condenseWarnings(showHidden ? warnings : activeWarnings),
+    [activeWarnings, showHidden, warnings]
+  )
+  const hasProblems = semanticSummary.problemFindings > 0
+  const hasErrors = semanticSummary.errorFindings > 0
+  const statusParts = [
+    semanticSummary.errorFindings
+      ? `${semanticSummary.errorFindings} error${semanticSummary.errorFindings === 1 ? "" : "s"}`
+      : "",
+    semanticSummary.warningFindings
+      ? `${semanticSummary.warningFindings} warning${semanticSummary.warningFindings === 1 ? "" : "s"}`
+      : "",
+  ].filter(Boolean)
+  const statusCopy = hasProblems
+    ? statusParts.join(" · ")
+    : semanticSummary.infoFindings
+      ? `Clean · ${semanticSummary.infoFindings} info`
       : "Clean"
+
+  useEffect(() => {
+    return () => {
+      if (spinResetRef.current) window.clearTimeout(spinResetRef.current)
+    }
+  }, [])
+
+  function rotateCylinder(direction: "up" | "down") {
+    if (cylinderWarnings.length < 2) return
+    setFocusedSignalIndex((current) => {
+      const offset = direction === "down" ? 1 : -1
+      return (current + offset + cylinderWarnings.length) % cylinderWarnings.length
+    })
+    setSpinDirection(direction)
+    setSpinTick((current) => current + 1)
+    if (spinResetRef.current) window.clearTimeout(spinResetRef.current)
+    spinResetRef.current = window.setTimeout(() => {
+      setSpinDirection(null)
+    }, 190)
+  }
+
+  const safeFocusedSignalIndex =
+    cylinderWarnings.length > 0 ? focusedSignalIndex % cylinderWarnings.length : 0
+  const focusedWarning = cylinderWarnings[safeFocusedSignalIndex] ?? null
+  const previousWarning =
+    cylinderWarnings.length > 1
+      ? cylinderWarnings[
+          (safeFocusedSignalIndex - 1 + cylinderWarnings.length) %
+            cylinderWarnings.length
+        ]
+      : null
+  const nextWarning =
+    cylinderWarnings.length > 2
+      ? cylinderWarnings[(safeFocusedSignalIndex + 1) % cylinderWarnings.length]
+      : null
 
   return (
     <aside
@@ -714,7 +992,7 @@ function SemanticWarningBeacon({
         onClick={() => setIsOpen((current) => !current)}
         className={
           "group relative flex max-w-full items-center gap-2 overflow-hidden rounded-full border px-2.5 py-2 text-left shadow-xl backdrop-blur-xl transition-all " +
-          (actionableWarnings.length > 0
+          (hasProblems
             ? "border-state-warning/25 bg-bg-surface/85 shadow-[0_0_28px_rgba(234,179,8,0.12)] hover:border-state-warning/45"
             : "border-state-success/25 bg-bg-surface/80 shadow-[0_0_28px_rgba(34,197,94,0.10)] hover:border-state-success/45")
         }
@@ -724,12 +1002,12 @@ function SemanticWarningBeacon({
         <span
           className={
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border " +
-            (actionableWarnings.length > 0
+            (hasProblems
               ? "border-state-warning/30 bg-state-warning/10 text-state-warning"
               : "border-state-success/30 bg-state-success/10 text-state-success")
           }
         >
-          {actionableWarnings.length > 0 ? (
+          {hasProblems ? (
             <AlertTriangle className="h-4 w-4" />
           ) : (
             <CheckCircle2 className="h-4 w-4" />
@@ -740,19 +1018,19 @@ function SemanticWarningBeacon({
             Semantic scan
           </span>
           <span className="block truncate text-[11px] text-text-muted">
-          {hasErrors ? "Needs review" : statusCopy}
+            {hasErrors ? `Needs review · ${statusCopy}` : statusCopy}
             {groupedWarnings.size > 0 ? ` · ${groupedWarnings.size} grouped` : ""}
           </span>
         </span>
         <span
           className={
             "ml-auto shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold " +
-            (actionableWarnings.length > 0
+            (hasProblems
               ? "border-state-warning/25 bg-state-warning/10 text-state-warning"
               : "border-state-success/25 bg-state-success/10 text-state-success")
           }
         >
-          {activeWarnings.length}
+          {semanticSummary.problemFindings}
         </span>
         <ChevronDown
           className={
@@ -763,47 +1041,90 @@ function SemanticWarningBeacon({
       </button>
 
       {isOpen ? (
-        <div
-          className="mt-2 max-h-[min(24rem,calc(100vh-9rem))] w-full max-w-96 overflow-y-auto overflow-x-hidden rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-2xl backdrop-blur-xl"
-          data-testid="semantic-warning-drawer"
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-text-primary">Semantic signals</p>
-            <button
-              type="button"
-              onClick={() => setShowHidden((current) => !current)}
-              className="rounded-full bg-bg-elevated px-2 py-0.5 text-[10px] text-text-muted transition-colors hover:text-text-primary"
-            >
-              {showHidden ? "Hide intentional" : `${hiddenWarnings.length} hidden`}
-            </button>
-          </div>
-          <div className="grid min-w-0 gap-2">
-            {[...groupedWarnings.entries()].map(([category, groupWarnings]) => (
-              <details
-                key={category}
-                open={category === "safety" || groupWarnings.some((item) => item.severity === "error")}
-                className="min-w-0 rounded-2xl border border-border-default bg-bg-elevated/70 p-2"
+        <div className="mt-2 w-full max-w-96 overflow-visible" data-testid="semantic-warning-drawer">
+          <div
+            onWheel={(event) => {
+              if (Math.abs(event.deltaY) < 2) return
+              event.preventDefault()
+              const now = Date.now()
+              if (now - wheelGateRef.current < 120) return
+              wheelGateRef.current = now
+              rotateCylinder(event.deltaY > 0 ? "down" : "up")
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") {
+                event.preventDefault()
+                rotateCylinder("down")
+              }
+              if (event.key === "ArrowUp") {
+                event.preventDefault()
+                rotateCylinder("up")
+              }
+            }}
+            tabIndex={0}
+            className="relative grid h-[min(22rem,calc(100vh-11rem))] min-w-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 overflow-hidden p-1 outline-none [perspective:620px] [perspective-origin:50%_50%] [scrollbar-width:none] [transform-style:preserve-3d] focus-visible:ring-1 focus-visible:ring-accent-primary/45 [&::-webkit-scrollbar]:hidden"
+            aria-label="Semantic signal cylinder"
+          >
+            {hiddenWarnings.length > 0 || showHidden ? (
+              <button
+                type="button"
+                onClick={() => setShowHidden((current) => !current)}
+                className="absolute right-2 top-2 z-40 rounded-full border border-border-default/70 bg-bg-surface/80 px-2 py-0.5 text-[10px] text-text-muted shadow-lg backdrop-blur-md transition-colors hover:border-accent-primary/35 hover:text-text-primary"
               >
-                <summary className="flex min-w-0 cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-text-primary">
-                  <span className="min-w-0 truncate">
-                    {SEMANTIC_VALIDATION_CATEGORY_LABELS[category]}
-                  </span>
-                  <span className="rounded-full border border-border-subtle bg-bg-subtle px-1.5 py-0.5 text-[10px] text-text-muted">
-                    {groupWarnings.length}
-                  </span>
-                </summary>
-                <div className="mt-2">
-                  <WarningList
-                    warnings={groupWarnings}
-                    semanticScanState={semanticScanState}
-                    onSemanticScanStateChange={onSemanticScanStateChange}
-                    currentGraphId={currentGraphId}
-                    onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
-                    showHidden
-                  />
+                {showHidden ? "Hide intentional" : `${hiddenWarnings.length} hidden`}
+              </button>
+            ) : null}
+            <div className="pointer-events-none absolute inset-y-10 left-3 z-10 w-px bg-gradient-to-b from-transparent via-accent-primary/35 to-transparent" />
+            <div className="pointer-events-none absolute inset-y-10 right-3 z-10 w-px bg-gradient-to-b from-transparent via-accent-primary/35 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-16 bg-gradient-to-b from-bg-base via-bg-base/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 bg-gradient-to-t from-bg-base via-bg-base/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-8 top-1/2 z-0 h-24 -translate-y-1/2 rounded-full border border-accent-primary/10 bg-accent-dim/20 blur-xl" />
+            <div className="relative z-0 flex min-h-0 items-center overflow-visible">
+              {previousWarning ? (
+                <SemanticSignalCylinderCard
+                  warning={previousWarning}
+                  semanticScanState={semanticScanState}
+                  onSemanticScanStateChange={onSemanticScanStateChange}
+                  currentGraphId={currentGraphId}
+                  onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
+                  slot="above"
+                  spinDirection={spinDirection}
+                  spinTick={spinTick}
+                />
+              ) : null}
+            </div>
+            <div className="relative z-30 flex min-h-0 items-center">
+              {focusedWarning ? (
+                <SemanticSignalCylinderCard
+                  warning={focusedWarning}
+                  semanticScanState={semanticScanState}
+                  onSemanticScanStateChange={onSemanticScanStateChange}
+                  currentGraphId={currentGraphId}
+                  onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
+                  slot="focus"
+                  spinDirection={spinDirection}
+                  spinTick={spinTick}
+                />
+              ) : (
+                <div className="rounded-xl border border-state-success/25 bg-bg-elevated px-2.5 py-2 text-xs text-state-success">
+                  Semantic metadata is complete for this selection.
                 </div>
-              </details>
-            ))}
+              )}
+            </div>
+            <div className="relative z-0 flex min-h-0 items-center overflow-visible">
+              {nextWarning ? (
+                <SemanticSignalCylinderCard
+                  warning={nextWarning}
+                  semanticScanState={semanticScanState}
+                  onSemanticScanStateChange={onSemanticScanStateChange}
+                  currentGraphId={currentGraphId}
+                  onSendSemanticFindingToArchitect={onSendSemanticFindingToArchitect}
+                  slot="below"
+                  spinDirection={spinDirection}
+                  spinTick={spinTick}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
@@ -1076,10 +1397,14 @@ export function SemanticInspector({
     return () => window.removeEventListener("resize", updateCompactViewport)
   }, [])
 
+  const inspectorScrollClassName =
+    "overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
   const compactPanelClassName =
-    "pointer-events-auto fixed left-2 right-2 top-16 z-40 max-h-[calc(100vh-5rem)] overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
+    "pointer-events-auto fixed left-2 right-2 top-16 z-40 max-h-[calc(100vh-5rem)] rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl " +
+    inspectorScrollClassName
   const desktopPanelClassName =
-    "pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 overflow-y-auto rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl"
+    "pointer-events-auto absolute left-4 top-16 z-20 max-h-[calc(100%-5rem)] w-80 rounded-2xl border border-border-default bg-bg-surface/95 p-3 shadow-xl backdrop-blur-xl " +
+    inspectorScrollClassName
   const inspectorPanelClassName = isCompactViewport
     ? compactPanelClassName
     : desktopPanelClassName

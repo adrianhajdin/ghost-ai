@@ -1,4 +1,5 @@
 import { getCurrentProjectIdentity, userHasProjectAccess } from "@/lib/project-access"
+import { createArchitectConversationMessage } from "@/lib/ai/architect/architect-conversation-store"
 import { createCanvasDocV1 } from "@/lib/canvas/canvas-doc"
 import {
   readCanvasDoc,
@@ -9,10 +10,39 @@ import { applyChildLayerSummaryToParentDoc } from "@/lib/canvas/child-layer-summ
 import {
   createCanvasActivityEvent,
   withCanvasActivity,
+  type CanvasActivityEvent,
 } from "@/lib/canvas/canvas-activity"
 import { GraphIdError, ROOT_GRAPH_ID, graphIdFromSearchParam } from "@/lib/canvas/graph-ids"
 import { sanitizeCanvasSnapshot } from "@/lib/canvas/canvas-state"
 import type { NextRequest } from "next/server"
+
+const ARCHITECT_MANUAL_CANVAS_EVENT_KIND = "canvas_manual_save_result"
+
+function plural(count: number, singular: string, pluralText = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : pluralText}`
+}
+
+function hasMeaningfulCanvasActivityChanges(event: CanvasActivityEvent) {
+  const changes = event.changes
+  return (
+    changes.addedNodeIds.length > 0 ||
+    changes.removedNodeIds.length > 0 ||
+    changes.changedNodeIds.length > 0 ||
+    changes.addedEdgeIds.length > 0 ||
+    changes.removedEdgeIds.length > 0 ||
+    changes.changedEdgeIds.length > 0
+  )
+}
+
+function buildManualCanvasEventContent(event: CanvasActivityEvent) {
+  return [
+    "Arc Forge app event: Canvas manual edit saved.",
+    `Graph: ${event.graphId}.`,
+    `Saved changes: ${event.summary}.`,
+    `Canvas now has ${plural(event.nodeCount, "node")} and ${plural(event.edgeCount, "edge")}.`,
+    `Semantic Scan now has ${plural(event.problemSemanticFindings, "issue")} (${plural(event.blockingSemanticFindings, "blocking finding")}, ${plural(event.warningSemanticFindings, "warning")}) and ${plural(event.infoSemanticFindings, "info signal")} on this graph.`,
+  ].join(" ")
+}
 
 export async function GET(
   _request: NextRequest,
@@ -104,20 +134,33 @@ export async function PUT(
       summary: writeOptions.summary,
       panels: writeOptions.panels,
     })
-    const docWithActivity = withCanvasActivity(
-      requestDoc,
-      createCanvasActivityEvent({
-        kind: "manual-save",
-        actor: "user",
-        beforeDoc,
-        afterDoc: requestDoc,
-      })
-    )
+    const canvasActivity = createCanvasActivityEvent({
+      kind: "manual-save",
+      actor: "user",
+      beforeDoc,
+      afterDoc: requestDoc,
+    })
+    const docWithActivity = withCanvasActivity(requestDoc, canvasActivity)
     const { url, doc } = await writeCanvasDoc(projectId, docWithActivity, {
       ...writeOptions,
       panels: docWithActivity.panels,
     })
     let parentGraph = null
+    let architectEventMessage = null
+
+    if (hasMeaningfulCanvasActivityChanges(canvasActivity)) {
+      architectEventMessage = await createArchitectConversationMessage({
+        projectId,
+        graphId,
+        userId: identity.userId,
+        role: "assistant",
+        content: buildManualCanvasEventContent(canvasActivity),
+        metadata: {
+          kind: ARCHITECT_MANUAL_CANVAS_EVENT_KIND,
+          canvasActivity,
+        },
+      }).catch(() => null)
+    }
 
     if (doc.parentGraphId && doc.parentNodeId) {
       const existingParent = await readCanvasDoc(projectId, doc.parentGraphId)
@@ -143,7 +186,7 @@ export async function PUT(
       }
     }
 
-    return Response.json({ url, doc, parentGraph })
+    return Response.json({ url, doc, parentGraph, architectEventMessage })
   } catch (error) {
     if (error instanceof GraphIdError) {
       return Response.json({ error: error.message }, { status: 400 })
