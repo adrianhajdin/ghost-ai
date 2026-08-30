@@ -51,7 +51,7 @@ Ghost AI is a real-time collaborative system design workspace. Users describe a 
 ### AI Architecture Generation
 
 - AI generates a system design from a user-supplied prompt.
-- Project owners can configure local or cloud model APIs from the app.
+- Project owners can configure local, Azure, or cloud model APIs from the app.
 - Output is structured as canvas nodes and edges written into the shared room.
 - Generation runs as a durable background task.
 

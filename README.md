@@ -151,7 +151,7 @@ DATABASE_URL=
 
 ━━━━━━━━━━━━━━━━━━━━
 # AI agent selection
-# Supported: ollama, lmstudio, openai, anthropic, openrouter, custom
+# Supported: ollama, lmstudio, openai, anthropic, openrouter, azure, custom
 # Used as a fallback when a project has no app-managed provider.
 AI_AGENT=ollama
 AI_MODEL=
@@ -185,6 +185,11 @@ OPENROUTER_MODEL=
 OPENROUTER_HTTP_REFERER=
 OPENROUTER_APP_NAME=
 
+# Azure OpenAI / Microsoft Foundry
+AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/v1
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_MODEL=
+
 # Custom OpenAI-compatible endpoint
 AI_BASE_URL=
 AI_API_KEY=
@@ -198,7 +203,7 @@ AI_CONFIG_ENCRYPTION_KEY=
 APP_URL=http://localhost:3000
 ```
 
-Replace the placeholder values with your real credentials. Provider settings can be managed from the gear button in the AI Workspace. The project owner can add, edit, test, remove, and select a default local or cloud provider without changing environment variables. API keys are encrypted at rest; `AI_CONFIG_ENCRYPTION_KEY` must be present in both the Next.js server and Trigger.dev worker environments.
+Replace the placeholder values with your real credentials. Provider settings can be managed from the gear button in the AI Workspace. The project owner can add, edit, test, remove, and select a default local, Azure, or cloud provider without changing environment variables. API keys are encrypted at rest; `AI_CONFIG_ENCRYPTION_KEY` must be present in both the Next.js server and Trigger.dev worker environments.
 
 For local development, install either [Ollama](https://ollama.com/) or [LM Studio](https://lmstudio.ai/), start its OpenAI-compatible server, and add the local endpoint from the AI Workspace. Cloud workers cannot reach `127.0.0.1`; use a cloud provider or publicly reachable custom endpoint for deployed workers.
 

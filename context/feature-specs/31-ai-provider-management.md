@@ -3,7 +3,7 @@ Manage project AI providers from the application instead of requiring environmen
 ## Behavior
 
 - Project owners can add, edit, test, remove, and select a default AI provider from the AI Workspace settings.
-- Supported providers are Ollama, LM Studio, OpenAI, Anthropic, OpenRouter, and custom OpenAI-compatible endpoints.
+- Supported providers are Ollama, LM Studio, Azure OpenAI/Microsoft Foundry, OpenAI, Anthropic, OpenRouter, and custom OpenAI-compatible endpoints.
 - A provider stores a display name, provider type, model ID, optional local/custom base URL, and an encrypted API key.
 - API keys are never returned in API responses and are never included in Trigger.dev task payloads.
 - Design and spec tasks resolve the selected project provider at execution time.

@@ -27,7 +27,7 @@
 - **Database**: metadata, ownership, relationships, and task run records.
 - **Vercel Blob**: generated artifacts — canvas snapshots at `canvas/{projectId}.json` and specs at `specs/{projectId}/{timestamp}-{uuid}.md`.
 - Project records, spec records, and task run records belong in PostgreSQL.
-- Project AI provider records store model metadata and encrypted credentials; the encryption key is supplied only through server/worker environment configuration.
+- Project AI provider records store model metadata and encrypted credentials; the encryption key is supplied only through server/worker environment configuration. Azure uses the OpenAI v1-compatible endpoint with its `api-key` header.
 - Canvas content and Markdown output are stored in and retrieved from Vercel Blob.
 - The blob URL is stored in the database (`canvasBlobUrl`, `filePath`) as the reference to the artifact.
 
@@ -54,7 +54,7 @@
 
 - Input: user prompt, project context, and current canvas state.
 - Execution: durable background task via Trigger.dev.
-- Model: selected server-side through `lib/ai-provider.ts`; local Ollama/LM Studio and cloud OpenAI, Anthropic, OpenRouter, or custom OpenAI-compatible endpoints are supported.
+- Model: selected server-side through `lib/ai-provider.ts`; local Ollama/LM Studio, Azure OpenAI/Microsoft Foundry, and cloud OpenAI, Anthropic, OpenRouter, or custom OpenAI-compatible endpoints are supported.
 - Output: structured node and edge updates written into the shared Liveblocks room.
 
 ### Spec Generation

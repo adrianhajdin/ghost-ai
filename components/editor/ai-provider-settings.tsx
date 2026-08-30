@@ -85,7 +85,12 @@ export function AiProviderSettings({ projectId }: AiProviderSettingsProps) {
     () => AI_PROVIDER_DEFINITIONS[form.provider],
     [form.provider]
   )
-  const showsBaseUrl = selectedDefinition.isLocal || form.provider === "custom"
+  const showsBaseUrl =
+    selectedDefinition.isLocal || form.provider === "custom" || form.provider === "azure"
+  const baseUrlPlaceholder =
+    form.provider === "azure"
+      ? "https://resource.openai.azure.com/openai/v1"
+      : selectedDefinition.defaultBaseUrl ?? "https://your-gateway.example/v1"
 
   const loadProviders = useCallback(async () => {
     setLoading(true)
@@ -382,7 +387,7 @@ export function AiProviderSettings({ projectId }: AiProviderSettingsProps) {
                   onChange={(event) =>
                     setForm((current) => ({ ...current, baseUrl: event.target.value }))
                   }
-                  placeholder={selectedDefinition.defaultBaseUrl ?? "https://your-gateway.example/v1"}
+                  placeholder={baseUrlPlaceholder}
                   className="border-border-subtle bg-bg-surface text-text-primary placeholder:text-text-faint"
                 />
               </label>

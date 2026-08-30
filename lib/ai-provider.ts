@@ -38,6 +38,9 @@ const AGENT_ALIASES: Record<string, AiProviderId> = {
   claude: "anthropic",
   openrouter: "openrouter",
   "open-router": "openrouter",
+  azure: "azure",
+  "azure-openai": "azure",
+  "azure-foundry": "azure",
   custom: "custom",
   "openai-compatible": "custom",
 }
@@ -71,6 +74,7 @@ function getModel(task: AiTask, provider: AiProviderId): string {
     openai: "OPENAI_MODEL",
     anthropic: "ANTHROPIC_MODEL",
     openrouter: "OPENROUTER_MODEL",
+    azure: "AZURE_OPENAI_MODEL",
     custom: "AI_CUSTOM_MODEL",
   }[provider]
 
@@ -117,6 +121,23 @@ function createCompatibleModel(
   })
 
   return provider.chatModel(agent.model)
+}
+
+function createAzureModel(agent: AiAgentInfo, baseUrl: string, apiKey: string) {
+  const provider = createOpenAI({
+    name: "azure",
+    baseURL: baseUrl,
+    apiKey: "azure-api-key",
+    headers: { "api-key": apiKey },
+    fetch: async (input, init) => {
+      const headers = new Headers(init?.headers)
+      headers.delete("Authorization")
+      headers.set("api-key", apiKey)
+      return globalThis.fetch(input, { ...init, headers })
+    },
+  })
+
+  return provider.chat(agent.model)
 }
 
 export function getAiAgentInfo(task: AiTask): AiAgentInfo {
@@ -186,6 +207,12 @@ export function getAiModelFromConfig(config: AiProviderSettings) {
         requireValue(config.apiKey, `${agent.label} requires an API key.`),
         config.headers
       )
+    case "azure":
+      return createAzureModel(
+        agent,
+        requireUrl(config.baseUrl, `${agent.label} requires a base URL`),
+        requireValue(config.apiKey, `${agent.label} requires an API key.`)
+      )
     case "custom":
       return createCompatibleModel(
         agent,
@@ -200,6 +227,7 @@ export function getAiModel(task: AiTask) {
   const baseUrls: Partial<Record<AiProviderId, string | undefined>> = {
     ollama: readEnv("OLLAMA_BASE_URL"),
     lmstudio: readEnv("LM_STUDIO_BASE_URL"),
+    azure: readEnv("AZURE_OPENAI_BASE_URL"),
     custom: readEnv("AI_BASE_URL"),
   }
   const apiKeys: Partial<Record<AiProviderId, string | undefined>> = {
@@ -208,6 +236,7 @@ export function getAiModel(task: AiTask) {
     openai: readEnv("OPENAI_API_KEY"),
     anthropic: readEnv("ANTHROPIC_API_KEY"),
     openrouter: readEnv("OPENROUTER_API_KEY"),
+    azure: readEnv("AZURE_OPENAI_API_KEY"),
     custom: readEnv("AI_API_KEY"),
   }
 

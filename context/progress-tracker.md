@@ -3,10 +3,10 @@
 Update this file whenever the current phase, active feature, or implementation state changes.
 
 ## Current Phase
-- Feature 31 (In-App AI Provider Management) — in progress
+- Feature 32 (Azure Hosting & AI Integration) — in progress
 
 ## Current Goal
-- Let project owners configure, test, and switch local/cloud AI providers without editing environment files.
+- Add a low-cost Azure deployment path and a first-class Azure OpenAI/Microsoft Foundry provider.
 
 ## Completed
 
@@ -42,13 +42,14 @@ Update this file whenever the current phase, active feature, or implementation s
 - Feature 28 (Spec Persistence & Download): ProjectSpec Prisma model added (id, projectId, filePath, createdAt; relation to Project with cascade delete; index on projectId); migration applied and client regenerated. trigger/generate-spec.ts updated to upload generated Markdown to Vercel Blob (specs/{projectId}/{timestamp}.md, private access) and create a ProjectSpec record, returning specId alongside spec. app/api/projects/[projectId]/specs/[specId]/download/route.ts — GET authenticates user, verifies project access via userHasProjectAccess, verifies spec belongs to project, fetches file from Vercel Blob and streams it back as a Markdown attachment (Content-Disposition: attachment). Returns 401/403/404 on error cases. `npm run build` passes clean.
 - Feature 30 (AI Provider Migration & Harness): lib/ai-provider.ts provides local Ollama/LM Studio, OpenAI, Anthropic, OpenRouter, and custom OpenAI-compatible model factories with task-specific agent/model overrides. Shared Zod schemas bound request and task payload sizes and strip unused graph fields. Design requests now resolve project access from roomId instead of trusting a client projectId; per-project Trigger queues serialize canvas mutations; design tokens expire after one hour; action tools return acknowledgements so multi-step agents can continue; Liveblocks read failures are surfaced instead of treated as an empty canvas; Trigger.dev imports use the v4 entrypoint; generated `.trigger/` runtime artifacts are ignored and removed from source control; and concurrent spec uploads use unique object keys. `npm run build` passes clean.
 - Feature 31 (In-App AI Provider Management): project owners can add, edit, test, remove, and select a default provider from the AI Workspace settings. Provider metadata and encrypted credentials are stored in PostgreSQL; design/spec tasks resolve the selected project provider at execution time, while environment-based configuration remains a fallback. `npm run build` passes clean.
+- Feature 32 (Azure Hosting & AI Integration): Azure OpenAI/Microsoft Foundry is available as an app-managed provider using the OpenAI v1 endpoint and Azure `api-key` authentication. A standalone Next.js container path is being added for Azure Container Apps Consumption with scale-to-zero defaults.
 
 ## In Progress
 
-- Feature 31: Provider vault UI, API routes, encryption, and task resolution are implemented; migration and end-to-end validation remain.
+- Feature 32: Azure provider support is implemented; container deployment artifacts, migration validation, and end-to-end Azure smoke testing remain.
 
 ## Next Up
-- Apply the AI provider migration, configure `AI_CONFIG_ENCRYPTION_KEY` in the Next.js and Trigger.dev environments, and test a local and cloud provider.
+- Add the Azure Container Apps deployment, apply the Azure enum migration, and test an Azure OpenAI provider.
 
 
 
@@ -66,6 +67,7 @@ Update this file whenever the current phase, active feature, or implementation s
 - Ollama and LM Studio use the OpenAI-compatible adapter so the same tasks can run against local models or cloud APIs without changing canvas/spec behavior.
 - Trigger.dev's `.trigger/` directory is local runtime output and must not be committed.
 - App-managed provider configurations are project-scoped and owner-managed. API keys are encrypted with AES-256-GCM using `AI_CONFIG_ENCRYPTION_KEY`; the raw key is never returned or placed in a task payload.
+- Azure OpenAI/Microsoft Foundry uses a dedicated provider path because Azure key authentication requires the `api-key` header rather than the generic Bearer header used by OpenAI-compatible gateways.
 
 ## Session Notes
 
@@ -78,5 +80,6 @@ Update this file whenever the current phase, active feature, or implementation s
 - @trigger.dev/sdk ^4.4.4 installed. trigger.config.ts reads project ref from TRIGGER_PROJECT_REF env var. TRIGGER_SECRET_KEY must be set in .env.local for triggering tasks from server code. Run `npx trigger.dev@latest dev` for local development; deploy with `npx trigger.dev@latest deploy`.
 - AI SDK providers: `@ai-sdk/openai`, `@ai-sdk/anthropic`, and `@ai-sdk/openai-compatible`. Set `AI_AGENT=ollama` for local-first development, or select `lmstudio`, `openai`, `anthropic`, `openrouter`, or `custom` in the worker environment.
 - Provider credentials entered in the app require the same `AI_CONFIG_ENCRYPTION_KEY` on the Next.js server and Trigger.dev worker. Local endpoints are usable only with a local Trigger worker; cloud deployments need cloud or publicly reachable endpoints.
+- Azure Container Apps is the preferred low-cost hosting target: Consumption plan, `minReplicas: 0`, and `maxReplicas: 1` for the initial deployment. Keep Trigger.dev and Liveblocks until an all-Azure rewrite is justified.
 - Prisma 7.8.0 — generated client goes to app/generated/prisma/; import PrismaClient from @/app/generated/prisma/client (no index.ts in v7). Constructor always requires { adapter } argument. @prisma/adapter-pg used for all connections.
 - prisma.config.ts uses schema: "prisma/" (multi-file schema) and reads DATABASE_URL from .env via dotenv.

@@ -4,6 +4,7 @@ export const AI_PROVIDER_IDS = [
   "openai",
   "anthropic",
   "openrouter",
+  "azure",
   "custom",
 ] as const
 
@@ -59,6 +60,14 @@ export const AI_PROVIDER_DEFINITIONS: Record<AiProviderId, AiProviderDefinition>
     label: "OpenRouter",
     description: "Route requests through multiple cloud model providers.",
     defaultModel: "openai/gpt-4o-mini",
+    isLocal: false,
+    requiresApiKey: true,
+  },
+  azure: {
+    id: "azure",
+    label: "Azure OpenAI / Foundry",
+    description: "Use an Azure-hosted OpenAI-compatible deployment.",
+    defaultModel: "gpt-4.1-nano",
     isLocal: false,
     requiresApiKey: true,
   },

@@ -15,6 +15,7 @@ const PROVIDER_TO_DATABASE = {
   openai: "OPENAI",
   anthropic: "ANTHROPIC",
   openrouter: "OPENROUTER",
+  azure: "AZURE",
   custom: "CUSTOM",
 } as const
 const DATABASE_TO_PROVIDER: Record<string, AiProviderId> = {
@@ -23,6 +24,7 @@ const DATABASE_TO_PROVIDER: Record<string, AiProviderId> = {
   OPENAI: "openai",
   ANTHROPIC: "anthropic",
   OPENROUTER: "openrouter",
+  AZURE: "azure",
   CUSTOM: "custom",
 }
 
@@ -98,12 +100,17 @@ export function getProviderConfigError(input: {
     return `${definition.label} requires a model name.`
   }
 
-  if (input.baseUrl && !definition.isLocal && input.provider !== "custom") {
-    return "Custom base URLs are only supported for local or custom providers."
+  if (
+    input.baseUrl &&
+    !definition.isLocal &&
+    input.provider !== "custom" &&
+    input.provider !== "azure"
+  ) {
+    return "Custom base URLs are only supported for local, Azure, or custom providers."
   }
 
-  if (input.provider === "custom" && !input.baseUrl) {
-    return "Custom OpenAI-compatible providers require a base URL."
+  if ((input.provider === "custom" || input.provider === "azure") && !input.baseUrl) {
+    return `${definition.label} requires a base URL.`
   }
 
   if (definition.requiresApiKey && !input.hasApiKey) {

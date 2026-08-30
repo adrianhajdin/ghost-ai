@@ -1,0 +1,10 @@
+.git
+.next
+.trigger
+node_modules
+app/generated/prisma
+.env*
+coverage
+Dockerfile
+docker-compose*.yml
+*.log
