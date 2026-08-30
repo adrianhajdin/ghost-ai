@@ -37,9 +37,11 @@
 ## Data and Storage
 
 - Project metadata and relationships belong in PostgreSQL via Prisma.
+- Project AI provider metadata belongs in PostgreSQL; provider API keys must be encrypted at rest and never returned to clients.
 - Canvas snapshots and generated specs belong in Vercel Blob; Prisma stores only the blob URL reference.
 - Do not store large generated content directly in the database.
 - Task run records are first-class relational data — treat ownership and run IDs as verified before any token issuance.
+- Resolve project AI providers in background tasks from the project-scoped configuration; do not send provider credentials in task payloads.
 
 ## File Organization
 

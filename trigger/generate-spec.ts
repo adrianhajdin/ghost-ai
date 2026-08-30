@@ -1,52 +1,28 @@
-import { schemaTask, metadata, logger } from "@trigger.dev/sdk/v3"
-import { createGoogleGenerativeAI } from "@ai-sdk/google"
+import { randomUUID } from "node:crypto"
+import { schemaTask, metadata, logger } from "@trigger.dev/sdk"
 import { generateText } from "ai"
-import { z } from "zod"
 import { put } from "@vercel/blob"
 import { prisma } from "@/lib/prisma"
+import {
+  getAiAgentInfo,
+  getAiAgentInfoFromConfig,
+  getAiModel,
+  getAiModelFromConfig,
+} from "@/lib/ai-provider"
+import {
+  getProjectAiProviderConfig,
+  toAiProviderSettings,
+} from "@/lib/ai-provider-config"
+import {
+  specPayloadSchema,
+  type AiCanvasEdge,
+  type AiCanvasNode,
+  type AiChatMessage,
+} from "@/lib/ai-schemas"
 
-const chatMessageSchema = z.object({
-  role: z.enum(["user", "assistant"]),
-  content: z.string(),
-})
-
-const nodeDataSchema = z
-  .object({
-    label: z.string().optional(),
-    shape: z.string().optional(),
-    color: z.string().optional(),
-  })
-  .passthrough()
-
-const nodeSchema = z
-  .object({
-    id: z.string(),
-    type: z.string().optional(),
-    position: z.object({ x: z.number(), y: z.number() }).optional(),
-    data: nodeDataSchema.optional(),
-  })
-  .passthrough()
-
-const edgeSchema = z
-  .object({
-    id: z.string(),
-    source: z.string(),
-    target: z.string(),
-    data: z.object({ label: z.string().optional() }).passthrough().optional(),
-  })
-  .passthrough()
-
-const payloadSchema = z.object({
-  projectId: z.string(),
-  roomId: z.string(),
-  chatHistory: z.array(chatMessageSchema),
-  nodes: z.array(nodeSchema),
-  edges: z.array(edgeSchema),
-})
-
-type Node = z.infer<typeof nodeSchema>
-type Edge = z.infer<typeof edgeSchema>
-type ChatMessage = z.infer<typeof chatMessageSchema>
+type Node = AiCanvasNode
+type Edge = AiCanvasEdge
+type ChatMessage = AiChatMessage
 
 function buildContext(nodes: Node[], edges: Edge[], chatHistory: ChatMessage[]): string {
   const nodeLines = nodes
@@ -95,14 +71,30 @@ Write in clear, professional technical language. Use Markdown headers, bullet po
 
 export const generateSpec = schemaTask({
   id: "generate-spec",
-  schema: payloadSchema,
+  schema: specPayloadSchema,
   retry: { maxAttempts: 2, minTimeoutInMs: 1000, maxTimeoutInMs: 10000, factor: 2 },
   run: async (payload) => {
-    const google = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_AI_API_KEY })
-
     metadata.set("status", "starting")
+
+    const storedConfig = await getProjectAiProviderConfig(
+      payload.projectId,
+      payload.providerConfigId
+    )
+    if (payload.providerConfigId && !storedConfig) {
+      throw new Error("The requested AI provider configuration was not found.")
+    }
+
+    const providerSettings = storedConfig ? toAiProviderSettings(storedConfig) : null
+    const agent = providerSettings
+      ? getAiAgentInfoFromConfig(providerSettings)
+      : getAiAgentInfo("spec")
+    const model = providerSettings ? getAiModelFromConfig(providerSettings) : getAiModel("spec")
+
     logger.info("Generating spec", {
       projectId: payload.projectId,
+      roomId: payload.roomId,
+      agent: agent.id,
+      model: agent.model,
       nodeCount: payload.nodes.length,
       edgeCount: payload.edges.length,
     })
@@ -112,7 +104,7 @@ export const generateSpec = schemaTask({
     const context = buildContext(payload.nodes, payload.edges, payload.chatHistory)
 
     const result = await generateText({
-      model: google("gemini-2.5-flash"),
+      model,
       system: SYSTEM_PROMPT,
       prompt: context,
     })
@@ -122,7 +114,7 @@ export const generateSpec = schemaTask({
     metadata.set("status", "uploading")
 
     const blob = await put(
-      `specs/${payload.projectId}/${Date.now()}.md`,
+      `specs/${payload.projectId}/${Date.now()}-${randomUUID()}.md`,
       spec,
       {
         access: "private",

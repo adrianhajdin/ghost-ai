@@ -1,6 +1,6 @@
 import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { auth as triggerAuth } from "@trigger.dev/sdk/v3"
+import { auth as triggerAuth } from "@trigger.dev/sdk"
 
 export async function POST(request: Request) {
   const { userId } = await auth()
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
 
   const token = await triggerAuth.createPublicToken({
     scopes: { read: { runs: [runId] } },
+    expirationTime: "1h",
   })
 
   return Response.json({ token })

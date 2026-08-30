@@ -19,12 +19,13 @@ Ghost AI is a real-time collaborative system design workspace. Users describe a 
 2. User creates or selects a project.
 3. User enters the project workspace.
 4. User optionally imports a starter system design template into the canvas.
-5. User prompts the AI to generate or extend the system design.
-6. AI generates nodes and edges in the shared canvas.
-7. Collaborators edit and refine the design.
-8. User triggers spec generation.
-9. App persists the generated Markdown spec.
-10. User reviews or downloads the spec.
+5. User configures or selects a project AI provider from the AI Workspace settings.
+6. User prompts the AI to generate or extend the system design.
+7. AI generates nodes and edges in the shared canvas.
+8. Collaborators edit and refine the design.
+9. User triggers spec generation.
+10. App persists the generated Markdown spec.
+11. User reviews or downloads the spec.
 
 ## Features
 
@@ -38,7 +39,7 @@ Ghost AI is a real-time collaborative system design workspace. Users describe a 
 
 - Shared real-time canvas using Liveblocks and React Flow.
 - Live cursors, presence indicators, and node/edge editing.
-- Canvas snapshots persisted to the filesystem.
+- Canvas snapshots persisted to private Vercel Blob storage.
 
 ### Starter System Designs
 
@@ -50,13 +51,14 @@ Ghost AI is a real-time collaborative system design workspace. Users describe a 
 ### AI Architecture Generation
 
 - AI generates a system design from a user-supplied prompt.
+- Project owners can configure local or cloud model APIs from the app.
 - Output is structured as canvas nodes and edges written into the shared room.
 - Generation runs as a durable background task.
 
 ### Spec Generation
 
 - The current canvas graph is converted into a Markdown technical specification.
-- Specs are persisted as files and linked to the project in the database.
+- Specs are persisted as private Vercel Blob artifacts and linked to the project in the database.
 - Users can view and download generated specs.
 
 ## Scope

@@ -28,7 +28,7 @@ declare global {
     RoomEvent:
       | { type: "ai-status"; message: string; status: "start" | "thinking" | "complete" | "error" };
 
-    ThreadMetadata: {};
+    ThreadMetadata: Record<string, never>;
 
     FeedMessageData: {
       // ai-status-feed
@@ -41,7 +41,7 @@ declare global {
       timestamp?: string;
     };
 
-    RoomInfo: {};
+    RoomInfo: Record<string, never>;
   }
 }
 

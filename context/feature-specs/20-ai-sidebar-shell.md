@@ -1,4 +1,4 @@
-Complete the existing AI sidebar placeholder and turn it into a proper floating chat sidebar component. The sidebar already exists, so keep the current floating placement and smooth slide-in behavior from the right side. This unit is focused on building out the sidebar UI inside it.
+Complete the existing AI sidebar placeholder and turn it into a proper floating chat sidebar component. The sidebar already exists, so keep the current floating placement and smooth slide-in behavior from the right side. This unit is focused on building out the sidebar UI inside it, including access to project AI provider settings.
 
 ## Implementation
 
@@ -15,11 +15,12 @@ Complete the existing AI sidebar placeholder and turn it into a proper floating 
    - use `text-primary-text` for the title
    - use `text-muted-text` for the subtitle
 
-3. Add a tabbed layout with two tabs.
+3. Add a tabbed layout with the architect, chat, and specs tabs.
 
    Use shadcn `Tabs`.
    - `AI Architect`
    - `Specs`
+   - provider settings are available from the sidebar header
    - active tab should use the accent styling, like `bg-accent` and `text-accent`
    - inactive tab text should stay muted with `text-muted-text`
 

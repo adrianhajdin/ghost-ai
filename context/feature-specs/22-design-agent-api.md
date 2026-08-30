@@ -7,7 +7,8 @@ This unit handles triggering background jobs, tracking runs, and issuing tokens.
 
    Create: `POST /api/ai/design`
    This route should:
-   - accept the design prompt and required context (`roomId`, `projectId`)
+   - accept the design prompt and `roomId`; resolve the project from the authenticated user's access
+     - do not trust a client-supplied `projectId`
    - trigger the design task through Trigger.dev
    - create a TaskRun record
    - return the run ID to the client
@@ -41,7 +42,7 @@ This unit handles triggering background jobs, tracking runs, and issuing tokens.
    - check the existing Trigger.dev setup and installed agent features first
    - reuse the existing setup instead of creating a new pattern
    - export a minimal design task
-   - accept the expected payload (`prompt`, `roomId`)
+   - accept the expected payload (`prompt`, `roomId`, `projectId`, `userId`)
    - log or echo the input for now
    - don’t add AI logic yet
 
