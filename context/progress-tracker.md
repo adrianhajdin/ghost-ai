@@ -3,10 +3,10 @@
 Update this file whenever the current phase, active feature, or implementation state changes.
 
 ## Current Phase
-- Feature 32 (Azure Hosting & AI Integration) — in progress
+- Feature 32 (Azure Hosting & AI Integration) — complete
 
 ## Current Goal
-- Add a low-cost Azure deployment path and a first-class Azure OpenAI/Microsoft Foundry provider.
+- Feature 33 (TBD)
 
 ## Completed
 
@@ -42,14 +42,14 @@ Update this file whenever the current phase, active feature, or implementation s
 - Feature 28 (Spec Persistence & Download): ProjectSpec Prisma model added (id, projectId, filePath, createdAt; relation to Project with cascade delete; index on projectId); migration applied and client regenerated. trigger/generate-spec.ts updated to upload generated Markdown to Vercel Blob (specs/{projectId}/{timestamp}.md, private access) and create a ProjectSpec record, returning specId alongside spec. app/api/projects/[projectId]/specs/[specId]/download/route.ts — GET authenticates user, verifies project access via userHasProjectAccess, verifies spec belongs to project, fetches file from Vercel Blob and streams it back as a Markdown attachment (Content-Disposition: attachment). Returns 401/403/404 on error cases. `npm run build` passes clean.
 - Feature 30 (AI Provider Migration & Harness): lib/ai-provider.ts provides local Ollama/LM Studio, OpenAI, Anthropic, OpenRouter, and custom OpenAI-compatible model factories with task-specific agent/model overrides. Shared Zod schemas bound request and task payload sizes and strip unused graph fields. Design requests now resolve project access from roomId instead of trusting a client projectId; per-project Trigger queues serialize canvas mutations; design tokens expire after one hour; action tools return acknowledgements so multi-step agents can continue; Liveblocks read failures are surfaced instead of treated as an empty canvas; Trigger.dev imports use the v4 entrypoint; generated `.trigger/` runtime artifacts are ignored and removed from source control; and concurrent spec uploads use unique object keys. `npm run build` passes clean.
 - Feature 31 (In-App AI Provider Management): project owners can add, edit, test, remove, and select a default provider from the AI Workspace settings. Provider metadata and encrypted credentials are stored in PostgreSQL; design/spec tasks resolve the selected project provider at execution time, while environment-based configuration remains a fallback. `npm run build` passes clean.
-- Feature 32 (Azure Hosting & AI Integration): Azure OpenAI/Microsoft Foundry is available as an app-managed provider using the OpenAI v1 endpoint and Azure `api-key` authentication. A standalone Next.js container path is being added for Azure Container Apps Consumption with scale-to-zero defaults.
+- Feature 32 (Azure Hosting & AI Integration): Azure OpenAI/Microsoft Foundry is available as an app-managed provider using the OpenAI v1 endpoint and Azure `api-key` authentication. Dockerfile and `.dockerignore` build a Next.js standalone image, while `infra/azure/container-app.bicep` and its deployment guide target Azure Container Apps Consumption with scale-to-zero defaults.
 
 ## In Progress
 
-- Feature 32: Azure provider support is implemented; container deployment artifacts, migration validation, and end-to-end Azure smoke testing remain.
+- None.
 
 ## Next Up
-- Add the Azure Container Apps deployment, apply the Azure enum migration, and test an Azure OpenAI provider.
+- Deploy to an Azure subscription and run an end-to-end Azure OpenAI smoke test.
 
 
 
