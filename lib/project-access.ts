@@ -1,27 +1,32 @@
-import { auth, currentUser } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
+import { getCurrentSession } from "@/lib/auth"
 
 export interface ProjectIdentity {
   userId: string | null
   primaryEmailAddress: string | null
+  displayName: string | null
+  avatarUrl: string | null
 }
 
 export async function getCurrentProjectIdentity(): Promise<ProjectIdentity> {
-  const { userId } = await auth()
+  const session = await getCurrentSession()
+  const user = session?.user
 
-  if (!userId) {
+  if (!user?.id) {
     return {
       userId: null,
       primaryEmailAddress: null,
+      displayName: null,
+      avatarUrl: null,
     }
   }
 
-  const user = await currentUser()
-
   return {
-    userId,
+    userId: user.id,
     primaryEmailAddress:
-      user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase() ?? null,
+      user.email?.trim().toLowerCase() ?? null,
+    displayName: user.name?.trim() || null,
+    avatarUrl: user.image ?? null,
   }
 }
 

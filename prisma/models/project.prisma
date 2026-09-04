@@ -3,6 +3,16 @@ enum ProjectStatus {
   ARCHIVED
 }
 
+enum AiProviderType {
+  OLLAMA
+  LMSTUDIO
+  OPENAI
+  ANTHROPIC
+  OPENROUTER
+  AZURE
+  CUSTOM
+}
+
 model Project {
   id             String        @id @default(cuid())
   ownerId        String
@@ -15,9 +25,29 @@ model Project {
 
   collaborators ProjectCollaborator[]
   specs         ProjectSpec[]
+  aiProviders   AiProviderConfig[]
 
   @@index([ownerId])
   @@index([createdAt])
+}
+
+model AiProviderConfig {
+  id              String         @id @default(cuid())
+  projectId       String
+  name            String
+  provider        AiProviderType
+  model           String
+  baseUrl         String?
+  encryptedApiKey String?
+  isDefault       Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, name])
+  @@index([projectId])
+  @@index([projectId, isDefault])
 }
 
 model TaskRun {

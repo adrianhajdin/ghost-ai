@@ -6,7 +6,7 @@ Create `prisma/models/project.prisma`.
 
 Add `Project`:
 
-- owner ID mapped to Clerk user
+- owner ID mapped to the stable Entra `tenantId:objectId`
 - name
 - optional description
 - status enum: `DRAFT`, `ARCHIVED`

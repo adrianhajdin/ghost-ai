@@ -12,16 +12,16 @@ Collaborators can:
 - view the collaborator list only
 - not invite, remove, or manage access
 
-## Clerk User Data
+## Entra User Data
 
 Collaborators are stored by email in the database.
 
-Use Clerk Backend API to enrich collaborator emails with:
+Use the authenticated Entra session to provide the current user's identity. Collaborator records should use:
 
 - display name
 - avatar image
 
-If a Clerk user is not found for an email, fall back to showing the email only.
+If a collaborator's profile is not available from Entra claims, fall back to showing the stored email only.
 
 ## Implementation
 
@@ -40,5 +40,5 @@ Do not add a local user table.
 - share dialog opens from the workspace
 - owners can invite and remove collaborators
 - collaborators see read-only access
-- collaborator names/avatars load from Clerk when available
+- collaborator names/avatars use session claims when available and otherwise fall back to email
 - `npm run build` passes

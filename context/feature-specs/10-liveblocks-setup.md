@@ -32,7 +32,7 @@ Use the project ID as the Liveblocks room ID.
 
 This route must:
 
-1. require Clerk authentication
+1. require Microsoft Entra authentication through the Auth.js session helper
 2. verify project access using the existing access helper
 3. ensure the Liveblocks room exists (create only if needed)
 4. return a session token with:

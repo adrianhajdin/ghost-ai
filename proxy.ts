@@ -1,18 +1,36 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { getToken } from "next-auth/jwt"
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
-const signInUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_IN_URL ?? "/sign-in"
-const signUpUrl = process.env.NEXT_PUBLIC_CLERK_SIGN_UP_URL ?? "/sign-up"
+const PUBLIC_PATHS = ["/", "/sign-in", "/sign-up", "/api/auth"]
 
-const isPublicRoute = createRouteMatcher([
-  `${signInUrl}(.*)`,
-  `${signUpUrl}(.*)`,
-])
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  )
+}
 
-export const proxy = clerkMiddleware(async (auth, request) => {
-  if (!isPublicRoute(request)) {
-    await auth.protect()
+export async function proxy(request: NextRequest) {
+  if (isPublicPath(request.nextUrl.pathname)) {
+    return NextResponse.next()
   }
-})
+
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  })
+
+  if (token) {
+    return NextResponse.next()
+  }
+
+  const signInUrl = new URL("/sign-in", request.url)
+  signInUrl.searchParams.set(
+    "callbackUrl",
+    `${request.nextUrl.pathname}${request.nextUrl.search}`
+  )
+  return NextResponse.redirect(signInUrl)
+}
 
 export const config = {
   matcher: [

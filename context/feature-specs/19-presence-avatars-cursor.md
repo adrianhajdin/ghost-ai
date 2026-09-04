@@ -13,20 +13,20 @@ without changing the editor home navbar.
 2. Add the participant avatar group inside the editor canvas area.
    - position it in the top-right corner of the editor canvas view
    - keep it visually separate from the main navbar actions
-   - get the current user's ID from the active Clerk session
+   - get the current user's ID from the active Entra session
    - filter the Liveblocks presence list to exclude any entry
-     whose user ID matches the current Clerk user ID
+     whose user ID matches the current Entra user ID
    - render the filtered list as collaborator avatars only
-   - render the current user separately using the existing Clerk
-     UserButton — do not render a second avatar for them from
+   - render the current user separately using the shared sign-out
+     control — do not render a second avatar for them from
      the Liveblocks presence list
-   - keep collaborator avatars and the Clerk UserButton the same
+   - keep collaborator avatars and the sign-out control the same
      size so the group looks visually consistent
    - collaborator avatars are display-only, not interactive
    - show a divider between the collaborator avatars and the
-     Clerk UserButton only when at least one collaborator exists
-   - if no collaborators are present, show only the Clerk
-     UserButton with no divider
+     sign-out control only when at least one collaborator exists
+   - if no collaborators are present, show only the sign-out
+     control with no divider
 
 3. Render collaborator avatars.
    - use profile photos when available
@@ -57,7 +57,7 @@ without changing the editor home navbar.
 - don't add participant avatars to the shared navbar globally
 - don't remove existing navbar actions like Save, Import,
   Share, or AI
-- don't replace Clerk user/profile/logout behavior
+- don't replace Entra session behavior
 - don't make collaborator avatars interactive
 - don't change canvas node or edge behavior
 
@@ -65,7 +65,7 @@ without changing the editor home navbar.
 
 - Presence avatars only appear in the editor canvas view.
 - Editor home navbar is unchanged.
-- Current user is resolved from the active Clerk session.
+- Current user is resolved from the active Entra session.
 - Collaborator avatars exclude the current user.
 - Divider only appears when collaborators exist.
 - Cursor position is broadcast via Liveblocks presence on

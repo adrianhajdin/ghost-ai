@@ -11,7 +11,7 @@ Implement the full AI design agent so a user prompt results in real-time updates
    - reuse existing Liveblocks flow and presence patterns instead of creating new ones
 
    Then implement:
-   - use Gemini (`@ai-sdk/google`) to interpret the user prompt
+   - use the configured local or cloud AI agent through `lib/ai-provider.ts` to interpret the user prompt
    - update the canvas using the existing collaborative flow utilities
    - support actions like:
      - add node
@@ -35,7 +35,7 @@ Implement the full AI design agent so a user prompt results in real-time updates
    - clear AI presence when the task finishes
 
 ## Dependencies
-   All packages are already installed.`GEMINI_API_KEY` is already in `.env.local`.
+   Configure the selected AI agent and its credentials in `.env.local` before running the Trigger.dev worker.
 
 ## Scope Limits
 

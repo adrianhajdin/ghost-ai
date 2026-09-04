@@ -14,7 +14,7 @@
 
 <img src="https://img.shields.io/badge/-Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
 <img src="https://img.shields.io/badge/-PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white" />
-<img src="https://img.shields.io/badge/-Clerk-6C47FF?style=for-the-badge&logo=clerk&logoColor=white" /><br/>
+<img src="https://img.shields.io/badge/-Microsoft_Entra_ID-5E5CE6?style=for-the-badge&logo=microsoft&logoColor=white" /><br/>
 
 <img src="https://img.shields.io/badge/Trigger.dev-22c55e?style=for-the-badge&logo=triggerdotdev&logoColor=white" />
 <img src="https://img.shields.io/badge/-Liveblocks-050505?style=for-the-badge&logo=liveblocks&logoColor=white" />
@@ -48,7 +48,7 @@ If you prefer visual learning, this is the perfect resource for you. Follow our 
 
 ## <a name="introduction">✨ Introduction</a>
 
-Ghost Arc is an agentic planning application built for software teams. A user submits a natural-language prompt (e.g., "Design a scalable e-commerce backend") and a Google Gemini-powered AI agent autonomously places nodes and edges onto a shared React Flow canvas in real-time. Human teammates can watch the AI build the diagram live, then jump in to collaboratively refine it. Once the team is satisfied, a second AI background task converts the visual graph into a comprehensive, multi-page Markdown technical specification that can be downloaded directly from the app.
+Ghost Arc is an agentic planning application built for software teams. A user submits a natural-language prompt (e.g., "Design a scalable e-commerce backend") and a configurable local or cloud AI agent autonomously places nodes and edges onto a shared React Flow canvas in real-time. Human teammates can watch the AI build the diagram live, then jump in to collaboratively refine it. Once the team is satisfied, a second AI background task converts the visual graph into a comprehensive, multi-page Markdown technical specification that can be downloaded directly from the app.
 
 If you're getting started and need assistance or face any bugs, join our active Discord community with over **50k+** members. It's a place where people help each other out.
 
@@ -64,9 +64,13 @@ If you're getting started and need assistance or face any bugs, join our active 
 
 - **[Liveblocks](https://jsm.dev/ghost-liveblocks)** is a real-time collaboration infrastructure that enables developers to build multiplayer experiences. It provides robust APIs for presence, shared state, and text synchronization, allowing you to easily add collaborative features like cursors, whiteboard tools, and shared document editing to your apps.
 
-- **[Clerk](https://jsm.dev/ghost-clerk)** is a specialized authentication and user management platform for React and Next.js. It offers drop-in pre-built components for sign-in, sign-up, and profile management, while handling complex requirements like session management, multi-factor authentication, and organization hierarchies out of the box.
+- **[Microsoft Entra ID](https://www.microsoft.com/security/business/identity-access/microsoft-entra-id)** provides standards-based OpenID Connect authentication, single-tenant organization access, and Microsoft identity integration without a separate authentication service.
+
+- **[Auth.js](https://authjs.dev/)** manages the Entra OAuth callback, encrypted JWT session, and server-side session access.
 
 - **[Trigger.dev](https://jsm.dev/ghost-triggerdev)** is an open-source platform for orchestrating long-running background jobs and workflows. It allows developers to define jobs directly in their code that respond to webhooks, schedules, or events, handling retries, delays, and state management without the need for complex infrastructure.
+
+- **[Vercel AI SDK](https://ai-sdk.dev/)** provides the common model interface used by the architecture and specification agents. The provider registry supports local Ollama/LM Studio servers as well as OpenAI, Anthropic, OpenRouter, and other OpenAI-compatible endpoints.
 
 - **[Prisma ORM](https://www.prisma.io/)** is a next-generation ORM for Node.js and TypeScript that simplifies database interactions. By providing a type-safe client generated from your schema, it makes querying your database intuitive, readable, and highly efficient, effectively eliminating common SQL-related runtime errors.
 
@@ -80,21 +84,21 @@ If you're getting started and need assistance or face any bugs, join our active 
 
 ## <a name="features">🔋 Features</a>
 
-👉 **AI Architecture Agent**: Submit a plain-English prompt; Gemini draws nodes and edges onto the live canvas in real-time via Trigger.dev background tasks and the Liveblocks Node.js SDK.
+👉 **AI Architecture Agent**: Submit a plain-English prompt; a configured Ollama, LM Studio, OpenAI, Anthropic, OpenRouter, or custom OpenAI-compatible agent draws nodes and edges onto the live canvas in real-time via Trigger.dev background tasks and the Liveblocks Node.js SDK.
 
 👉 **Multiplayer Canvas**: Full real-time collaboration powered by Liveblocks: synchronized node/edge state, live cursor positions, and presence avatars for every connected user.
 
 👉 **Custom Canvas Nodes**: Double-click to edit node labels inline; select to resize with NodeResizer; choose from 12 colour swatches via a floating NodeToolbar — all synced across clients instantly.
 
-👉 **AI Spec Generation**: One click converts the current graph into a detailed Markdown technical specification using a second Gemini-powered Trigger.dev task.
+👉 **AI Spec Generation**: One click converts the current graph into a detailed Markdown technical specification using a configurable Trigger.dev task.
 
-👉 **Multi-Spec Storage**: Each project stores multiple specs. Metadata lives in PostgreSQL (Prisma); content is stored as Markdown files on disk (`data/specs/{projectId}/{specId}.md`).
+👉 **Multi-Spec Storage**: Each project stores multiple specs. Metadata lives in PostgreSQL (Prisma); content is stored as private Markdown blobs (`specs/{projectId}/{timestamp}-{uuid}.md`).
 
 👉 **Downloadable Specs**: Every generated spec is available via a dedicated download API route.
 
-👉 **Clerk Authentication**: Global route protection via `clerkMiddleware`; Liveblocks tokens are only issued to authenticated users.
+👉 **Microsoft Entra Authentication**: Auth.js handles Entra OpenID Connect sessions; protected routes and Liveblocks tokens are issued only to authenticated users.
 
-👉 **Auto-Save Canvas**: The canvas state is debounced-saved to `data/canvas/{projectId}.json` every 3 seconds of inactivity.
+👉 **Auto-Save Canvas**: The canvas state is debounced-saved to a private Blob object (`canvas/{projectId}.json`) after inactivity.
 
 👉 **Project Management**: Create projects from a slide-in sidebar; project slugs auto-generate room IDs; the active room is highlighted.
 
@@ -134,11 +138,12 @@ npm install
 Create a new file named `.env` in the root of your project and add the following content:
 
 ```env
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+# Microsoft Entra ID / Auth.js
+ENTRA_CLIENT_ID=
+ENTRA_CLIENT_SECRET=
+ENTRA_TENANT_ID=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=http://localhost:3000
 
 LIVEBLOCKS_SECRET_KEY=
 
@@ -148,18 +153,71 @@ NEXT_PUBLIC_TRIGGER_PUBLIC_API_KEY=
 DATABASE_URL=
 
 ━━━━━━━━━━━━━━━━━━━━
-# Google
-GOOGLE_GENERATIVE_AI_API_KEY=
-# Optional: override the default Gemini model (default: gemini-2.0-flash)
-GEMINI_MODEL=
-# Optional: override model used specifically for spec generation
-GEMINI_SPEC_MODEL=
+# AI agent selection
+# Supported: ollama, lmstudio, openai, anthropic, openrouter, azure, custom
+# Used as a fallback when a project has no app-managed provider.
+AI_AGENT=ollama
+AI_MODEL=
+# Optional: select different agents/models for each task.
+AI_DESIGN_AGENT=
+AI_DESIGN_MODEL=
+AI_SPEC_AGENT=
+AI_SPEC_MODEL=
+
+# Ollama (local, OpenAI-compatible)
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MODEL=llama3.2
+OLLAMA_API_KEY=
+
+# LM Studio (local, OpenAI-compatible)
+LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
+LM_STUDIO_MODEL=
+LM_STUDIO_API_KEY=
+
+# OpenAI
+OPENAI_API_KEY=
+OPENAI_MODEL=
+
+# Anthropic
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
+
+# OpenRouter
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=
+OPENROUTER_HTTP_REFERER=
+OPENROUTER_APP_NAME=
+
+# Azure OpenAI / Microsoft Foundry
+AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/v1
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_MODEL=
+
+# Custom OpenAI-compatible endpoint
+AI_BASE_URL=
+AI_API_KEY=
+AI_CUSTOM_MODEL=
+
+# Required to encrypt provider keys saved from the app.
+# Use the same value in the Next.js and Trigger.dev environments.
+AI_CONFIG_ENCRYPTION_KEY=
 
 ━━━━━━━━━━━━━━━━━━━━
 APP_URL=http://localhost:3000
 ```
 
-Replace the placeholder values with your real credentials. You can get these by signing up at: [**Clerk**](https://jsm.dev/ghost-clerk), [**Liveblocks**](https://jsm.dev/ghost-liveblocks), [**Trigger.dev**](https://jsm.dev/ghost-triggerdev), [**Google AI Studio**](https://aistudio.google.com/).
+Replace the placeholder values with your real credentials. Provider settings can be managed from the gear button in the AI Workspace. The project owner can add, edit, test, remove, and select a default local, Azure, or cloud provider without changing environment variables. API keys are encrypted at rest; `AI_CONFIG_ENCRYPTION_KEY` must be present in both the Next.js server and Trigger.dev worker environments.
+
+For local development, install either [Ollama](https://ollama.com/) or [LM Studio](https://lmstudio.ai/), start its OpenAI-compatible server, and add the local endpoint from the AI Workspace. Cloud workers cannot reach `127.0.0.1`; use a cloud provider or publicly reachable custom endpoint for deployed workers.
+
+Register a Microsoft Entra web application in the [Entra admin center](https://entra.microsoft.com) and add these redirect URIs:
+
+```text
+http://localhost:3000/api/auth/callback/azure-ad
+https://<production-host>/api/auth/callback/azure-ad
+```
+
+For a private team deployment, choose **Single tenant** and set `ENTRA_TENANT_ID` to your Directory (tenant) ID. `ENTRA_CLIENT_SECRET` is used only by the server and should be stored as an Azure Container Apps secret or Key Vault reference.
 
 **Running the Project**
 
@@ -168,6 +226,12 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser to view the project.
+
+For the default Ollama agent, pull a model before starting the worker:
+
+```bash
+ollama pull llama3.2
+```
 
 **Run Trigger.dev (Background Tasks)**
 
@@ -200,21 +264,19 @@ npx trigger.dev@latest dev
 │   ├── api/              # Next.js API routes (auth, AI, projects, specs)
 │   ├── editor/           # Canvas editor pages
 │   ├── generated/prisma/ # Auto-generated Prisma client
-│   ├── sign-in/          # Clerk sign-in page
-│   └── sign-up/          # Clerk sign-up page
+│   ├── sign-in/          # Microsoft Entra sign-in page
+│   └── sign-up/          # Entra account redirect page
 ├── components/
 │   ├── editor/           # Canvas UI components (editor, sidebar, AI chat)
 │   └── ui/               # Reusable shadcn/ui primitives
-├── data/
-│   ├── canvas/           # Auto-saved React Flow graph JSON per project
-│   └── specs/            # Generated Markdown specs per project
+├── data/                 # Legacy local artifact directory (not used for new artifacts)
 ├── docs/                 # Project documentation
 ├── hooks/                # Custom React hooks (auto-save, keyboard shortcuts)
-├── lib/                  # Shared utilities (Prisma client, Liveblocks, AI agents)
+├── lib/                  # Shared utilities (Auth.js, Prisma, Liveblocks, AI agents)
 ├── prisma/               # Prisma schema and migrations
 ├── trigger/              # Trigger.dev background task definitions
 │   ├── design-agent.ts   # AI canvas generation task
-│   └── generate-spec-gemini.ts  # AI spec generation task
+│   └── generate-spec.ts  # AI spec generation task
 └── types/                # Shared TypeScript types
 ```
 

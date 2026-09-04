@@ -1,5 +1,5 @@
-import { SignUp } from "@clerk/nextjs"
 import { BrainCircuit, Share2, ScrollText } from "lucide-react"
+import { EntraSignInButton } from "@/components/auth/entra-sign-in-button"
 
 const features = [
   {
@@ -23,6 +23,13 @@ const features = [
 ]
 
 export default function SignUpPage() {
+  const entraConfigured = Boolean(
+    process.env.ENTRA_CLIENT_ID?.trim() &&
+      process.env.ENTRA_CLIENT_SECRET?.trim() &&
+      process.env.ENTRA_TENANT_ID?.trim() &&
+      process.env.NEXTAUTH_SECRET?.trim()
+  )
+
   return (
     <main className="min-h-screen flex">
       <div className="hidden lg:flex w-1/2 flex-col bg-bg-surface border-r border-border-default">
@@ -80,7 +87,20 @@ export default function SignUpPage() {
       </div>
 
       <div className="flex flex-1 lg:w-1/2 items-center justify-center p-8 bg-bg-base">
-        <SignUp />
+        <div className="w-full max-w-sm space-y-4">
+          <div className="space-y-1 text-center">
+            <h2 className="text-lg font-semibold text-text-primary">Use your organization account</h2>
+            <p className="text-sm text-text-muted">
+              Accounts are managed by Microsoft Entra ID.
+            </p>
+          </div>
+          <EntraSignInButton configured={entraConfigured} />
+          {!entraConfigured ? (
+            <p className="text-center text-xs text-state-warning">
+              Set the Entra and Auth.js variables in `.env.local` before signing in.
+            </p>
+          ) : null}
+        </div>
       </div>
     </main>
   )

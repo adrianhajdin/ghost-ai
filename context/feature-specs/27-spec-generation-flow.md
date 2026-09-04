@@ -37,7 +37,7 @@ Define a `generateSpec` task that:
 
 - accepts `projectId`, `roomId`, `chatHistory`, `nodes`, and `edges`
 - validates input with Zod
-- uses Gemini through `@ai-sdk/google`
+- uses the configured local or cloud AI agent through `lib/ai-provider.ts`
 - generates a Markdown technical spec from the canvas and chat context
 - updates run metadata/status for realtime tracking
 - returns the generated spec content as task output
@@ -50,7 +50,7 @@ Follow the existing Trigger.dev task patterns in the codebase for retries, loggi
 - Do not create spec editor UI
 - Do not store the final spec in this unit
 - Do not derive access from client-provided project IDs
-- Do not create a new AI provider abstraction
+- Reuse the shared AI provider abstraction; do not add a second provider layer
 - Do not change existing canvas or chat data models
 
 ### Notes
@@ -60,7 +60,7 @@ Follow the existing Trigger.dev task patterns in the codebase for retries, loggi
 - Use Prisma for `TaskRun` persistence
 - Project access must come from the authenticated user + `roomId`
 - Keep the task output as plain Markdown
-- Reuse existing auth, Prisma, Trigger.dev, and Gemini patterns
+- Reuse existing auth, Prisma, Trigger.dev, and configured AI provider patterns
 
 ### Check When Done
 

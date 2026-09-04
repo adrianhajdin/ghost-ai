@@ -1,26 +1,50 @@
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
-import { tasks } from "@trigger.dev/sdk/v3"
+import { tasks } from "@trigger.dev/sdk"
 import type { designAgent } from "@/trigger/design-agent"
+import { getAccessibleProject, getCurrentProjectIdentity } from "@/lib/project-access"
+import { designRequestSchema } from "@/lib/ai-schemas"
+import { getProjectAiProviderConfig } from "@/lib/ai-provider-config"
 
 export async function POST(request: Request) {
-  const { userId } = await auth()
-  if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 })
+  const identity = await getCurrentProjectIdentity()
+  if (!identity.userId) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
-  const body: unknown = await request.json().catch(() => ({}))
-  const b = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {}
-  const prompt = typeof b.prompt === "string" ? b.prompt.trim() : ""
-  const roomId = typeof b.roomId === "string" ? b.roomId.trim() : ""
-  const projectId = typeof b.projectId === "string" ? b.projectId.trim() : ""
-
-  if (!prompt || !roomId || !projectId) {
-    return Response.json({ error: "Missing required fields" }, { status: 400 })
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const handle = await tasks.trigger<typeof designAgent>("design-agent", { prompt, roomId, userId })
+  const parsed = designRequestSchema.safeParse(body)
+  if (!parsed.success) {
+    return Response.json({ error: "Invalid request" }, { status: 400 })
+  }
+
+  const project = await getAccessibleProject(parsed.data.roomId, identity)
+  if (!project) return Response.json({ error: "Not found" }, { status: 404 })
+
+  if (parsed.data.providerConfigId) {
+    const providerConfig = await getProjectAiProviderConfig(
+      project.id,
+      parsed.data.providerConfigId
+    )
+    if (!providerConfig) {
+      return Response.json({ error: "AI provider configuration not found" }, { status: 404 })
+    }
+  }
+
+  const handle = await tasks.trigger<typeof designAgent>("design-agent", {
+    ...parsed.data,
+    projectId: project.id,
+    userId: identity.userId,
+  }, {
+    queue: "design-agent",
+    concurrencyKey: project.id,
+  })
 
   await prisma.taskRun.create({
-    data: { runId: handle.id, projectId, userId },
+    data: { runId: handle.id, projectId: project.id, userId: identity.userId },
   })
 
   return Response.json({ runId: handle.id }, { status: 201 })

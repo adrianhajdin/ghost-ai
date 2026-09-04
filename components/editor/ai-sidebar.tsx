@@ -25,6 +25,7 @@ import {
 import { useRealtimeRun } from "@trigger.dev/react-hooks"
 import { AiStatusFeedMessageSchema, ChatFeedMessageSchema } from "@/types/tasks"
 import { cn } from "@/lib/utils"
+import { AiProviderSettings } from "@/components/editor/ai-provider-settings"
 
 const FEED_ID = "ai-status-feed"
 const CHAT_FEED_ID = "ai-chat"
@@ -78,7 +79,7 @@ function RunTracker({ runId, publicToken, onTerminal }: RunTrackerProps) {
     if (!(TERMINAL_STATUSES as readonly string[]).includes(run.status)) return
     firedRef.current = true
     onTerminal(run.status, run.output)
-  }, [run?.status, run?.id, onTerminal])
+  }, [run, onTerminal])
 
   return null
 }
@@ -161,6 +162,8 @@ export function AiSidebar({ isOpen, onClose, roomId, projectId }: AiSidebarProps
   // Fetch specs when sidebar opens
   useEffect(() => {
     if (!isOpen) return
+    // The fetch synchronizes the open sidebar with the persisted spec list.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchSpecs()
   }, [isOpen, fetchSpecs])
 
@@ -311,7 +314,7 @@ export function AiSidebar({ isOpen, onClose, roomId, projectId }: AiSidebarProps
       const designRes = await fetch("/api/ai/design", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: text, roomId, projectId }),
+        body: JSON.stringify({ prompt: text, roomId }),
       })
 
       if (!designRes.ok) throw new Error("Design request failed")
@@ -347,7 +350,7 @@ export function AiSidebar({ isOpen, onClose, roomId, projectId }: AiSidebarProps
       setStatusText("")
       updateMyPresence({ thinking: false })
     }
-  }, [input, isLoading, roomId, projectId, updateMyPresence, createFeedMessage, self])
+  }, [input, isLoading, roomId, updateMyPresence, createFeedMessage, self])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -546,6 +549,7 @@ export function AiSidebar({ isOpen, onClose, roomId, projectId }: AiSidebarProps
             <span>Working</span>
           </div>
         )}
+        <AiProviderSettings projectId={projectId} />
         <button
           onClick={onClose}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-bg-subtle hover:text-text-primary"

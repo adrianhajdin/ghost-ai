@@ -10,6 +10,9 @@
 !.yarn/releases
 !.yarn/versions
 /context/current-issues.md
+
+# trigger.dev local runtime cache
+/.trigger/
 # testing
 /coverage
 

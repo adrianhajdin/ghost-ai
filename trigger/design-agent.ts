@@ -1,10 +1,20 @@
-import { task } from "@trigger.dev/sdk/v3";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, tool } from "ai";
+import { logger, queue, schemaTask } from "@trigger.dev/sdk";
+import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { LiveObject } from "@liveblocks/client";
 import type { LiveblocksNode, LiveblocksEdge } from "@liveblocks/react-flow";
 import { getLiveblocks } from "@/lib/liveblocks";
+import {
+  getAiAgentInfo,
+  getAiAgentInfoFromConfig,
+  getAiModel,
+  getAiModelFromConfig,
+} from "@/lib/ai-provider";
+import {
+  getProjectAiProviderConfig,
+  toAiProviderSettings,
+} from "@/lib/ai-provider-config";
+import { designPayloadSchema } from "@/lib/ai-schemas";
 import { NODE_COLORS, SHAPE_DEFAULTS, NODE_SHAPES } from "@/types/canvas";
 import type { CanvasNode, CanvasEdge, NodeShape } from "@/types/canvas";
 
@@ -33,6 +43,15 @@ const EDGE_SYNC_CONFIG = {
 };
 
 const COLOR_NAMES = ["neutral", "blue", "purple", "orange", "red", "pink", "green", "teal"];
+const designQueue = queue({
+  name: "design-agent",
+  concurrencyLimit: 1,
+});
+
+const nodeIdSchema = z.string().trim().min(1).max(120);
+const labelSchema = z.string().trim().min(1).max(200);
+const coordinateSchema = z.number().min(-100_000).max(100_000);
+const acknowledgeAction = async () => ({ accepted: true });
 
 function buildSystemPrompt(): string {
   const colorGuide = NODE_COLORS.map(
@@ -88,64 +107,71 @@ const canvasTools = {
   addNode: tool({
     description: "Add a new node to the canvas",
     inputSchema: z.object({
-      id: z.string().describe('Unique slug ID e.g. "api-gateway", "user-db"'),
-      label: z.string().describe("Display label for the node"),
+      id: nodeIdSchema.describe('Unique slug ID e.g. "api-gateway", "user-db"'),
+      label: labelSchema.describe("Display label for the node"),
       shape: z.enum(NODE_SHAPES).describe("Node shape"),
       colorIndex: z.number().int().min(0).max(7).describe("Color palette index 0-7"),
-      x: z.number().describe("X position in pixels"),
-      y: z.number().describe("Y position in pixels"),
+      x: coordinateSchema.describe("X position in pixels"),
+      y: coordinateSchema.describe("Y position in pixels"),
     }),
+    execute: acknowledgeAction,
   }),
   moveNode: tool({
     description: "Move an existing node to a new position",
     inputSchema: z.object({
-      id: z.string().describe("ID of the node to move"),
-      x: z.number(),
-      y: z.number(),
+      id: nodeIdSchema.describe("ID of the node to move"),
+      x: coordinateSchema,
+      y: coordinateSchema,
     }),
+    execute: acknowledgeAction,
   }),
   resizeNode: tool({
     description: "Resize an existing node",
     inputSchema: z.object({
-      id: z.string(),
-      width: z.number().positive(),
-      height: z.number().positive(),
+      id: nodeIdSchema,
+      width: z.number().positive().max(2_000),
+      height: z.number().positive().max(2_000),
     }),
+    execute: acknowledgeAction,
   }),
   updateNodeData: tool({
     description: "Update the label, shape, or color of an existing node",
     inputSchema: z.object({
-      id: z.string(),
-      label: z.string().optional(),
+      id: nodeIdSchema,
+      label: labelSchema.optional(),
       shape: z.enum(NODE_SHAPES).optional(),
       colorIndex: z.number().int().min(0).max(7).optional(),
     }),
+    execute: acknowledgeAction,
   }),
   deleteNode: tool({
     description: "Delete a node from the canvas",
     inputSchema: z.object({
-      id: z.string(),
+      id: nodeIdSchema,
     }),
+    execute: acknowledgeAction,
   }),
   addEdge: tool({
     description: "Add a directed edge between two nodes",
     inputSchema: z.object({
-      id: z.string().describe('Unique edge ID e.g. "edge-api-db"'),
-      source: z.string().describe("Source node ID"),
-      target: z.string().describe("Target node ID"),
-      label: z.string().optional().describe("Optional edge label"),
+      id: nodeIdSchema.describe('Unique edge ID e.g. "edge-api-db"'),
+      source: nodeIdSchema.describe("Source node ID"),
+      target: nodeIdSchema.describe("Target node ID"),
+      label: z.string().trim().max(120).optional().describe("Optional edge label"),
     }),
+    execute: acknowledgeAction,
   }),
   deleteEdge: tool({
     description: "Delete an edge from the canvas",
     inputSchema: z.object({
-      id: z.string(),
+      id: nodeIdSchema,
     }),
+    execute: acknowledgeAction,
   }),
   finalizeDesign: tool({
     description: "Complete the design and provide a summary — call this last",
     inputSchema: z.object({
-      summary: z.string().describe("1-2 sentence description of the designed architecture"),
+      summary: labelSchema.describe("1-2 sentence description of the designed architecture"),
     }),
   }),
 };
@@ -153,12 +179,13 @@ const canvasTools = {
 type ToolName = keyof typeof canvasTools;
 type ToolCall = { toolName: ToolName; input: Record<string, unknown> };
 
-export const designAgent = task({
+export const designAgent = schemaTask({
   id: "design-agent",
+  queue: designQueue,
+  schema: designPayloadSchema,
   retry: { maxAttempts: 2 },
-  run: async (payload: { prompt: string; roomId: string; userId: string }) => {
+  run: async (payload) => {
     const lb = getLiveblocks();
-    const google = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_AI_API_KEY });
 
     await lb
       .setPresence(payload.roomId, {
@@ -178,26 +205,43 @@ export const designAgent = task({
       .catch(() => {});
 
     try {
+      const storedConfig = await getProjectAiProviderConfig(
+        payload.projectId,
+        payload.providerConfigId
+      );
+      if (payload.providerConfigId && !storedConfig) {
+        throw new Error("The requested AI provider configuration was not found.")
+      }
+
+      const providerSettings = storedConfig ? toAiProviderSettings(storedConfig) : null;
+      const agent = providerSettings
+        ? getAiAgentInfoFromConfig(providerSettings)
+        : getAiAgentInfo("design");
+      const model = providerSettings ? getAiModelFromConfig(providerSettings) : getAiModel("design");
+      logger.info("Running design agent", {
+        agent: agent.id,
+        model: agent.model,
+        projectId: payload.projectId,
+        roomId: payload.roomId,
+      });
+
       let canvasContext = "The canvas is currently empty — create a fresh design.";
-      try {
-        const doc = await lb.getStorageDocument(payload.roomId, "json");
-        const flow = (doc as Record<string, unknown>)?.flow as
-          | Record<string, unknown>
-          | undefined;
-        const nodeCount = flow?.nodes ? Object.keys(flow.nodes as object).length : 0;
-        if (nodeCount > 0) {
-          canvasContext = `Canvas has ${nodeCount} existing node(s). Current state:\n${JSON.stringify(flow, null, 2)}\nExtend or modify based on the request; only clear if explicitly asked.`;
-        }
-      } catch {
-        // No storage yet — treat as empty
+      const doc = await lb.getStorageDocument(payload.roomId, "json");
+      const flow = (doc as Record<string, unknown>)?.flow as
+        | Record<string, unknown>
+        | undefined;
+      const nodeCount = flow?.nodes ? Object.keys(flow.nodes as object).length : 0;
+      if (nodeCount > 0) {
+        canvasContext = `Canvas has ${nodeCount} existing node(s). Current state:\n${JSON.stringify(flow, null, 2)}\nExtend or modify based on the request; only clear if explicitly asked.`;
       }
 
       const result = await generateText({
-        model: google("gemini-2.5-flash"),
+        model,
         system: buildSystemPrompt(),
         prompt: `User request: ${payload.prompt}\n\n${canvasContext}`,
         tools: canvasTools,
         toolChoice: "required",
+        stopWhen: stepCountIs(32),
       });
 
       const toolCalls = result.steps.flatMap((s) => s.toolCalls) as ToolCall[];
@@ -263,6 +307,7 @@ type LiveMapLike<T> = {
   get(id: string): T | undefined;
   set(id: string, value: T): void;
   delete(id: string): boolean;
+  forEach(callback: (value: T, key: string) => void): void;
 };
 
 function applyToolCall(
@@ -285,6 +330,8 @@ function applyToolCall(
       const ci = clampColor(colorIndex);
       const color = NODE_COLORS[ci];
       const size = SHAPE_DEFAULTS[shape] ?? SHAPE_DEFAULTS.rectangle;
+      if (nodes.get(id)) break;
+
       nodes.set(
         id,
         LiveObject.from(
@@ -344,6 +391,12 @@ function applyToolCall(
     case "deleteNode": {
       const { id } = input as { id: string };
       nodes.delete(id);
+      edges.forEach((edge, edgeId) => {
+        const liveEdge = edge as unknown as LiveNodeLike;
+        if (liveEdge.get("source") === id || liveEdge.get("target") === id) {
+          edges.delete(edgeId);
+        }
+      });
       break;
     }
 
@@ -354,6 +407,8 @@ function applyToolCall(
         target: string;
         label?: string;
       };
+      if (edges.get(id) || !nodes.get(source) || !nodes.get(target)) break;
+
       edges.set(
         id,
         LiveObject.from(
