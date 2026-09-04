@@ -2,15 +2,14 @@
 
 import Image from "next/image"
 import { useOthers } from "@liveblocks/react"
-import { UserButton, useUser } from "@clerk/nextjs"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 
 const MAX_VISIBLE = 5
 
 export function CollaboratorAvatars() {
-  const { user } = useUser()
   const others = useOthers()
 
-  const collaborators = others.filter((o) => o.id !== user?.id)
+  const collaborators = others
   const visible = collaborators.slice(0, MAX_VISIBLE)
   const overflow = collaborators.length - MAX_VISIBLE
 
@@ -36,7 +35,7 @@ export function CollaboratorAvatars() {
           <div className="h-5 w-px bg-border-subtle" />
         </>
       )}
-      <UserButton />
+      <SignOutButton compact />
     </div>
   )
 }

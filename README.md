@@ -14,7 +14,7 @@
 
 <img src="https://img.shields.io/badge/-Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white" />
 <img src="https://img.shields.io/badge/-PostgreSQL-336791?style=for-the-badge&logo=postgresql&logoColor=white" />
-<img src="https://img.shields.io/badge/-Clerk-6C47FF?style=for-the-badge&logo=clerk&logoColor=white" /><br/>
+<img src="https://img.shields.io/badge/-Microsoft_Entra_ID-5E5CE6?style=for-the-badge&logo=microsoft&logoColor=white" /><br/>
 
 <img src="https://img.shields.io/badge/Trigger.dev-22c55e?style=for-the-badge&logo=triggerdotdev&logoColor=white" />
 <img src="https://img.shields.io/badge/-Liveblocks-050505?style=for-the-badge&logo=liveblocks&logoColor=white" />
@@ -64,7 +64,9 @@ If you're getting started and need assistance or face any bugs, join our active 
 
 - **[Liveblocks](https://jsm.dev/ghost-liveblocks)** is a real-time collaboration infrastructure that enables developers to build multiplayer experiences. It provides robust APIs for presence, shared state, and text synchronization, allowing you to easily add collaborative features like cursors, whiteboard tools, and shared document editing to your apps.
 
-- **[Clerk](https://jsm.dev/ghost-clerk)** is a specialized authentication and user management platform for React and Next.js. It offers drop-in pre-built components for sign-in, sign-up, and profile management, while handling complex requirements like session management, multi-factor authentication, and organization hierarchies out of the box.
+- **[Microsoft Entra ID](https://www.microsoft.com/security/business/identity-access/microsoft-entra-id)** provides standards-based OpenID Connect authentication, single-tenant organization access, and Microsoft identity integration without a separate authentication service.
+
+- **[Auth.js](https://authjs.dev/)** manages the Entra OAuth callback, encrypted JWT session, and server-side session access.
 
 - **[Trigger.dev](https://jsm.dev/ghost-triggerdev)** is an open-source platform for orchestrating long-running background jobs and workflows. It allows developers to define jobs directly in their code that respond to webhooks, schedules, or events, handling retries, delays, and state management without the need for complex infrastructure.
 
@@ -94,7 +96,7 @@ If you're getting started and need assistance or face any bugs, join our active 
 
 👉 **Downloadable Specs**: Every generated spec is available via a dedicated download API route.
 
-👉 **Clerk Authentication**: Global route protection via `clerkMiddleware`; Liveblocks tokens are only issued to authenticated users.
+👉 **Microsoft Entra Authentication**: Auth.js handles Entra OpenID Connect sessions; protected routes and Liveblocks tokens are issued only to authenticated users.
 
 👉 **Auto-Save Canvas**: The canvas state is debounced-saved to a private Blob object (`canvas/{projectId}.json`) after inactivity.
 
@@ -136,11 +138,12 @@ npm install
 Create a new file named `.env` in the root of your project and add the following content:
 
 ```env
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
-CLERK_SECRET_KEY=
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+# Microsoft Entra ID / Auth.js
+ENTRA_CLIENT_ID=
+ENTRA_CLIENT_SECRET=
+ENTRA_TENANT_ID=
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=http://localhost:3000
 
 LIVEBLOCKS_SECRET_KEY=
 
@@ -207,6 +210,15 @@ Replace the placeholder values with your real credentials. Provider settings can
 
 For local development, install either [Ollama](https://ollama.com/) or [LM Studio](https://lmstudio.ai/), start its OpenAI-compatible server, and add the local endpoint from the AI Workspace. Cloud workers cannot reach `127.0.0.1`; use a cloud provider or publicly reachable custom endpoint for deployed workers.
 
+Register a Microsoft Entra web application in the [Entra admin center](https://entra.microsoft.com) and add these redirect URIs:
+
+```text
+http://localhost:3000/api/auth/callback/azure-ad
+https://<production-host>/api/auth/callback/azure-ad
+```
+
+For a private team deployment, choose **Single tenant** and set `ENTRA_TENANT_ID` to your Directory (tenant) ID. `ENTRA_CLIENT_SECRET` is used only by the server and should be stored as an Azure Container Apps secret or Key Vault reference.
+
 **Running the Project**
 
 ```bash
@@ -252,15 +264,15 @@ npx trigger.dev@latest dev
 │   ├── api/              # Next.js API routes (auth, AI, projects, specs)
 │   ├── editor/           # Canvas editor pages
 │   ├── generated/prisma/ # Auto-generated Prisma client
-│   ├── sign-in/          # Clerk sign-in page
-│   └── sign-up/          # Clerk sign-up page
+│   ├── sign-in/          # Microsoft Entra sign-in page
+│   └── sign-up/          # Entra account redirect page
 ├── components/
 │   ├── editor/           # Canvas UI components (editor, sidebar, AI chat)
 │   └── ui/               # Reusable shadcn/ui primitives
 ├── data/                 # Legacy local artifact directory (not used for new artifacts)
 ├── docs/                 # Project documentation
 ├── hooks/                # Custom React hooks (auto-save, keyboard shortcuts)
-├── lib/                  # Shared utilities (Prisma client, Liveblocks, AI agents)
+├── lib/                  # Shared utilities (Auth.js, Prisma, Liveblocks, AI agents)
 ├── prisma/               # Prisma schema and migrations
 ├── trigger/              # Trigger.dev background task definitions
 │   ├── design-agent.ts   # AI canvas generation task

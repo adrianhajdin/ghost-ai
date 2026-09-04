@@ -6,7 +6,7 @@
 | ---------------- | ----------------------- | -------------------------------------------------------------- |
 | Framework        | Next.js 16 + TypeScript | Full-stack app with server/client boundaries                   |
 | UI               | Tailwind + shadcn/ui    | Component composition and styling                              |
-| Auth             | Clerk                   | User identity and route protection                             |
+| Auth             | Microsoft Entra ID + Auth.js | OIDC sign-in, JWT sessions, and route protection             |
 | Database         | Prisma + PostgreSQL     | Relational metadata: projects, collaborators, specs, task runs, AI provider configs |
 | Canvas           | Liveblocks + React Flow | Real-time collaborative canvas, presence, and cursors          |
 | Background tasks | Trigger.dev             | Durable AI generation workflows                                |
@@ -33,9 +33,10 @@
 
 ## Auth and Collaboration Model
 
-- Every project has a single owner (Clerk user ID).
+- Every project has a single owner (stable Entra tenant/object identity).
 - Projects can include additional collaborators.
 - Only authenticated users can access protected routes.
+- Entra OIDC sessions are validated server-side; route protection is an optimistic proxy check backed by authorization checks at each data boundary.
 - Only the owner or a collaborator can mutate project resources.
 - Only the project owner can create, edit, test, select, or delete provider configurations.
 - Liveblocks room tokens are issued only after verifying project membership.
@@ -73,3 +74,4 @@
 5. The canvas schema must remain consistent between user-created content and imported templates.
 6. AI provider credentials and endpoint configuration remain server-side; task payloads contain no provider secrets.
 7. Provider keys saved from the app are encrypted at rest and are never returned by API responses.
+8. Entra `tenantId:objectId` values are used as stable owner/user IDs; email remains a collaborator lookup attribute, not an identity key.

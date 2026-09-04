@@ -11,7 +11,7 @@ Create REST endpoints for:
 
 ## Rules
 
-Use the authenticated Clerk user ID as `ownerId`.
+Use the authenticated Entra `tenantId:objectId` as `ownerId`.
 
 When creating:
 

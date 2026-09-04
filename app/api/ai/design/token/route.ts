@@ -1,9 +1,9 @@
-import { auth } from "@clerk/nextjs/server"
 import { prisma } from "@/lib/prisma"
 import { auth as triggerAuth } from "@trigger.dev/sdk"
+import { getCurrentProjectIdentity } from "@/lib/project-access"
 
 export async function POST(request: Request) {
-  const { userId } = await auth()
+  const { userId } = await getCurrentProjectIdentity()
   if (!userId) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const body: unknown = await request.json().catch(() => ({}))

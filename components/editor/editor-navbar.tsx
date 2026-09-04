@@ -1,8 +1,8 @@
 "use client"
 
 import { LayoutTemplate, PanelLeftClose, PanelLeftOpen, Save, Share2, Sparkles } from "lucide-react"
-import { UserButton } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
+import { SignOutButton } from "@/components/auth/sign-out-button"
 import type { SaveStatus } from "@/hooks/use-canvas-autosave"
 
 interface EditorNavbarProps {
@@ -103,7 +103,7 @@ export function EditorNavbar({
           </>
         ) : null}
 
-        {!onToggleAiSidebar ? <UserButton /> : null}
+        {!onToggleAiSidebar ? <SignOutButton compact /> : null}
       </div>
     </header>
   )

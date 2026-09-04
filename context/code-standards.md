@@ -31,6 +31,7 @@
 
 - Validate and parse request input before any logic runs.
 - Enforce auth and project ownership checks before any mutation.
+- Use the shared Auth.js/Entra session helper for identity checks; never trust client-provided user IDs or email addresses.
 - Return consistent, predictable response shapes.
 - Keep route handlers thin — push complexity into shared modules or background tasks.
 

@@ -79,8 +79,10 @@ az containerapp secret set \
   --secrets \
     database-url='<DATABASE_URL>' \
     encryption-key='<AI_CONFIG_ENCRYPTION_KEY>' \
-    clerk-secret='<CLERK_SECRET_KEY>' \
-    clerk-publishable='<NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY>' \
+    entra-client-secret='<ENTRA_CLIENT_SECRET>' \
+    entra-client-id='<ENTRA_CLIENT_ID>' \
+    entra-tenant-id='<ENTRA_TENANT_ID>' \
+    nextauth-secret='<NEXTAUTH_SECRET>' \
     liveblocks-secret='<LIVEBLOCKS_SECRET_KEY>' \
     trigger-secret='<TRIGGER_SECRET_KEY>' \
     blob-token='<BLOB_READ_WRITE_TOKEN>'
@@ -91,14 +93,25 @@ az containerapp update \
   --set-env-vars \
     DATABASE_URL=secretref:database-url \
     AI_CONFIG_ENCRYPTION_KEY=secretref:encryption-key \
-    CLERK_SECRET_KEY=secretref:clerk-secret \
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=secretref:clerk-publishable \
+    ENTRA_CLIENT_SECRET=secretref:entra-client-secret \
+    ENTRA_CLIENT_ID=secretref:entra-client-id \
+    ENTRA_TENANT_ID=secretref:entra-tenant-id \
+    NEXTAUTH_SECRET=secretref:nextauth-secret \
+    NEXTAUTH_URL='https://<container-app-fqdn>' \
     LIVEBLOCKS_SECRET_KEY=secretref:liveblocks-secret \
     TRIGGER_SECRET_KEY=secretref:trigger-secret \
     BLOB_READ_WRITE_TOKEN=secretref:blob-token
 ```
 
 For a production deployment, reference secrets from Azure Key Vault with a managed identity instead of passing values directly to the CLI. The same `DATABASE_URL` and `AI_CONFIG_ENCRYPTION_KEY` must also be configured in the Trigger.dev environment.
+
+Register a single-tenant Microsoft Entra web application and add the callback URL:
+
+```text
+https://<container-app-fqdn>/api/auth/callback/azure-ad
+```
+
+Set `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, `ENTRA_TENANT_ID`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL` from that registration.
 
 ## Azure AI provider
 
